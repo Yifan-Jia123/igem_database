@@ -32,7 +32,7 @@ def load_enzymes():
     enzyme_df = pd.DataFrame()
     enzyme_df["uniprot_id"] = merged["Entry"]
     # Prefer names_split name if available, else rhea's Protein name
-    enzyme_df["primary_name"] = merged["Recommended_name"].fillna(merged["Protein name"])
+    enzyme_df["primary_name"] = merged["Recommended_name"].fillna(merged["Protein name"]).fillna(merged["Entry"])
     enzyme_df["organism_name"] = merged["Organism_detailed"].fillna(merged["Organism"])
     # secondary_names as JSON array
     enzyme_df["secondary_names"] = merged["Alternative_names"].fillna("").apply(

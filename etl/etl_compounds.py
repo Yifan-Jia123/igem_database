@@ -20,7 +20,7 @@ def load_compounds():
     )
 
     cols = ["compound_id", "name", "chebi_id", "smiles", "average_mass",
-            "chebi_url", "structure_image_url", "formula", "charge", "inchi", "description"]
+            "chebi_url", "structure_image_url"]
     df[cols].to_sql("compound", engine, if_exists="append", index=False)
     print(f"  compound: {len(df)} rows inserted")
 

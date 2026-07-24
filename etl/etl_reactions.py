@@ -77,11 +77,8 @@ def load_reaction_compounds():
         return
 
     rc_df = pd.DataFrame(rows).drop_duplicates()
-    cols = ["reaction_id", "compound_id", "role"]
-    rc_df[cols].to_sql("reaction_compound", engine, if_exists="append", index=False)
-    print(f"  reaction_compound: {len(rc_df)} rows inserted")
 
-    # Also insert any missing compounds into compound table
+    # Supplement missing compounds BEFORE inserting reaction_compound (FK constraint)
     all_chebi_ids = set(rc_df["compound_id"].unique())
     existing_cmp = pd.read_sql("SELECT compound_id FROM compound", engine)
     existing_cmp_ids = set(existing_cmp["compound_id"])
@@ -91,10 +88,14 @@ def load_reaction_compounds():
         missing_df = pd.DataFrame({
             "compound_id": list(missing),
             "chebi_id": list(missing),
-            "name": [cid for cid in missing],  # placeholder name = chebi ID
+            "name": [cid for cid in missing],
         })
         missing_df.to_sql("compound", engine, if_exists="append", index=False)
         print(f"  compound (from reaction): {len(missing_df)} new rows (non-terpene)")
+
+    cols = ["reaction_id", "compound_id", "role"]
+    rc_df[cols].to_sql("reaction_compound", engine, if_exists="append", index=False)
+    print(f"  reaction_compound: {len(rc_df)} rows inserted")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from app.deps import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.search import PathwaySearchRequest
 from app.services.search_service import search_entries
+from app.services.pathway_service import search_pathways as do_pathway_search
 
 router = APIRouter()
 
@@ -49,8 +50,21 @@ async def search_entries_endpoint(
 
 
 @router.post("/search/pathways")
-async def search_pathways(
+async def search_pathways_endpoint(
     request: PathwaySearchRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return ApiResponse(data={"items": [], "graph": None})
+    cards = await do_pathway_search(
+        db,
+        start_compound_id=request.start_compound_id,
+        end_compound_id=request.end_compound_id,
+        via_compound_ids=request.via_compound_ids,
+        max_steps=request.max_steps,
+        source_types=request.source_types,
+        review_statuses=request.review_statuses,
+        limit=request.limit,
+    )
+    return ApiResponse(data={
+        "items": [c.model_dump(by_alias=True) for c in cards],
+        "graph": None,
+    })

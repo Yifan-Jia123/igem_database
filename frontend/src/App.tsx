@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   ArrowDownToLine,
@@ -26,8 +26,16 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
-import { entities, filterOptions, getEntity, graphEdges, graphNodes } from './data'
+import { entities as mockEntities, filterOptions as mockFilterOptions, graphEdges as mockGraphEdges, graphNodes as mockGraphNodes } from './data'
+import { loadApiDataset, searchApiEntries } from './api'
 import type { Entity, EntityKind, GraphNode } from './types'
+
+let entities = mockEntities
+let filterOptions = mockFilterOptions
+let graphEdges = mockGraphEdges
+let graphNodes = mockGraphNodes
+
+const getEntity = (id: string) => entities.find((entity) => entity.id === id)
 
 type View = 'home' | 'network' | 'search' | 'downloads'
 type SearchKind = 'all' | EntityKind
@@ -138,13 +146,92 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [downloadedIds, setDownloadedIds] = useState<string[]>(['CHEBI:17115', 'ENZ:Q9ZSY2'])
   const [showEdgeLabels, setShowEdgeLabels] = useState(true)
+  const [apiSearchResults, setApiSearchResults] = useState<Entity[] | null>(null)
+  const [apiSearchLoading, setApiSearchLoading] = useState(false)
+  const [apiSearchError, setApiSearchError] = useState<string | null>(null)
+  const [, setDatasetRevision] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    loadApiDataset()
+      .then((dataset) => {
+        if (cancelled || dataset.entities.length === 0 || dataset.graphNodes.length === 0) return
+
+        entities = dataset.entities
+        filterOptions = dataset.filterOptions
+        graphEdges = dataset.graphEdges
+        graphNodes = dataset.graphNodes
+
+        setSelectedSpecies(dataset.filterOptions.species[0] || mockFilterOptions.species[0])
+        setSelectedClass(dataset.filterOptions.classes[0] || mockFilterOptions.classes[0])
+        setSelectedFamily(dataset.filterOptions.families[0] || mockFilterOptions.families[0])
+        setSelectedId((current) => (current && dataset.entities.some((entity) => entity.id === current) ? current : dataset.entities[0]?.id ?? null))
+        setDownloadedIds((current) => current.filter((id) => dataset.entities.some((entity) => entity.id === id)))
+        setDatasetRevision((revision) => revision + 1)
+      })
+      .catch((error) => {
+        console.warn('Unable to load backend dataset; using mock data.', error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery || searchKind === 'compound' || searchKind === 'reaction') {
+      setApiSearchResults(null)
+      setApiSearchLoading(false)
+      setApiSearchError(null)
+      return
+    }
+
+    let cancelled = false
+    setApiSearchLoading(true)
+    setApiSearchError(null)
+
+    const timer = window.setTimeout(() => {
+      const organismName = selectedSpecies && selectedSpecies !== filterOptions.species[0] ? selectedSpecies : undefined
+
+      searchApiEntries({ q: trimmedQuery, organismName })
+        .then((results) => {
+          if (cancelled) return
+
+          if (results.length > 0) {
+            const knownIds = new Set(entities.map((entity) => entity.id))
+            entities = [...entities, ...results.filter((entity) => !knownIds.has(entity.id))]
+            setSelectedId((current) => (current && results.some((entity) => entity.id === current) ? current : results[0].id))
+            setDatasetRevision((revision) => revision + 1)
+          }
+
+          setApiSearchResults(results)
+        })
+        .catch((error) => {
+          if (cancelled) return
+          console.warn('Backend search failed; showing loaded graph records.', error)
+          setApiSearchResults(null)
+          setApiSearchError('Backend search unavailable; showing loaded graph records.')
+        })
+        .finally(() => {
+          if (!cancelled) setApiSearchLoading(false)
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [query, searchKind, selectedSpecies])
 
   const filters = { query, searchKind, species: selectedSpecies, compoundClass: selectedClass, enzymeFamily: selectedFamily }
   const selected = selectedId ? getEntity(selectedId) : undefined
   const downloadedItems = useMemo(() => downloadedIds.map((id) => getEntity(id)).filter((entity): entity is Entity => Boolean(entity)), [downloadedIds])
   const queuedIds = useMemo(() => new Set(downloadedIds), [downloadedIds])
 
-  const filteredEntities = useMemo(() => entities.filter((entity) => matchesFilters(entity, filters)), [filters])
+  const localFilteredEntities = useMemo(() => entities.filter((entity) => matchesFilters(entity, filters)), [filters])
+  const filteredEntities = apiSearchResults ? apiSearchResults.filter((entity) => matchesFilters(entity, { ...filters, query: '' })) : localFilteredEntities
   const visibleNodeIds = useMemo(
     () =>
       new Set(
@@ -363,6 +450,8 @@ function App() {
             setSelectedFamily={setSelectedFamily}
             clearFilters={clearFilters}
             filteredEntities={filteredEntities}
+            apiSearchLoading={apiSearchLoading}
+            apiSearchError={apiSearchError}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
             addToQueue={toggleQueue}
@@ -789,6 +878,8 @@ function SearchView({
   setSelectedFamily,
   clearFilters,
   filteredEntities,
+  apiSearchLoading,
+  apiSearchError,
   selectedId,
   setSelectedId,
   addToQueue,
@@ -807,6 +898,8 @@ function SearchView({
   setSelectedFamily: (value: string) => void
   clearFilters: () => void
   filteredEntities: Entity[]
+  apiSearchLoading: boolean
+  apiSearchError: string | null
   selectedId: string | null
   setSelectedId: (value: string | null) => void
   addToQueue: (id: string) => void
@@ -857,7 +950,8 @@ function SearchView({
               ))}
             </div>
             <div className="search-summary">
-              Showing <strong>{filteredEntities.length}</strong> curated entries
+              {apiSearchLoading ? 'Searching backend...' : <>Showing <strong>{filteredEntities.length}</strong> curated entries</>}
+              {apiSearchError && <span>{apiSearchError}</span>}
             </div>
           </div>
 

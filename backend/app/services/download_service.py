@@ -104,6 +104,14 @@ def _resolve_columns(fields: List[str]) -> List[str]:
     return [FIELD_MAP[f]["label"] for f in fields if f in FIELD_MAP]
 
 
+def _item_value(item, snake_key: str, camel_key: str):
+    if hasattr(item, snake_key):
+        return getattr(item, snake_key)
+    if isinstance(item, dict):
+        return item.get(snake_key) or item.get(camel_key)
+    return None
+
+
 async def _fetch_entry_data(
     db: AsyncSession,
     items: list,
@@ -113,15 +121,18 @@ async def _fetch_entry_data(
     """Fetch data for each item according to requested fields."""
 
     enzyme_ids = set()
+    compound_ids = set()
     for item in items:
-        if hasattr(item, "entity_id"):
-            enzyme_ids.add(item.entity_id)
-        elif isinstance(item, dict):
-            eid = item.get("entity_id") or item.get("enzyme_id") or item.get("enzymeId")
-            if eid:
-                enzyme_ids.add(eid)
+        entity_id = _item_value(item, "entity_id", "entityId")
+        entity_type = (_item_value(item, "entity_type", "entityType") or "").lower()
+        if not entity_id:
+            continue
+        if entity_type == "compound" or str(entity_id).startswith("CHEBI:"):
+            compound_ids.add(entity_id)
+        else:
+            enzyme_ids.add(entity_id)
 
-    if not enzyme_ids:
+    if not enzyme_ids and not compound_ids:
         return []
 
     # Fetch enzymes
@@ -129,6 +140,11 @@ async def _fetch_entry_data(
         select(Enzyme).where(Enzyme.enzyme_id.in_(list(enzyme_ids)))
     )
     enzymes: Dict[str, Enzyme] = {e.enzyme_id: e for e in result.scalars().all()}
+
+    compound_result = await db.execute(
+        select(Compound).where(Compound.compound_id.in_(list(compound_ids)))
+    )
+    compounds: Dict[str, Compound] = {c.compound_id: c for c in compound_result.scalars().all()}
 
     # Fetch first reaction per enzyme
     edge_result = await db.execute(
@@ -140,6 +156,18 @@ async def _fetch_entry_data(
     for ere, rxn in edge_result:
         if ere.enzyme_id not in enzyme_reactions:
             enzyme_reactions[ere.enzyme_id] = rxn
+
+    reaction_compounds: Dict[str, Compound] = {}
+    reaction_ids = [rxn.reaction_id for rxn in enzyme_reactions.values()]
+    if reaction_ids:
+        cpd_result = await db.execute(
+            select(ReactionCompound, Compound)
+            .join(Compound, ReactionCompound.compound_id == Compound.compound_id)
+            .where(ReactionCompound.reaction_id.in_(reaction_ids))
+        )
+        for rc, cpd in cpd_result:
+            if rc.reaction_id not in reaction_compounds:
+                reaction_compounds[rc.reaction_id] = cpd
 
     # Fetch gene info
     gene_result = await db.execute(
@@ -162,12 +190,27 @@ async def _fetch_entry_data(
     # Build rows
     rows = []
     for item in items:
-        eid = None
-        if hasattr(item, "entity_id"):
-            eid = item.entity_id
-        elif isinstance(item, dict):
-            eid = item.get("entity_id") or item.get("enzyme_id") or item.get("enzymeId")
+        entity_id = _item_value(item, "entity_id", "entityId")
+        entity_type = (_item_value(item, "entity_type", "entityType") or "").lower()
 
+        if entity_type == "compound" or str(entity_id).startswith("CHEBI:"):
+            cpd = compounds.get(entity_id)
+            if not cpd:
+                continue
+
+            row = {}
+            for field in fields:
+                if field not in FIELD_MAP:
+                    continue
+                cfg = FIELD_MAP[field]
+                if cfg["table"] == "compound":
+                    row[field] = _val(getattr(cpd, cfg["column"], None))
+                else:
+                    row[field] = ""
+            rows.append(row)
+            continue
+
+        eid = entity_id
         enz = enzymes.get(eid) if eid else None
         if not enz:
             continue
@@ -175,6 +218,7 @@ async def _fetch_entry_data(
         rxn = enzyme_reactions.get(eid)
         gene = enzyme_genes.get(eid)
         ev = enzyme_evidences.get(eid)
+        cpd = reaction_compounds.get(rxn.reaction_id) if rxn else None
 
         row = {}
         for field in fields:
@@ -191,7 +235,7 @@ async def _fetch_entry_data(
             elif table == "gene":
                 row[field] = _val(getattr(gene, col, None)) if gene else ""
             elif table == "compound":
-                row[field] = ""
+                row[field] = _val(getattr(cpd, col, None)) if cpd else ""
             elif table == "evidence":
                 row[field] = _val(getattr(ev, col, None)) if ev else ""
 

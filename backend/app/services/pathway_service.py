@@ -63,7 +63,7 @@ async def search_pathways(
     elif end_compound_id and via:
         # any → via → end — search backwards from end compound
         reversed_graph = _reverse_graph(graph)
-        required = list(reversed([end_compound_id] + via))
+        required = list(reversed(via))
         rev_paths = iddfs(reversed_graph, end_compound_id, required, max_steps, limit * 3)
         paths = [list(reversed(p)) for p in rev_paths]
     elif start_compound_id:
@@ -297,7 +297,7 @@ async def _assemble_pathway_card(
     summary = " → ".join(names)
 
     # Map each step to a reaction
-    reaction_ids_in_order = []
+    reaction_steps = []
     edge_ids = []
     edge_group_ids = []
 
@@ -317,9 +317,10 @@ async def _assemble_pathway_card(
             continue
 
         chosen_rxn = candidate_rxn_ids[0]
-        reaction_ids_in_order.append(chosen_rxn)
+        reaction_steps.append((chosen_rxn, from_cpd, to_cpd))
 
     # Collect edge data
+    reaction_ids_in_order = [rxn_id for rxn_id, _, _ in reaction_steps]
     if reaction_ids_in_order:
         edge_result = await db.execute(
             select(EnzymeReactionEdge, Enzyme)
@@ -332,12 +333,12 @@ async def _assemble_pathway_card(
                 rxn_edges[ere.reaction_id] = []
             rxn_edges[ere.reaction_id].append(ere.edge_id)
 
-        for rxn_id in reaction_ids_in_order:
+        for rxn_id, from_cpd, to_cpd in reaction_steps:
             eids = rxn_edges.get(rxn_id, [])
             if len(eids) == 1:
                 edge_ids.append(eids[0])
             elif len(eids) > 1:
-                group_id = f"GROUP_{rxn_id}"
+                group_id = f"GROUP_{from_cpd}_{to_cpd}"
                 edge_group_ids.append(group_id)
 
     return PathwayCard(

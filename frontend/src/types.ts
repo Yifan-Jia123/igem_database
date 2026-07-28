@@ -32,6 +32,7 @@ export type Entity = {
   fields: Array<{ label: string; value: string }>
   related: Array<{ id: string; name: string; kind: EntityKind }>
   imageLabel?: string
+  imageUrl?: string
   species?: string
   compoundClass?: string
   enzymeFamily?: string

@@ -26,6 +26,7 @@ class ApiResponse(CamelModel):
     success: bool = True
     data: Any = None
     meta: dict | None = None
+    error: Any = None
 
 
 class ErrorDetail(CamelModel):

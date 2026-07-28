@@ -72,6 +72,20 @@ type FilterOptionsPayload = {
   reviewStatuses?: string[]
 }
 
+type HomologyResultItem = {
+  enzymeId: string
+  eValue: number
+  identity?: number | null
+  card?: EnzymeCard | null
+}
+
+type HomologyPayload = {
+  jobId: string
+  status: string
+  progress?: number | null
+  results: HomologyResultItem[]
+}
+
 export type ApiDataset = {
   entities: Entity[]
   graphNodes: GraphNode[]
@@ -111,8 +125,20 @@ export async function searchApiEntries({ q, organismName, pageSize = 80 }: Entry
   return payload.items.map((enzyme) => enzymeEntity(enzyme))
 }
 
-async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_PREFIX}${path}`)
+export async function searchHomologyEntries(sequence: string, maxResults = 50): Promise<Entity[]> {
+  const payload = await request<HomologyPayload>('/homology/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sequence, maxResults }),
+  })
+
+  return payload.results
+    .filter((result) => result.card)
+    .map((result) => homologyEntity(result))
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_PREFIX}${path}`, init)
   if (!response.ok) throw new Error(`API ${path} returned ${response.status}`)
 
   const payload = (await response.json()) as ApiResponse<T>
@@ -232,7 +258,8 @@ function compoundEntity(compound: CompoundCard): Entity {
     subtitle: compound.chebiId || compound.compoundId,
     description: compound.description || compound.smiles || 'Compound record from the terpene pathway database.',
     tags: ['Compound'],
-    imageLabel: compound.structureImageUrl ? '2D structure' : undefined,
+    imageLabel: compound.structureImageUrl || compound.chebiId ? '2D structure' : undefined,
+    imageUrl: compoundImageUrl(compound),
     fields: [
       field('Formula', compound.formula),
       field('Average mass', compound.averageMass),
@@ -242,6 +269,12 @@ function compoundEntity(compound: CompoundCard): Entity {
     ].filter(Boolean) as Array<{ label: string; value: string }>,
     related: [],
   }
+}
+
+function compoundImageUrl(compound: CompoundCard) {
+  const chebiId = compound.chebiId || compound.compoundId
+  if (chebiId?.startsWith('CHEBI:')) return `/api/v1/assets/compounds/${encodeURIComponent(chebiId)}/structure.svg?v=4`
+  return compound.structureImageUrl || undefined
 }
 
 function enzymeEntity(enzyme: EnzymeCard, source?: CompoundCard, target?: CompoundCard): Entity {
@@ -265,6 +298,17 @@ function enzymeEntity(enzyme: EnzymeCard, source?: CompoundCard, target?: Compou
       related(target?.compoundId, target?.name, 'compound'),
     ].filter(Boolean) as Array<{ id: string; name: string; kind: EntityKind }>,
   }
+}
+
+function homologyEntity(result: HomologyResultItem): Entity {
+  const entity = enzymeEntity(result.card!)
+  entity.tags = ['Homology hit', ...entity.tags]
+  entity.fields = [
+    field('Identity', result.identity === null || result.identity === undefined ? null : `${result.identity}%`),
+    field('E-value', result.eValue.toExponential(2)),
+    ...entity.fields,
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+  return entity
 }
 
 function reactionEntity(edge: ReactionEdge, source?: CompoundCard, target?: CompoundCard, enzyme?: EnzymeCard | null): Entity {
@@ -375,4 +419,157 @@ function shortLabel(name: string, fallback: string) {
   if (words.length >= 2) return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase()
   if (words[0]) return words[0].slice(0, 4)
   return fallback.replace(/^.*:/, '').slice(0, 4)
+}
+
+export type HomeGraphCompound = {
+  compoundId: string
+  name: string
+  chebiId?: string | null
+  formula?: string | null
+  charge?: number | null
+  averageMass?: number | null
+  smiles?: string | null
+  inchi?: string | null
+  structureImageUrl?: string | null
+  chebiUrl?: string | null
+  description?: string | null
+}
+
+export type HomeGraphEnzymeCard = {
+  edgeId: string
+  enzymeId: string
+  primaryName: string
+  uniprotId?: string | null
+  databaseCode: string
+  organismName?: string | null
+  ecNumber?: string | null
+  reactionId: string
+  reactionEquation: string
+  reactionDirection: string
+  sourceType: string
+  reviewStatus: string
+}
+
+export type HomeGraphEdge = {
+  edgeId: string
+  edgeGroupId?: string | null
+  reactionId: string
+  enzymeId: string
+  sourceCompoundId: string
+  targetCompoundId: string
+  label: string
+  direction: string
+  sourceType: string
+  reviewStatus: string
+  card?: HomeGraphEnzymeCard | null
+}
+
+export type HomeGraphEdgeGroup = {
+  edgeGroupId: string
+  sourceCompoundId: string
+  targetCompoundId: string
+  label: string
+  count: number
+  edgeIds: string[]
+}
+
+export type HomeGraphData = {
+  nodes: HomeGraphCompound[]
+  edges: HomeGraphEdge[]
+  edgeGroups: HomeGraphEdgeGroup[]
+}
+
+export type EnzymeGeneDetail = {
+  geneName?: string | null
+  geneId?: string | null
+  genbankId?: string | null
+  ncbiUrl?: string | null
+  enaAccession?: string | null
+  proteinAccession?: string | null
+}
+
+export type EnzymeEvidenceDetail = {
+  doi?: string | null
+  pubmedId?: string | null
+  sourceDescription?: string | null
+  reviewStatus?: string | null
+}
+
+export type EnzymeReactionDetail = {
+  reactionId: string
+  rheaId?: string | null
+  rheaUrl?: string | null
+  equation: string
+  direction: string
+  ecNumber?: string | null
+  smiles?: string | null
+  atomMapImageUrl?: string | null
+  substrates: HomeGraphCompound[]
+  products: HomeGraphCompound[]
+  sourceType: string
+  reviewStatus: string
+}
+
+export type EnzymeDetailData = {
+  enzymeId: string
+  databaseCode: string
+  primaryName: string
+  secondaryNames: string[]
+  uniprotId?: string | null
+  uniprotUrl?: string | null
+  organismName?: string | null
+  sequence?: string | null
+  gene?: EnzymeGeneDetail | null
+  reactions: EnzymeReactionDetail[]
+  evidence: EnzymeEvidenceDetail[]
+  links: Array<{ label: string; url: string }>
+}
+
+export async function loadHomeGraph(): Promise<HomeGraphData> {
+  return request<HomeGraphData>('/graph?depth=1&limit_nodes=28')
+}
+
+export async function loadEnzymeDetail(enzymeId: string): Promise<EnzymeDetailData> {
+  return request<EnzymeDetailData>(`/enzymes/${encodeURIComponent(enzymeId)}`)
+}
+
+export async function loadExpandedEdgeGroup(edgeGroupId: string): Promise<HomeGraphEdge[]> {
+  const payload = await request<{ edgeGroupId: string; edges: HomeGraphEdge[] }>(`/graph/edge-groups/${encodeURIComponent(edgeGroupId)}/edges`)
+  return payload.edges
+}
+
+export async function createEnzymeDownload(enzymeId: string, label: string): Promise<{ fileUrl?: string | null; status: string }> {
+  const payload = await request<{ fileUrl?: string | null; status: string }>('/download/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      downloadType: 'enzyme',
+      items: [
+        {
+          entityType: 'enzyme',
+          entityId: enzymeId,
+          displayLabel: label,
+        },
+      ],
+      fields: [
+        'primaryName',
+        'databaseCode',
+        'uniprotId',
+        'organismName',
+        'ecNumber',
+        'reactionEquation',
+        'direction',
+        'smiles',
+        'geneName',
+        'genbankId',
+        'doi',
+        'pubmedId',
+      ],
+      format: 'csv',
+      includeExternalLinks: true,
+      includeGraphImage: false,
+    }),
+  })
+
+  return payload
 }

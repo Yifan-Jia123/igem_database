@@ -1364,6 +1364,14 @@ select:focus-visible {
   margin: 16px 0 14px;
 }
 
+.structure-image {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
 .structure-grid {
   position: absolute;
   inset: 0;
@@ -1457,10 +1465,12 @@ select:focus-visible {
 }
 
 .field-row strong {
+  min-width: 0;
   text-align: right;
   color: #07111b;
   font-size: 10px;
   font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .related-section {
@@ -2009,6 +2019,567 @@ select:focus-visible {
   }
 }
 
+body:has(.graph-home-page) {
+  overflow: hidden;
+}
+
+.graph-home-page {
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(122, 212, 255, 0.12), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 207, 114, 0.08), transparent 26%),
+    linear-gradient(180deg, #07111b 0%, #0b1621 100%);
+}
+
+.graph-home-stage {
+  min-height: 100vh;
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.graph-home-topbar,
+.graph-home-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.graph-home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.graph-home-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #07111b;
+  background: var(--amber);
+  box-shadow: 0 0 0 3px rgba(255, 207, 114, 0.12);
+}
+
+.graph-home-brand strong,
+.graph-home-summary h1,
+.graph-board-panel-header h2,
+.pair-detail-head h3,
+.compound-detail-head h3,
+.selected-enzyme-card h4,
+.inspector-empty-card h3 {
+  margin: 0;
+}
+
+.graph-home-brand strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.graph-home-brand span {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.graph-home-year {
+  color: var(--ink-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.graph-home-toolbar {
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(16, 31, 45, 0.78);
+  box-shadow: var(--shadow);
+}
+
+.graph-home-summary {
+  max-width: 420px;
+}
+
+.graph-home-summary h1 {
+  margin-top: 5px;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.graph-home-summary p,
+.inspector-empty-card p,
+.pair-detail-head p,
+.compound-detail-head p,
+.selected-enzyme-reaction strong,
+.enzyme-option span {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.graph-home-actions,
+.graph-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-home-actions {
+  margin-left: auto;
+}
+
+.graph-metric-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.graph-metric-pill {
+  min-width: 84px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(7, 17, 27, 0.55);
+}
+
+.graph-metric-pill span {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.graph-metric-pill strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.graph-home-layout {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+}
+
+.graph-board-panel,
+.graph-inspector-panel {
+  min-height: 0;
+}
+
+.graph-board-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(16, 31, 45, 0.82);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.graph-board-panel-header {
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.graph-board-panel-header h2 {
+  margin-top: 5px;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.graph-board-body {
+  min-height: 0;
+  flex: 1;
+  position: relative;
+  padding: 10px;
+}
+
+.graph-board-state {
+  position: absolute;
+  inset: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ink-muted);
+  font-size: 12px;
+  background: rgba(7, 17, 27, 0.58);
+}
+
+.graph-board {
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at center, rgba(122, 212, 255, 0.08), transparent 56%),
+    linear-gradient(180deg, rgba(7, 17, 27, 0.96), rgba(10, 22, 34, 0.96));
+}
+
+.graph-grid path {
+  fill: none;
+  stroke: rgba(173, 205, 234, 0.08);
+  stroke-width: 0.22;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-link {
+  fill: none;
+  cursor: pointer;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-link.summary {
+  stroke: rgba(122, 212, 255, 0.65);
+  stroke-width: 0.55;
+}
+
+.graph-link.summary.single {
+  stroke: rgba(122, 212, 255, 0.72);
+}
+
+.graph-link.summary.multi,
+.graph-link.summary.active {
+  stroke: var(--amber);
+}
+
+.graph-link.expanded {
+  stroke: rgba(173, 205, 234, 0.74);
+  stroke-width: 0.42;
+}
+
+.graph-link.expanded.selected {
+  stroke: var(--coral);
+  stroke-width: 0.6;
+}
+
+.graph-link-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 3;
+  cursor: pointer;
+}
+
+.graph-edge-label {
+  fill: var(--ink);
+  font: 700 1.3px Inter, sans-serif;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #07111b;
+  stroke-width: 0.5px;
+  pointer-events: none;
+}
+
+.graph-edge-label.expanded-label {
+  fill: var(--amber);
+  font-size: 1.1px;
+}
+
+.graph-home-page .graph-node {
+  cursor: grab;
+}
+
+.graph-home-page .graph-node circle {
+  fill: var(--cyan);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 0.4;
+}
+
+.graph-home-page .graph-node.selected circle {
+  fill: var(--amber);
+  stroke: #ffffff;
+  stroke-width: 0.54;
+}
+
+.graph-node-short {
+  text-anchor: middle;
+  fill: #07111b;
+  font: 800 2px Inter, sans-serif;
+  pointer-events: none;
+}
+
+.graph-node-name {
+  text-anchor: middle;
+  fill: var(--ink);
+  font: 700 1.45px Inter, sans-serif;
+  paint-order: stroke;
+  stroke: #07111b;
+  stroke-width: 0.6px;
+  pointer-events: none;
+}
+
+.graph-inspector-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compound-detail-card,
+.pair-detail-card,
+.inspector-empty-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(16, 31, 45, 0.86);
+  box-shadow: var(--shadow);
+}
+
+.compound-detail-card,
+.pair-detail-card {
+  padding: 14px;
+}
+
+.inspector-empty-card {
+  padding: 16px 14px;
+}
+
+.compound-detail-head,
+.pair-detail-head,
+.selected-enzyme-topline,
+.selected-enzyme-meta,
+.compound-facts,
+.selected-enzyme-reaction {
+  display: flex;
+  gap: 10px;
+}
+
+.compound-detail-head,
+.pair-detail-head,
+.selected-enzyme-topline {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.compound-detail-head h3,
+.pair-detail-head h3,
+.inspector-empty-card h3 {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.pair-detail-head {
+  margin-bottom: 12px;
+}
+
+.pair-detail-ids {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--cyan);
+  text-decoration: none;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.compound-preview {
+  margin: 12px 0;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: #f7fbff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.compound-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  padding: 10px;
+}
+
+.compound-preview-empty {
+  color: #5b6a78;
+  font-size: 11px;
+}
+
+.compound-facts,
+.selected-enzyme-meta {
+  flex-direction: column;
+}
+
+.compound-facts div,
+.selected-enzyme-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid rgba(173, 205, 234, 0.1);
+}
+
+.compound-facts div:first-child,
+.selected-enzyme-meta div:first-child {
+  border-top: 0;
+}
+
+.compound-facts span,
+.selected-enzyme-meta span,
+.selected-enzyme-reaction span {
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.compound-facts strong,
+.selected-enzyme-meta strong,
+.selected-enzyme-reaction strong {
+  min-width: 0;
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.secondary-button.compact,
+.primary-button.compact {
+  min-height: 34px;
+  padding: 8px 10px;
+  font-size: 10px;
+  margin-top: 10px;
+}
+
+.selected-enzyme-card {
+  padding: 12px;
+  border: 1px solid rgba(173, 205, 234, 0.16);
+  border-radius: 12px;
+  background: rgba(7, 17, 27, 0.46);
+}
+
+.selected-enzyme-card h4 {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.enzyme-edge-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.selected-enzyme-meta {
+  margin-top: 10px;
+}
+
+.selected-enzyme-reaction {
+  margin-top: 10px;
+  flex-direction: column;
+}
+
+.enzyme-option-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.enzyme-option {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(7, 17, 27, 0.48);
+  color: var(--ink);
+  padding: 10px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+}
+
+.enzyme-option strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.enzyme-option span {
+  display: block;
+  margin-top: 3px;
+}
+
+.enzyme-option.active {
+  border-color: var(--amber);
+  background: rgba(255, 207, 114, 0.1);
+}
+
+@media (max-width: 1180px) {
+  body:has(.graph-home-page) {
+    overflow: auto;
+  }
+
+  .graph-home-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-inspector-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .graph-board {
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 760px) {
+  .graph-home-stage {
+    padding: 14px;
+  }
+
+  .graph-home-topbar,
+  .graph-home-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .graph-home-actions,
+  .graph-metric-row {
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .graph-home-year {
+    display: none;
+  }
+
+  .graph-board {
+    min-height: 420px;
+  }
+
+  .graph-inspector-panel {
+    grid-template-columns: 1fr;
+  }
+}
 .home-map-page {
   min-height: 100vh;
   color: #f2edf7;
@@ -2449,11 +3020,64 @@ select:focus-visible {
 
 .compound-structure {
   position: relative;
-  height: 288px;
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  margin: 28px auto 22px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.compound-structure img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.structure-unavailable {
+  color: #39424d;
+  font-size: 18px;
+}
+
+.record-visual {
+  min-height: 190px;
   margin: 28px 0 22px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.74);
-  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.record-visual-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(235, 231, 162, 0.18);
+  color: #ebe7a2;
+}
+
+.record-visual span:not(.record-visual-icon) {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 22px;
+}
+
+.record-visual strong {
+  max-width: 85%;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
 }
 
 .structure-ring {
@@ -2513,14 +3137,17 @@ select:focus-visible {
 
 .popover-fields p {
   margin: 0;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
   gap: 18px;
 }
 
 .popover-fields strong {
+  min-width: 0;
   font-weight: 400;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .popover-cart {
@@ -2756,5 +3383,970 @@ select:focus-visible {
     top: 470px;
     grid-template-columns: 1fr;
     font-size: 18px;
+  }
+}
+
+
+.atlas-live-stage {
+  min-height: 1280px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(24, 18, 41, 0.18) 0%, transparent 16%, transparent 82%, rgba(24, 18, 41, 0.22) 100%),
+    linear-gradient(rgba(84, 76, 121, 0.18), rgba(84, 76, 121, 0.18)),
+    radial-gradient(circle at 18% 22%, rgba(234, 226, 202, 0.16) 0%, transparent 26%),
+    radial-gradient(circle at 74% 16%, rgba(243, 208, 227, 0.14) 0%, transparent 24%),
+    #534d72;
+}
+
+.dataset-pill-static {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dataset-pill-static span {
+  color: rgba(255, 248, 241, 0.92);
+}
+
+.home-pill-button {
+  color: rgba(255, 248, 241, 0.92);
+}
+
+.home-map-feedback {
+  position: absolute;
+  left: 50%;
+  top: 200px;
+  transform: translateX(-50%);
+  z-index: 4;
+  min-width: 320px;
+  padding: 16px 22px;
+  border-radius: 20px;
+  background: rgba(54, 46, 78, 0.72);
+  color: #fff9f1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 16px 30px rgba(24, 18, 36, 0.2);
+}
+
+.home-live-map {
+  inset: 0;
+  width: 100%;
+  height: 1240px;
+}
+
+.home-map-path,
+.live-expanded-edge,
+.home-map-hit {
+  fill: none;
+}
+
+.home-map-path {
+  stroke: rgba(255, 245, 238, 0.74);
+  stroke-width: 0.28;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.home-map-path.multi {
+  stroke: rgba(242, 230, 157, 0.92);
+}
+
+.home-map-path.active {
+  stroke: rgba(255, 220, 234, 0.95);
+  stroke-width: 0.34;
+}
+
+.home-map-hit {
+  stroke: transparent;
+  stroke-width: 2.4;
+  cursor: pointer;
+}
+
+.live-expanded-edge {
+  stroke: rgba(255, 234, 243, 0.9);
+  stroke-width: 0.3;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.live-expanded-edge.selected {
+  stroke: #ffb4d4;
+  stroke-width: 0.38;
+}
+
+.home-edge-label,
+.expanded-edge-label {
+  fill: rgba(255, 249, 242, 0.95);
+  font-family: "Times New Roman", Times, serif;
+  font-size: 1.4px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(56, 48, 84, 0.72);
+  stroke-width: 0.16px;
+}
+
+.expanded-edge-label {
+  fill: rgba(244, 236, 185, 0.98);
+  font-size: 1.18px;
+}
+
+.home-map-node circle {
+  fill: rgba(248, 245, 224, 0.98);
+  stroke: rgba(255, 255, 255, 0.46);
+  stroke-width: 0.12;
+  cursor: pointer;
+}
+
+.home-map-node.selected circle {
+  stroke: #ffb4d4;
+  stroke-width: 0.36;
+}
+
+.home-map-node.neighbor circle {
+  stroke: #f2d4ff;
+  stroke-width: 0.28;
+}
+
+.home-map-node-code,
+.home-map-node-name {
+  fill: rgba(255, 247, 239, 0.94);
+  font-family: "Times New Roman", Times, serif;
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(65, 56, 94, 0.76);
+  stroke-width: 0.18px;
+}
+
+.home-map-node-code {
+  font-size: 2.35px;
+}
+
+.home-map-node-name {
+  font-size: 1.85px;
+}
+
+.live-compound-popover {
+  left: 0;
+  top: 292px;
+  width: 520px;
+  background: rgba(36, 36, 43, 0.9);
+  box-shadow: 0 18px 48px rgba(28, 20, 42, 0.28);
+}
+
+.popover-open-link {
+  width: 46px;
+  height: 46px;
+  border: 4px solid rgba(255, 255, 255, 0.9);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.popover-smiles-row strong {
+  text-align: left;
+}
+
+.live-enzyme-stack {
+  right: 0;
+  top: 278px;
+  width: 600px;
+  padding-top: 62px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.stack-heading {
+  position: absolute;
+  top: 14px;
+  left: 20px;
+  right: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  color: #2a203b;
+}
+
+.stack-heading strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.stack-heading span {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  color: rgba(42, 32, 59, 0.76);
+}
+
+.stack-close-button {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(42, 32, 59, 0.12);
+  color: #2a203b;
+  display: grid;
+  place-items: center;
+}
+
+.enzyme-card-copy {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+}
+
+.compact-home-menu button {
+  justify-content: center;
+}
+
+.home-map-stats {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 245, 240, 0.78);
+}
+
+@media (max-width: 1400px) {
+  .atlas-live-stage {
+    min-height: 1380px;
+  }
+
+  .home-live-map {
+    height: 1320px;
+  }
+
+  .live-compound-popover {
+    width: min(500px, calc(100vw - 42px));
+  }
+
+  .live-enzyme-stack {
+    top: 910px;
+    width: min(620px, calc(100vw - 40px));
+    right: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .atlas-live-stage {
+    min-height: 1540px;
+  }
+
+  .home-search-bar {
+    top: 112px;
+  }
+
+  .live-compound-popover {
+    top: 260px;
+  }
+
+  .live-enzyme-stack {
+    top: 940px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .home-map-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    height: auto;
+    min-height: 96px;
+    padding: 14px 20px;
+  }
+}
+
+/* Atlas refinement pass - 2026-07-28 */
+body:has(.home-map-page) {
+  overflow: auto;
+}
+
+.home-map-page {
+  overflow-x: hidden;
+}
+
+.atlas-live-stage {
+  min-height: 1200px;
+  overflow: visible;
+}
+
+.atlas-brand {
+  left: 24px;
+  top: 18px;
+  gap: 10px;
+  font-size: 23px;
+  color: rgba(255, 248, 241, 0.82);
+}
+
+.atlas-logo {
+  width: 30px;
+  height: 30px;
+}
+
+.atlas-year {
+  right: 28px;
+  top: 22px;
+  font-size: 17px;
+  color: rgba(255, 245, 238, 0.52);
+}
+
+.dataset-pill {
+  top: 66px;
+  width: 246px;
+  min-height: 54px;
+  padding: 12px 18px 12px 28px;
+  font-size: 17px;
+}
+
+.dataset-pill strong,
+.dataset-pill > button,
+.dataset-pill > span {
+  font-size: 17px;
+}
+
+.home-search-bar {
+  top: 44px;
+  width: min(760px, 54vw);
+  height: 54px;
+  border-radius: 28px;
+}
+
+.home-search-mode {
+  min-width: 228px;
+  gap: 9px;
+  border-radius: 28px;
+  font-size: 17px;
+  padding: 0 18px;
+}
+
+.home-search-bar input {
+  font-size: 18px;
+  padding: 0 16px;
+}
+
+.home-search-submit {
+  width: 62px;
+  height: 54px;
+}
+
+.home-search-submit svg {
+  width: 24px;
+  height: 24px;
+}
+
+.search-mode-menu {
+  top: 54px;
+  width: 228px;
+}
+
+.search-mode-menu button,
+.source-menu button,
+.floating-menu button {
+  font-size: 15px;
+}
+
+.download-pill,
+.mapping-pill {
+  width: 252px;
+  min-width: 252px;
+  min-height: 54px;
+  top: 76px;
+}
+
+.mapping-pill {
+  top: 142px;
+}
+
+.download-pill,
+.mapping-pill > button {
+  font-size: 17px;
+  gap: 10px;
+}
+
+.download-pill span {
+  min-width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+
+.source-menu {
+  top: 56px;
+  width: 252px;
+  padding: 12px 14px;
+}
+
+.home-live-map {
+  height: 1160px;
+}
+
+.home-edge-label {
+  font-size: 1.08px;
+}
+
+.expanded-edge-label {
+  font-size: 0.96px;
+}
+
+.home-map-node-code {
+  font-size: 1.86px;
+}
+
+.home-map-node-name {
+  font-size: 1.28px;
+}
+
+.live-compound-popover {
+  top: 248px;
+  width: 368px;
+  min-height: 0;
+  padding: 22px 24px 20px;
+  border-radius: 0 16px 16px 0;
+  background: rgba(33, 31, 42, 0.9);
+}
+
+.popover-heading {
+  gap: 12px;
+  font-size: 22px;
+}
+
+.popover-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.popover-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.popover-open-link,
+.popover-close-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 248, 241, 0.58);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff8f1;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.popover-close-button {
+  cursor: pointer;
+}
+
+.popover-id {
+  margin-top: 12px;
+  font-size: 14px;
+  color: rgba(255, 244, 238, 0.74);
+}
+
+.compound-structure {
+  width: min(100%, 230px);
+  margin: 16px auto 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 12px;
+}
+
+.compound-structure img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+}
+
+.popover-fields {
+  gap: 7px;
+  font-size: 14px;
+}
+
+.popover-fields p {
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+}
+
+.popover-fields span {
+  color: rgba(255, 244, 238, 0.62);
+}
+
+.popover-fields strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.popover-smiles-row strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.popover-cart {
+  margin-top: 16px;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.check-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+
+.live-enzyme-stack {
+  right: 18px;
+  top: 248px;
+  width: 438px;
+  max-height: 650px;
+  padding: 52px 0 14px 14px;
+  overflow-y: auto;
+  border-radius: 16px 0 0 16px;
+  background: rgba(245, 241, 248, 0.44);
+}
+
+.stack-heading {
+  top: 12px;
+  left: 14px;
+  right: 14px;
+  gap: 10px;
+}
+
+.stack-heading strong {
+  font-size: 16px;
+}
+
+.stack-heading span {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.stack-close-button {
+  width: 30px;
+  height: 30px;
+}
+
+.enzyme-card {
+  min-height: 94px;
+  grid-template-columns: 34px minmax(0, 1fr) 110px;
+  gap: 12px;
+  padding: 12px 14px 12px 10px;
+  border-radius: 10px 0 0 10px;
+}
+
+.card-check {
+  width: 26px;
+  height: 26px;
+}
+
+.enzyme-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.28;
+}
+
+.enzyme-card p {
+  margin: 3px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 248, 241, 0.8);
+}
+
+.enzyme-card-meta {
+  gap: 3px;
+  font-size: 11px;
+}
+
+.enzyme-card-meta strong,
+.enzyme-card-meta small,
+.enzyme-card-meta button {
+  font-size: 11px;
+}
+
+.map-footer-stats {
+  height: 52px;
+  padding: 0 24px;
+  font-size: 13px;
+}
+
+.app-shell:not(.home-shell) {
+  background:
+    radial-gradient(circle at 12% 14%, rgba(236, 228, 214, 0.26), transparent 26%),
+    radial-gradient(circle at 88% 12%, rgba(220, 203, 233, 0.24), transparent 22%),
+    linear-gradient(180deg, #f5f1f7 0%, #f1edf5 56%, #ebe6f1 100%);
+  color: #312848;
+}
+
+.sidebar {
+  border-right: 1px solid rgba(110, 93, 145, 0.16);
+  background: rgba(248, 245, 251, 0.78);
+  backdrop-filter: blur(18px);
+  box-shadow: 18px 0 36px rgba(96, 81, 129, 0.08);
+}
+
+.brand-name,
+.page-heading h1,
+.panel-header h2,
+.detail-title h2 {
+  font-family: "Times New Roman", Times, serif;
+  letter-spacing: 0;
+}
+
+.brand-name {
+  color: #33294b;
+}
+
+.brand-subtitle,
+.sidebar-section-label,
+.dataset-meta span,
+.dataset-copy span,
+.version-chip,
+.sync-state,
+.crumbs span {
+  color: rgba(62, 48, 86, 0.58);
+}
+
+.brand-mark,
+.dataset-icon {
+  background: rgba(110, 93, 145, 0.12);
+  color: #5c4a81;
+  border: 1px solid rgba(110, 93, 145, 0.18);
+}
+
+.nav-item,
+.dataset-card,
+.version-chip,
+.footer-link,
+.topbar-download,
+.topbar-secondary,
+.icon-button,
+.outline-button,
+.secondary-button,
+.primary-button,
+.filter-toggle,
+.filter-select,
+.search-field {
+  border-radius: 14px;
+}
+
+.nav-item,
+.dataset-card,
+.footer-link,
+.topbar-download,
+.topbar-secondary,
+.icon-button,
+.outline-button,
+.secondary-button,
+.filter-toggle,
+.filter-select,
+.search-field,
+.chip-button {
+  border-color: rgba(110, 93, 145, 0.16);
+  background: rgba(255, 255, 255, 0.62);
+  color: #352b4d;
+}
+
+.nav-item.active,
+.chip-button.active {
+  background: rgba(110, 93, 145, 0.18);
+  border-color: rgba(110, 93, 145, 0.28);
+  color: #2f2447;
+}
+
+.topbar {
+  background: rgba(248, 245, 251, 0.7);
+  border-bottom: 1px solid rgba(110, 93, 145, 0.12);
+  backdrop-filter: blur(16px);
+}
+
+.content-wrap {
+  max-width: 1480px;
+  padding: 26px 32px 40px;
+}
+
+.page-heading {
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+.page-heading h1 {
+  font-size: 31px;
+  color: #2f2447;
+}
+
+.page-heading p {
+  max-width: 720px;
+  color: rgba(55, 42, 79, 0.7);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.eyebrow,
+.result-total,
+.data-updated,
+.search-toolbar,
+.search-summary,
+.panel-kicker,
+.node-count,
+.summary-row,
+.field-row span,
+.related-row small,
+.result-subtitle,
+.result-tag,
+.queue-kind,
+.detail-description,
+.detail-topline,
+.detail-title p {
+  color: rgba(60, 46, 84, 0.62);
+}
+
+.workspace-grid,
+.search-shell,
+.downloads-shell {
+  gap: 18px;
+}
+
+.section-panel,
+.network-panel,
+.detail-panel,
+.downloads-summary .summary-panel,
+.search-result,
+.download-row {
+  border: 1px solid rgba(121, 102, 157, 0.12);
+  border-radius: 20px;
+  background: rgba(252, 250, 255, 0.7);
+  box-shadow: 0 18px 36px rgba(93, 76, 124, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.panel-header {
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid rgba(121, 102, 157, 0.1);
+}
+
+.panel-header h2 {
+  margin-top: 6px;
+  color: #2f2447;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.network-canvas-wrap {
+  margin: 0 14px 14px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(240, 228, 242, 0.82), transparent 24%),
+    linear-gradient(180deg, rgba(245, 241, 248, 0.9), rgba(238, 233, 244, 0.92));
+  border: 1px solid rgba(121, 102, 157, 0.1);
+}
+
+.network-canvas {
+  border-radius: 18px;
+}
+
+.network-footer {
+  padding: 0 18px 16px;
+}
+
+.filter-toolbar,
+.search-toolbar {
+  gap: 12px;
+}
+
+.search-field,
+.search-hero {
+  border: 1px solid rgba(121, 102, 157, 0.14);
+  background: rgba(252, 250, 255, 0.86);
+  box-shadow: 0 12px 26px rgba(93, 76, 124, 0.06);
+}
+
+.search-hero {
+  height: 54px;
+  padding: 0 16px;
+  margin-bottom: 14px;
+  border-radius: 18px;
+}
+
+.search-hero input,
+.search-field input {
+  color: #312848;
+}
+
+.search-result,
+.download-row {
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.search-result:nth-child(2n) {
+  background: rgba(248, 245, 252, 0.76);
+}
+
+.search-result:hover,
+.search-result.selected,
+.download-row:hover {
+  border-color: rgba(121, 102, 157, 0.22);
+  box-shadow: 0 18px 32px rgba(93, 76, 124, 0.12);
+  transform: translateY(-1px);
+}
+
+.result-name,
+.queue-copy strong,
+.detail-title h2,
+.field-row strong,
+.related-row strong,
+.summary-row strong {
+  color: #312848;
+}
+
+.result-name {
+  font-size: 14px;
+}
+
+.result-description,
+.queue-copy small {
+  color: rgba(65, 51, 91, 0.68);
+}
+
+.detail-panel {
+  color: #312848;
+}
+
+.detail-panel.empty-detail,
+.empty-home {
+  background: rgba(252, 250, 255, 0.62);
+  border-radius: 20px;
+}
+
+.structure-preview {
+  border-radius: 16px;
+  background: rgba(245, 241, 248, 0.92);
+}
+
+.tag {
+  background: rgba(110, 93, 145, 0.1);
+  color: #43355f;
+  border-color: rgba(110, 93, 145, 0.14);
+}
+
+.summary-actions {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+@media (max-width: 1400px) {
+  .live-enzyme-stack {
+    top: 860px;
+    width: min(460px, calc(100vw - 32px));
+  }
+}
+
+@media (max-width: 1100px) {
+  .atlas-live-stage {
+    min-height: 1360px;
+  }
+
+  .home-search-bar {
+    top: 106px;
+    width: calc(100vw - 36px);
+  }
+
+  .live-compound-popover {
+    top: 248px;
+    width: min(360px, calc(100vw - 36px));
+  }
+
+  .live-enzyme-stack {
+    top: 898px;
+    right: 12px;
+  }
+
+  .map-footer-stats {
+    height: auto;
+    min-height: 74px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 12px 18px;
+  }
+}
+
+@media (max-width: 900px) {
+  .content-wrap {
+    padding: 20px 18px 30px;
+  }
+
+  .page-heading h1 {
+    font-size: 25px;
+  }
+
+  .page-heading p {
+    font-size: 12px;
+  }
+
+  .home-search-mode {
+    min-width: 170px;
+    font-size: 15px;
+  }
+
+  .home-search-bar input {
+    font-size: 16px;
+  }
+
+  .live-compound-popover {
+    width: calc(100% - 24px);
+  }
+
+  .live-enzyme-stack {
+    left: 12px;
+    width: auto;
+    max-height: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .atlas-brand {
+    font-size: 18px;
+  }
+
+  .dataset-pill,
+  .download-pill,
+  .mapping-pill,
+  .searching-filters-pill {
+    font-size: 16px;
+  }
+
+  .home-search-mode {
+    font-size: 14px;
+  }
+
+  .home-search-bar input {
+    font-size: 15px;
+  }
+
+  .compound-popover,
+  .enzyme-card-stack {
+    top: 420px;
+  }
+
+  .enzyme-card {
+    grid-template-columns: 30px 1fr;
+  }
+
+  .enzyme-card-meta {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .map-footer-stats {
+    top: 420px;
+    grid-template-columns: 1fr;
   }
 }

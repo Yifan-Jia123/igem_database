@@ -27,7 +27,8 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { entities as mockEntities, filterOptions as mockFilterOptions, graphEdges as mockGraphEdges, graphNodes as mockGraphNodes } from './data'
-import { loadApiDataset, searchApiEntries } from './api'
+import { loadApiDataset, searchApiEntries, searchHomologyEntries } from './api'
+import { CompoundGraphHome, EnzymeDetailView } from './graphExperience'
 import type { Entity, EntityKind, GraphNode } from './types'
 
 let entities = mockEntities
@@ -37,7 +38,7 @@ let graphNodes = mockGraphNodes
 
 const getEntity = (id: string) => entities.find((entity) => entity.id === id)
 
-type View = 'home' | 'network' | 'search' | 'downloads'
+type View = 'home' | 'network' | 'search' | 'downloads' | 'enzyme'
 type SearchKind = 'all' | EntityKind
 type HomeSearchMode = 'enzymeItems' | 'pathways' | 'blast' | 'mapsearch'
 
@@ -60,70 +61,11 @@ const navigation = [
   { view: 'downloads', label: 'Download queue', icon: Download },
 ] as const
 
-const featuredRoutes = [
-  {
-    id: 'monoterpene',
-    title: 'Monoterpene branch',
-    source: 'CHEBI:17115',
-    enzyme: 'ENZ:Q9ZSY2',
-    product: 'CHEBI:16486',
-    description: 'Fast route from GPP to linalool.',
-    accent: 'amber',
-  },
-  {
-    id: 'sesquiterpene',
-    title: 'Sesquiterpene branch',
-    source: 'CHEBI:17292',
-    enzyme: 'ENZ:Q5T7B8',
-    product: 'CHEBI:17579',
-    description: 'Curated FPP branch with product diversity.',
-    accent: 'coral',
-  },
-  {
-    id: 'diterpene',
-    title: 'Diterpene branch',
-    source: 'CHEBI:15377',
-    enzyme: 'ENZ:Q9FJA2',
-    product: 'CHEBI:33998',
-    description: 'Taxane route from GGPP to taxadiene.',
-    accent: 'teal',
-  },
-] as const
-
 const homeSearchModes: Array<{ id: HomeSearchMode; label: string }> = [
   { id: 'enzymeItems', label: 'Enzyme items' },
   { id: 'pathways', label: 'Pathways' },
   { id: 'blast', label: 'BLAST' },
   { id: 'mapsearch', label: 'Enzyme items (mapsearch)' },
-]
-
-const sourceFilters = ['Swiss-Prot', 'TrEMBL', 'Essay-Searched', 'AI-Predicted']
-
-const homeEdgeCards = [
-  {
-    id: 'Q9ZSY2',
-    name: 'Linalool synthase',
-    organism: 'Arabidopsis thaliana',
-    rhea: 'RHEA:24464',
-    equation: 'GPP = linalool + diphosphate',
-    extra: '+1',
-  },
-  {
-    id: 'Q5T7B8',
-    name: 'Germacrene A synthase',
-    organism: 'Cichorium intybus',
-    rhea: 'RHEA:23808;23809',
-    equation: 'FPP = germacrene A + diphosphate',
-    extra: '+2',
-  },
-  {
-    id: 'Q9FJA2',
-    name: 'Taxadiene synthase',
-    organism: 'Taxus baccata',
-    rhea: 'RHEA:18797',
-    equation: 'GGPP = taxa-4,11-diene',
-    extra: '',
-  },
 ]
 
 type FilterState = {
@@ -195,7 +137,12 @@ function App() {
     const timer = window.setTimeout(() => {
       const organismName = selectedSpecies && selectedSpecies !== filterOptions.species[0] ? selectedSpecies : undefined
 
-      searchApiEntries({ q: trimmedQuery, organismName })
+      const isHomologySearch = looksLikeProteinSequence(trimmedQuery)
+      const searchPromise = isHomologySearch
+        ? searchHomologyEntries(trimmedQuery)
+        : searchApiEntries({ q: trimmedQuery, organismName })
+
+      searchPromise
         .then((results) => {
           if (cancelled) return
 
@@ -212,7 +159,7 @@ function App() {
           if (cancelled) return
           console.warn('Backend search failed; showing loaded graph records.', error)
           setApiSearchResults(null)
-          setApiSearchError('Backend search unavailable; showing loaded graph records.')
+          setApiSearchError(isHomologySearch ? 'Homology search unavailable; showing loaded graph records.' : 'Backend search unavailable; showing loaded graph records.')
         })
         .finally(() => {
           if (!cancelled) setApiSearchLoading(false)
@@ -242,7 +189,7 @@ function App() {
     [filters],
   )
 
-  const routeCount = featuredRoutes.length
+  const routeCount = new Set(graphEdges.map((edge) => edge.edgeGroupId || edge.reactionId)).size
   const queueCount = downloadedItems.length
   const visibleNodeCount = visibleNodeIds.size
   const visibleEdgeCount = graphEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)).length
@@ -402,11 +349,18 @@ function App() {
             nodeCount={visibleNodeCount}
             edgeCount={visibleEdgeCount}
             downloadedItems={downloadedItems}
-            onOpenSearch={() => goTo('search')}
+            onOpenSearch={(nextQuery) => {
+              const nextSearch = nextQuery || ''
+              setQuery(nextSearch)
+              setSearchKind(looksLikeProteinSequence(nextSearch) ? 'enzyme' : 'all')
+              goTo('search')
+            }}
             onOpenNetwork={() => goTo('network')}
             onOpenDownloads={() => goTo('downloads')}
+            onOpenEnzyme={(id) => goTo('enzyme', id)}
             onToggleQueue={toggleQueue}
             openRecord={openRecord}
+            isQueued={(id) => queuedIds.has(id)}
           />
         )}
 
@@ -433,6 +387,15 @@ function App() {
             visibleNodeIds={visibleNodeIds}
             onSelectRelated={setSelectedId}
             isQueued={selected ? queuedIds.has(selected.id) : false}
+          />
+        )}
+
+        {view === 'enzyme' && (
+          <EnzymeDetailView
+            enzymeId={selectedId}
+            onBack={() => goTo('home')}
+            onToggleQueue={toggleQueue}
+            isQueued={(id) => queuedIds.has(id)}
           />
         )}
 
@@ -479,213 +442,43 @@ function App() {
 
 function HomeView({
   queueCount,
-  entityCount,
-  nodeCount,
-  edgeCount,
-  downloadedItems,
+  entityCount: _entityCount,
+  nodeCount: _nodeCount,
+  edgeCount: _edgeCount,
+  downloadedItems: _downloadedItems,
   onOpenSearch,
   onOpenNetwork,
   onOpenDownloads,
+  onOpenEnzyme,
   onToggleQueue,
-  openRecord,
+  openRecord: _openRecord,
+  isQueued,
 }: {
   queueCount: number
   entityCount: number
   nodeCount: number
   edgeCount: number
   downloadedItems: Entity[]
-  onOpenSearch: () => void
+  onOpenSearch: (query?: string) => void
   onOpenNetwork: () => void
   onOpenDownloads: () => void
+  onOpenEnzyme: (id: string) => void
   onToggleQueue: (id: string) => void
   openRecord: (entity: Entity) => void
+  isQueued: (id: string) => boolean
 }) {
-  const [datasetOpen, setDatasetOpen] = useState(false)
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [modeOpen, setModeOpen] = useState(false)
-  const [mode, setMode] = useState<HomeSearchMode>('enzymeItems')
-  const [homeQuery, setHomeQuery] = useState('')
-  const [activeSources, setActiveSources] = useState<string[]>(['Swiss-Prot'])
-  const [selectedNodeId, setSelectedNodeId] = useState('CHEBI:15377')
-  const [expandedEdge, setExpandedEdge] = useState(false)
-  const selectedNode = getEntity(selectedNodeId)
-  const selectedQueued = selectedNode ? downloadedItems.some((item) => item.id === selectedNode.id) : false
-  const searchActive = homeQuery.trim().length > 0 || mode === 'mapsearch'
-
-  const toggleSource = (source: string) => {
-    setActiveSources((current) => (current.includes(source) ? current.filter((item) => item !== source) : [...current, source]))
-  }
-
   return (
-    <div className="home-map-page">
-      <section className="atlas-map-stage" aria-label="Terpene Atlas interactive overview">
-        <div className="atlas-brand">
-          <span className="atlas-logo">
-            <Network size={19} />
-          </span>
-          <span>Starase Atlas</span>
-        </div>
-
-        <div className="atlas-year">NJU - China&nbsp; 2026</div>
-
-        <div className={`floating-pill dataset-pill ${datasetOpen ? 'is-open' : ''}`}>
-          <button type="button" onClick={() => setDatasetOpen((open) => !open)}>
-            <span>Datasets:</span>
-            <ChevronDown size={23} />
-          </button>
-          <strong>Terpene synthase</strong>
-          {datasetOpen && (
-            <div className="floating-menu dataset-menu">
-              <button>Terpene synthase</button>
-              <button>Category 1</button>
-              <button>Category 2</button>
-            </div>
-          )}
-        </div>
-
-        <div className="home-search-bar">
-          <button className="home-search-mode" type="button" onClick={() => setModeOpen((open) => !open)}>
-            <ChevronDown size={22} />
-            <span>{homeSearchModes.find((item) => item.id === mode)?.label}</span>
-          </button>
-          {modeOpen && (
-            <div className="floating-menu search-mode-menu">
-              {homeSearchModes.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setMode(item.id)
-                    setModeOpen(false)
-                    if (item.id === 'pathways') onOpenNetwork()
-                    if (item.id === 'enzymeItems') onOpenSearch()
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <input
-            value={homeQuery}
-            onChange={(event) => setHomeQuery(event.target.value)}
-            placeholder={mode === 'blast' ? 'Paste a protein sequence or accession' : 'Search enzymes, pathways, substrates, or products'}
-          />
-          <button className="home-search-submit" type="button" onClick={mode === 'pathways' ? onOpenNetwork : onOpenSearch} title="Search">
-            <Search size={35} />
-          </button>
-        </div>
-
-        {searchActive && (
-          <button className="floating-pill searching-filters-pill" type="button" onClick={() => setFiltersOpen((open) => !open)}>
-            Searching filters
-            <ChevronDown size={22} />
-          </button>
-        )}
-
-        <button className="floating-pill download-pill" type="button" onClick={onOpenDownloads}>
-          Downloading table
-          {queueCount > 0 && <span>{queueCount}</span>}
-        </button>
-
-        <div className={`floating-pill mapping-pill ${filtersOpen ? 'is-open' : ''}`}>
-          <button type="button" onClick={() => setFiltersOpen((open) => !open)}>
-            <span>Mapping filters</span>
-            <ChevronDown size={23} />
-          </button>
-          {filtersOpen && (
-            <div className="floating-menu source-menu">
-              {sourceFilters.map((source) => (
-                <button key={source} type="button" onClick={() => toggleSource(source)}>
-                  <span>{source}</span>
-                  <span className={`check-box ${activeSources.includes(source) ? 'checked' : ''}`}>
-                    {activeSources.includes(source) && <Check size={18} />}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <HomeMapGraphic
-          selectedNodeId={selectedNodeId}
-          expandedEdge={expandedEdge}
-          searchActive={searchActive}
-          onNodeSelect={(id) => {
-            setSelectedNodeId(id)
-            setExpandedEdge(false)
-          }}
-          onEdgeSelect={() => {
-            setExpandedEdge(true)
-            setSelectedNodeId('CHEBI:17579')
-          }}
-        />
-
-        {selectedNode && !expandedEdge && (
-          <div className="compound-popover">
-            <div className="popover-heading">
-              <strong>{selectedNode.name}</strong>
-              <button type="button" onClick={() => openRecord(selectedNode)} title="Open record">
-                <ArrowUpRight size={25} />
-              </button>
-            </div>
-            <div className="popover-id">{selectedNode.id}</div>
-            <div className="compound-structure">
-              <span className="structure-ring one" />
-              <span className="structure-ring two" />
-              <span className="structure-bond a" />
-              <span className="structure-bond b" />
-              <span className="structure-bond c" />
-            </div>
-            <div className="popover-fields">
-              {selectedNode.fields.slice(0, 3).map((field) => (
-                <p key={field.label}>
-                  <span>{field.label}</span>
-                  <strong>{field.value}</strong>
-                </p>
-              ))}
-            </div>
-            <button className="popover-cart" type="button" onClick={() => onToggleQueue(selectedNode.id)}>
-              <span className={`check-box ${selectedQueued ? 'checked' : ''}`}>{selectedQueued && <Check size={17} />}</span>
-              {selectedQueued ? 'In downloading table' : 'Add to downloading table'}
-            </button>
-          </div>
-        )}
-
-        {expandedEdge && (
-          <div className="enzyme-card-stack">
-            {homeEdgeCards.map((card, index) => (
-              <article key={card.id} className={`enzyme-card ${index === 0 ? 'selected' : ''}`}>
-                <button className="card-check" type="button" onClick={() => onToggleQueue(`ENZ:${card.id}`)}>
-                  <Check size={20} />
-                </button>
-                <div>
-                  <h3>{card.name}</h3>
-                  <p>{card.organism}</p>
-                  <p>{card.equation}</p>
-                </div>
-                <div className="enzyme-card-meta">
-                  <strong>uniprot:</strong>
-                  <span>{card.id}</span>
-                  <small>{card.rhea}</small>
-                  {card.extra && <button type="button">{card.extra}</button>}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-
-        <div className="map-footer-stats">
-          <span>Total enzymes: {entityCount}</span>
-          <span>Total enzyme-reaction pairs: {edgeCount}</span>
-          <span>Mapping enzymes: {nodeCount}</span>
-          <span>Mapping main compounds: {graphNodes.length}</span>
-        </div>
-      </section>
-    </div>
+    <CompoundGraphHome
+      onOpenSearch={onOpenSearch}
+      onOpenNetwork={onOpenNetwork}
+      onOpenDownloads={onOpenDownloads}
+      onOpenEnzyme={onOpenEnzyme}
+      onToggleQueue={onToggleQueue}
+      isQueued={isQueued}
+      queueCount={queueCount}
+    />
   )
 }
-
 function NetworkView({
   query,
   setQuery,
@@ -1209,14 +1002,20 @@ function DetailPanel({
 
       {entity.imageLabel && (
         <div className="structure-preview">
-          <div className="structure-grid" />
-          <div className="structure-placeholder">
-            <span className="ring-shape" />
-            <span className="bond bond-a" />
-            <span className="bond bond-b" />
-            <span className="structure-label">{entity.imageLabel}</span>
-          </div>
-          <button className="preview-link" onClick={() => onOpenRecord(entity)}>
+          {entity.imageUrl ? (
+            <img className="structure-image" src={entity.imageUrl} alt={`${entity.name} 2D structure`} />
+          ) : (
+            <>
+              <div className="structure-grid" />
+              <div className="structure-placeholder">
+                <span className="ring-shape" />
+                <span className="bond bond-a" />
+                <span className="bond bond-b" />
+                <span className="structure-label">{entity.imageLabel}</span>
+              </div>
+            </>
+          )}
+          <button className="preview-link" onClick={() => window.open(entity.imageUrl || getExternalRecordUrl(entity), '_blank', 'noopener,noreferrer')}>
             Open asset
             <ExternalLink size={12} />
           </button>
@@ -1392,67 +1191,162 @@ type HomeMapNode = {
   x: number
   y: number
   size: number
+  kind: EntityKind
 }
 
-const homeMapNodes: HomeMapNode[] = [
-  { id: 'CHEBI:17115', label: 'compound', x: 15, y: 49, size: 13 },
-  { id: 'CHEBI:15377', label: 'compound', x: 32, y: 45, size: 19 },
-  { id: 'CHEBI:17292', label: 'compound', x: 45, y: 28, size: 13 },
-  { id: 'CHEBI:16486', label: 'compound', x: 53, y: 49, size: 18 },
-  { id: 'CHEBI:17579', label: 'compound', x: 63, y: 35, size: 21 },
-  { id: 'CHEBI:33998', label: 'compound', x: 74, y: 54, size: 14 },
-  { id: 'CHEBI:17347', label: 'compound', x: 88, y: 41, size: 13 },
-  { id: 'node-8', label: 'compound', x: 23, y: 64, size: 11 },
-  { id: 'node-9', label: 'compound', x: 39, y: 68, size: 12 },
-  { id: 'node-10', label: 'compound', x: 57, y: 74, size: 14 },
-  { id: 'node-11', label: 'compound', x: 68, y: 70, size: 15 },
-  { id: 'node-12', label: 'compound', x: 81, y: 72, size: 12 },
-  { id: 'node-13', label: 'compound', x: 11, y: 69, size: 10 },
-  { id: 'node-14', label: 'compound', x: 92, y: 24, size: 10 },
-  { id: 'node-15', label: 'compound', x: 6, y: 33, size: 10 },
-  { id: 'node-16', label: 'compound', x: 29, y: 18, size: 12 },
-  { id: 'node-17', label: 'compound', x: 77, y: 21, size: 12 },
-]
+type HomeMapEdge = {
+  id: string
+  sourceId: string
+  targetId: string
+  label: string
+  entityId: string
+  reactionId: string
+  multi: boolean
+}
 
-const homeMapEdges: Array<[string, string, string]> = [
-  ['CHEBI:17115', 'CHEBI:15377', 'enzyme'],
-  ['CHEBI:15377', 'CHEBI:17292', 'enzyme*2'],
-  ['CHEBI:17292', 'CHEBI:16486', 'enzyme'],
-  ['CHEBI:16486', 'CHEBI:17579', 'enzyme*3'],
-  ['CHEBI:17579', 'CHEBI:33998', 'enzyme'],
-  ['CHEBI:33998', 'CHEBI:17347', 'enzyme'],
-  ['CHEBI:15377', 'node-8', 'enzyme'],
-  ['node-8', 'node-13', 'enzyme'],
-  ['CHEBI:15377', 'node-9', 'enzyme'],
-  ['CHEBI:16486', 'node-10', 'enzyme'],
-  ['node-10', 'node-11', 'enzyme'],
-  ['node-11', 'node-12', 'enzyme'],
-  ['CHEBI:17579', 'node-17', 'enzyme'],
-  ['CHEBI:17347', 'node-14', 'enzyme'],
-  ['CHEBI:17115', 'node-15', 'enzyme'],
-  ['CHEBI:15377', 'node-16', 'enzyme'],
-]
+type HomeEdgeCard = {
+  id: string
+  entityId: string
+  name: string
+  organism: string
+  equation: string
+  recordCode: string
+  reactionId: string
+  extra?: string
+}
+
+function buildHomeMap(nodes: GraphNode[], edges: typeof graphEdges, activeSources: string[]) {
+  const sourceSet = new Set(activeSources.map(normalizeSourceLabel))
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+  const candidateEdges = edges.filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target))
+  const sourceFilteredEdges = sourceSet.size
+    ? candidateEdges.filter((edge) => {
+        const enzyme = getEntity(edge.enzymeId)
+        return enzyme?.tags.some((tag) => sourceSet.has(normalizeSourceLabel(tag)))
+      })
+    : candidateEdges
+  const displayEdges = (sourceFilteredEdges.length > 0 ? sourceFilteredEdges : candidateEdges).slice(0, 28)
+  const includedNodeIds = new Set(displayEdges.flatMap((edge) => [edge.source, edge.target]))
+  const displayNodes = (includedNodeIds.size > 0 ? nodes.filter((node) => includedNodeIds.has(node.id)) : nodes).slice(0, 22)
+  const displayNodeIds = new Set(displayNodes.map((node) => node.id))
+  const boundedEdges = displayEdges.filter((edge) => displayNodeIds.has(edge.source) && displayNodeIds.has(edge.target))
+  const degrees = new Map<string, number>()
+
+  boundedEdges.forEach((edge) => {
+    degrees.set(edge.source, (degrees.get(edge.source) || 0) + 1)
+    degrees.set(edge.target, (degrees.get(edge.target) || 0) + 1)
+  })
+
+  const xs = displayNodes.map((node) => node.x)
+  const ys = displayNodes.map((node) => node.y)
+  const minX = Math.min(...xs, 0)
+  const maxX = Math.max(...xs, 1)
+  const minY = Math.min(...ys, 0)
+  const maxY = Math.max(...ys, 1)
+  const spanX = Math.max(maxX - minX, 1)
+  const spanY = Math.max(maxY - minY, 1)
+  const pairCounts = new Map<string, number>()
+
+  boundedEdges.forEach((edge) => {
+    const pairKey = `${edge.source}->${edge.target}`
+    pairCounts.set(pairKey, (pairCounts.get(pairKey) || 0) + 1)
+  })
+
+  return {
+    nodes: displayNodes.map((node) => ({
+      id: node.id,
+      label: node.kind,
+      x: 7 + ((node.x - minX) / spanX) * 86,
+      y: 18 + ((node.y - minY) / spanY) * 58,
+      size: 12 + Math.min(degrees.get(node.id) || 0, 8),
+      kind: node.kind,
+    })),
+    edges: boundedEdges.map((edge) => ({
+      id: edge.id,
+      sourceId: edge.source,
+      targetId: edge.target,
+      label: edge.label.replace('RHEA:', 'R-'),
+      entityId: edge.enzymeId,
+      reactionId: edge.reactionId,
+      multi: (pairCounts.get(`${edge.source}->${edge.target}`) || 0) > 1 || Boolean(edge.curved),
+    })),
+  }
+}
+
+function deriveSourceFilters(items: Entity[]) {
+  const sourceTags = new Set<string>()
+  items.forEach((entity) => {
+    entity.tags.forEach((tag) => {
+      const normalized = normalizeSourceLabel(tag)
+      if (normalized && !normalized.includes('grouped') && !normalized.includes('compound')) sourceTags.add(formatSourceLabel(tag))
+    })
+  })
+  return Array.from(sourceTags).slice(0, 6)
+}
+
+function buildHomeEdgeCards(edgeId: string | null, edges: HomeMapEdge[]): HomeEdgeCard[] {
+  const selectedEdge = edges.find((edge) => edge.id === edgeId)
+  const sourceEdges = selectedEdge
+    ? edges.filter((edge) => edge.sourceId === selectedEdge.sourceId && edge.targetId === selectedEdge.targetId).slice(0, 3)
+    : edges.slice(0, 3)
+
+  return sourceEdges.map((edge, index) => {
+    const enzyme = getEntity(edge.entityId)
+    const reaction = getEntity(edge.reactionId)
+    const organism = enzyme?.species || enzyme?.fields.find((field) => field.label === 'Organism')?.value || 'Unknown organism'
+    const recordCode = enzyme?.subtitle || edge.entityId
+
+    return {
+      id: `${edge.id}:${index}`,
+      entityId: edge.entityId,
+      name: enzyme?.name || edge.entityId,
+      organism,
+      equation: reaction?.description || enzyme?.description || edge.label,
+      recordCode,
+      reactionId: edge.reactionId,
+      extra: sourceEdges.length > 1 && index === 0 ? `+${sourceEdges.length - 1}` : undefined,
+    }
+  })
+}
+
+function normalizeSourceLabel(value: string) {
+  return value.toLowerCase().replace(/[_\s-]+/g, '')
+}
+
+function formatSourceLabel(value: string) {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('-')
+}
 
 function HomeMapGraphic({
+  nodes,
+  edges,
   selectedNodeId,
-  expandedEdge,
+  expandedEdgeId,
   searchActive,
   onNodeSelect,
   onEdgeSelect,
 }: {
-  selectedNodeId: string
-  expandedEdge: boolean
+  nodes: HomeMapNode[]
+  edges: HomeMapEdge[]
+  selectedNodeId: string | null
+  expandedEdgeId: string | null
   searchActive: boolean
   onNodeSelect: (id: string) => void
-  onEdgeSelect: () => void
+  onEdgeSelect: (edge: HomeMapEdge) => void
 }) {
-  const nodeById = (id: string) => homeMapNodes.find((node) => node.id === id)!
-  const selected = nodeById(selectedNodeId)
+  const nodeById = (id: string) => nodes.find((node) => node.id === id)
+  const selected = (selectedNodeId ? nodeById(selectedNodeId) : undefined) || nodes[0]
   const neighborIds = new Set(
-    homeMapEdges
-      .filter(([source, target]) => source === selectedNodeId || target === selectedNodeId)
-      .flatMap(([source, target]) => [source, target]),
+    edges
+      .filter((edge) => edge.sourceId === selected?.id || edge.targetId === selected?.id)
+      .flatMap((edge) => [edge.sourceId, edge.targetId]),
   )
+
+  if (!selected) return null
 
   return (
     <svg className="home-map-svg" viewBox="0 0 100 100" role="img" aria-label="Interactive terpene network map">
@@ -1477,54 +1371,37 @@ function HomeMapGraphic({
       </g>
 
       <g className="home-map-edges">
-        {homeMapEdges.map(([sourceId, targetId, label], index) => {
-          if (expandedEdge && sourceId === 'CHEBI:15377' && targetId === 'CHEBI:17292') return null
-          const source = nodeById(sourceId)
-          const target = nodeById(targetId)
-          const selectedEdge = sourceId === selectedNodeId || targetId === selectedNodeId
-          const multi = label.includes('*')
+        {edges.map((edge) => {
+          const source = nodeById(edge.sourceId)
+          const target = nodeById(edge.targetId)
+          if (!source || !target) return null
+
+          const selectedEdge = edge.id === expandedEdgeId || edge.sourceId === selectedNodeId || edge.targetId === selectedNodeId
+          const labelVisible = edge.multi || selectedEdge || searchActive
 
           return (
-            <g key={`${sourceId}-${targetId}`}>
+            <g key={edge.id}>
               <line
                 x1={source.x}
                 y1={source.y}
                 x2={target.x}
                 y2={target.y}
-                className={`${selectedEdge ? 'active' : ''} ${multi ? 'multi' : ''}`}
+                className={`${selectedEdge ? 'active' : ''} ${edge.multi ? 'multi' : ''}`}
               />
-              <g role="button" tabIndex={0} aria-label={`Open ${label}`} onClick={multi ? onEdgeSelect : undefined}>
-                <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.4} className="home-edge-label">
-                  {multi ? label : index % 3 === 0 ? 'Q9ZSY2' : 'enzyme'}
-                </text>
+              <g role="button" tabIndex={0} aria-label={`Open ${edge.label}`} onClick={() => onEdgeSelect(edge)}>
+                {labelVisible && (
+                  <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.4} className="home-edge-label">
+                    {edge.multi ? `${edge.label}*` : edge.label}
+                  </text>
+                )}
               </g>
             </g>
           )
         })}
       </g>
 
-      {expandedEdge && (
-        <g className="expanded-edge-group">
-          <path d="M32 45 C38 34, 45 31, 53 49" className="expanded-edge red" />
-          <path d="M32 45 C39 45, 46 46, 53 49" className="expanded-edge orange" />
-          <path d="M32 45 C37 55, 45 58, 53 49" className="expanded-edge amber" />
-          <text x="42" y="34" className="expanded-edge-label">Q9ZSY2</text>
-          <text x="42" y="48" className="expanded-edge-label">Q5T7B8</text>
-          <text x="42" y="58" className="expanded-edge-label">Q9FJA2</text>
-        </g>
-      )}
-
-      {searchActive && (
-        <g className="search-edge-group">
-          <path d="M32 45 C39 22, 52 17, 63 35" className="search-result-edge orange" />
-          <path d="M32 45 C42 40, 53 40, 63 35" className="search-result-edge red" />
-          <text x="45" y="24" className="expanded-edge-label">A0A0A6ZFY4</text>
-          <text x="48" y="41" className="expanded-edge-label">A0A0A6ZFR4</text>
-        </g>
-      )}
-
       <g className="home-map-nodes">
-        {homeMapNodes.map((node) => {
+        {nodes.map((node) => {
           const isSelected = node.id === selectedNodeId
           const isNeighbor = neighborIds.has(node.id) && !isSelected
           const radius = isSelected ? node.size * 0.28 : isNeighbor ? node.size * 0.22 : node.size * 0.18
@@ -1543,7 +1420,6 @@ function HomeMapGraphic({
     </svg>
   )
 }
-
 function OverviewGraphic() {
   return (
     <svg className="overview-graphic" viewBox="0 0 960 620" role="img" aria-label="Dataset overview illustration">
@@ -1714,6 +1590,15 @@ function viewLabel(view: View) {
   }
 }
 
+function looksLikeProteinSequence(value: string) {
+  const compact = value
+    .replace(/^>.*$/gm, '')
+    .replace(/[^A-Za-z]/g, '')
+    .toUpperCase()
+
+  return compact.length >= 30 && /^[ACDEFGHIKLMNPQRSTVWYBXZJUO]+$/.test(compact)
+}
+
 function matchesFilters(entity: Entity | undefined, filters: FilterState) {
   if (!entity) return false
 
@@ -1746,3 +1631,14 @@ function visibleEdgeCount(visibleNodeIds: Set<string>) {
 }
 
 export default App
+
+
+
+
+
+
+
+
+
+
+

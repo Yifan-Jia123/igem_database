@@ -4350,3 +4350,411 @@ body:has(.home-map-page) {
     grid-template-columns: 1fr;
   }
 }
+
+/* 2026-07-28 atlas interaction + enzyme detail refinement */
+.dataset-pill-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  text-align: left;
+}
+
+.dataset-pill-button span,
+.dataset-pill-button strong {
+  display: block;
+}
+
+.dataset-select-menu {
+  left: 0;
+  top: calc(100% + 6px);
+  width: 100%;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(242, 240, 246, 0.94);
+  color: #2c2341;
+}
+
+.dataset-select-menu button {
+  min-height: 54px;
+  border-radius: 14px;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 14px;
+  text-align: left;
+}
+
+.dataset-select-menu button span,
+.dataset-select-menu button small {
+  display: block;
+}
+
+.dataset-select-menu button small {
+  color: rgba(44, 35, 65, 0.58);
+  font-size: 11px;
+}
+
+.dataset-select-menu button.is-active {
+  background: rgba(110, 93, 145, 0.14);
+}
+
+.dataset-select-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-home-menu {
+  display: grid;
+  gap: 12px;
+}
+
+.control-group {
+  display: grid;
+  gap: 6px;
+}
+
+.control-group label {
+  color: rgba(255, 247, 239, 0.78);
+  font-size: 12px;
+}
+
+.control-slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+}
+
+.control-slider {
+  width: 100%;
+  accent-color: #f0d6ea;
+}
+
+.control-value {
+  color: rgba(255, 248, 241, 0.92);
+  font-size: 11px;
+  text-align: right;
+}
+
+.control-menu-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.control-menu-actions button {
+  justify-content: center;
+}
+
+.selected-ring {
+  fill: none;
+  stroke: rgba(255, 68, 92, 0.96);
+  stroke-width: 0.34;
+}
+
+.selected-pulse,
+.home-map-node-code {
+  display: none;
+}
+
+.home-map-node-name {
+  fill: rgba(255, 248, 241, 0.9);
+}
+
+.enzyme-detail-page,
+.enzyme-atlas-page {
+  min-height: 100vh;
+  padding: 26px 30px 40px;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(242, 231, 240, 0.74), transparent 24%),
+    radial-gradient(circle at 88% 8%, rgba(228, 216, 240, 0.68), transparent 18%),
+    linear-gradient(180deg, #f5f1f7 0%, #f1edf5 56%, #ebe6f1 100%);
+  color: #312848;
+}
+
+.detail-atlas-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+  padding: 22px 24px;
+  border: 1px solid rgba(121, 102, 157, 0.14);
+  border-radius: 24px;
+  background: rgba(252, 250, 255, 0.76);
+  box-shadow: 0 18px 36px rgba(93, 76, 124, 0.08);
+}
+
+.detail-hero-copy h1 {
+  margin: 10px 0 10px;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 42px;
+  line-height: 1.1;
+  color: #2f2447;
+}
+
+.detail-hero-copy p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(55, 42, 79, 0.68);
+}
+
+.atlas-detail-actions {
+  flex-wrap: wrap;
+}
+
+.enzyme-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.detail-card {
+  border: 1px solid rgba(121, 102, 157, 0.12);
+  border-radius: 22px;
+  background: rgba(252, 250, 255, 0.74);
+  box-shadow: 0 18px 36px rgba(93, 76, 124, 0.08);
+}
+
+.main-detail-card,
+.detail-stack-card,
+.reactions-card {
+  padding: 18px 20px;
+}
+
+.detail-card-topline,
+.detail-name-stack,
+.section-title-row {
+  margin-bottom: 14px;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+}
+
+.section-title-row h3,
+.detail-name-stack h2 {
+  margin: 0;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 24px;
+  font-weight: 400;
+  color: #2f2447;
+}
+
+.section-title-row h3::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 10px;
+  border-radius: 999px;
+  background: rgba(110, 93, 145, 0.32);
+}
+
+.detail-name-stack p,
+.muted-copy,
+.reference-row p {
+  margin: 8px 0 0;
+  color: rgba(55, 42, 79, 0.66);
+  line-height: 1.6;
+}
+
+.detail-chip {
+  border-color: rgba(110, 93, 145, 0.16);
+  background: rgba(110, 93, 145, 0.1);
+  color: #43355f;
+}
+
+.detail-facts,
+.detail-copy-list,
+.reaction-meta-grid,
+.link-list {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-facts div,
+.detail-copy-list div,
+.reaction-meta-grid div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(121, 102, 157, 0.1);
+}
+
+.detail-facts div:first-child,
+.detail-copy-list div:first-child,
+.reaction-meta-grid div:first-child {
+  border-top: 0;
+}
+
+.detail-facts dt,
+.detail-copy-list span,
+.reaction-meta-grid span {
+  color: rgba(55, 42, 79, 0.56);
+  font-size: 12px;
+}
+
+.detail-facts dd,
+.detail-copy-list strong,
+.reaction-meta-grid strong {
+  margin: 0;
+  color: #312848;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.detail-reference-list,
+.link-list {
+  display: grid;
+  gap: 10px;
+}
+
+.reference-row,
+.link-list a {
+  border: 1px solid rgba(121, 102, 157, 0.1);
+  border-radius: 14px;
+  background: rgba(248, 245, 252, 0.84);
+  padding: 12px 14px;
+}
+
+.reference-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.reference-links,
+.link-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reaction-list {
+  display: grid;
+  gap: 14px;
+}
+
+.reaction-card {
+  padding: 16px;
+  border: 1px solid rgba(121, 102, 157, 0.12);
+  border-radius: 18px;
+  background: rgba(247, 243, 251, 0.92);
+}
+
+.reaction-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(121, 102, 157, 0.1);
+}
+
+.reaction-card-head strong {
+  display: block;
+  color: #2f2447;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.reaction-card-head p {
+  margin: 8px 0 0;
+  color: rgba(55, 42, 79, 0.6);
+  font-size: 12px;
+}
+
+.reaction-card-head > a,
+.reaction-card-head > span {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #6b598f;
+  font-size: 12px;
+}
+
+.reaction-meta-grid {
+  margin-top: 12px;
+}
+
+.reaction-compounds {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.reaction-compounds > div > span {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(55, 42, 79, 0.56);
+  font-size: 12px;
+}
+
+.atom-map-wrap {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(121, 102, 157, 0.08);
+}
+
+.atom-map-wrap img {
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  display: block;
+}
+
+.link-list a {
+  justify-content: space-between;
+  color: #43355f;
+  text-decoration: none;
+}
+
+@media (max-width: 1080px) {
+  .detail-atlas-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .enzyme-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .enzyme-detail-page,
+  .enzyme-atlas-page {
+    padding: 18px 16px 26px;
+  }
+
+  .detail-hero-copy h1 {
+    font-size: 30px;
+  }
+
+  .main-detail-card,
+  .detail-stack-card,
+  .reactions-card {
+    padding: 16px;
+  }
+
+  .detail-facts div,
+  .detail-copy-list div,
+  .reaction-meta-grid div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .reaction-card-head,
+  .reference-row {
+    flex-direction: column;
+  }
+}

@@ -34,6 +34,11 @@ const homeSearchModes = [
   { id: 'blast', label: 'Blast / homology' },
   { id: 'mapsearch', label: 'Map search' },
 ] as const
+const homeDatasetOptions = [
+  { id: 'terpene_synthase', label: 'Terpene synthase', detail: 'Live backend', disabled: false },
+  { id: 'comparative_sets', label: 'Comparative sets', detail: 'Coming soon', disabled: true },
+  { id: 'literature_merge', label: 'Literature merge', detail: 'Coming soon', disabled: true },
+] as const
 type HomeSearchMode = (typeof homeSearchModes)[number]['id']
 
 type Point = { x: number; y: number }
@@ -83,8 +88,12 @@ export function CompoundGraphHome({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [mode, setMode] = useState<HomeSearchMode>('enzymeItems')
   const [modeOpen, setModeOpen] = useState(false)
+  const [datasetOpen, setDatasetOpen] = useState(false)
   const [controlsOpen, setControlsOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [selectedDatasetId, setSelectedDatasetId] = useState<(typeof homeDatasetOptions)[number]['id']>(homeDatasetOptions[0].id)
+  const [nodeSize, setNodeSize] = useState(2.55)
+  const [labelScale, setLabelScale] = useState(1)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const dragRef = useRef<{ id: string; offsetX: number; offsetY: number } | null>(null)
 
@@ -142,6 +151,7 @@ export function CompoundGraphHome({
   const selectedPairTotal = selectedPair ? Math.max(selectedPair.count, selectedPair.edges.length) : 0
   const visibleEdgeCount = viewModel.pairs.reduce((sum, pair) => sum + Math.max(pair.count, pair.edges.length || 0), 0)
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
+  const selectedDataset = homeDatasetOptions.find((item) => item.id === selectedDatasetId) ?? homeDatasetOptions[0]
 
   useEffect(() => {
     if (selectedEdgeId && pairEdges.some((edge) => edge.edgeId === selectedEdgeId)) return
@@ -246,9 +256,32 @@ export function CompoundGraphHome({
 
         <div className="atlas-year">NJU - China 2026</div>
 
-        <div className="floating-pill dataset-pill dataset-pill-static">
-          <span>Datasets:</span>
-          <strong>Terpene synthase</strong>
+        <div className={`floating-pill dataset-pill dataset-pill-static ${datasetOpen ? 'is-open' : ''}`}>
+          <button className="dataset-pill-button" type="button" onClick={() => setDatasetOpen((open) => !open)}>
+            <span>Dataset</span>
+            <strong>{selectedDataset.label}</strong>
+            <ChevronDown size={18} />
+          </button>
+          {datasetOpen && (
+            <div className="floating-menu dataset-menu dataset-select-menu">
+              {homeDatasetOptions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={item.disabled}
+                  className={item.id === selectedDatasetId ? 'is-active' : ''}
+                  onClick={() => {
+                    if (item.disabled) return
+                    setSelectedDatasetId(item.id)
+                    setDatasetOpen(false)
+                  }}
+                >
+                  <span>{item.label}</span>
+                  <small>{item.detail}</small>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="home-search-bar">
@@ -293,13 +326,29 @@ export function CompoundGraphHome({
         <div className={`floating-pill mapping-pill ${controlsOpen ? 'is-open' : ''}`}>
           <button type="button" onClick={() => setControlsOpen((open) => !open)}>
             <span>Graph controls</span>
-            <ChevronDown size={22} />
+            <ChevronDown size={18} />
           </button>
           {controlsOpen && (
-            <div className="floating-menu source-menu compact-home-menu">
-              <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
-              <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
-              <button type="button" onClick={() => { onOpenNetwork(); setControlsOpen(false) }}>Open network view</button>
+            <div className="floating-menu source-menu compact-home-menu control-home-menu">
+              <div className="control-group">
+                <label htmlFor="home-node-size">Node size</label>
+                <div className="control-slider-row">
+                  <input id="home-node-size" className="control-slider" type="range" min="2" max="4.2" step="0.1" value={nodeSize} onChange={(event) => setNodeSize(Number(event.target.value))} />
+                  <span className="control-value">{nodeSize.toFixed(1)}</span>
+                </div>
+              </div>
+              <div className="control-group">
+                <label htmlFor="home-label-size">Label size</label>
+                <div className="control-slider-row">
+                  <input id="home-label-size" className="control-slider" type="range" min="0.8" max="1.45" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
+                  <span className="control-value">{labelScale.toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="control-menu-actions">
+                <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
+                <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
+                <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
+              </div>
             </div>
           )}
         </div>
@@ -336,7 +385,7 @@ export function CompoundGraphHome({
                       <>
                         <path d={edgePath(source, target, 0)} className={`home-map-path ${pair.count > 1 ? 'multi' : ''} ${selectedPairKey === pair.key ? 'active' : ''}`} markerEnd="url(#home-map-arrow)" onClick={() => void handlePairClick(pair)} />
                         <path d={edgePath(source, target, 0)} className="home-map-hit" onClick={() => void handlePairClick(pair)} />
-                        <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className="home-edge-label">{pairLineLabel}</text>
+                        <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className="home-edge-label" fontSize={1.02 * labelScale}>{pairLineLabel}</text>
                       </>
                     )}
                     {isExpanded && edgeItems.map((edge, index) => {
@@ -346,7 +395,7 @@ export function CompoundGraphHome({
                         <g key={edge.edgeId}>
                           <path d={edgePath(source, target, offset)} className={`expanded-edge live-expanded-edge ${selectedEdgeId === edge.edgeId ? 'selected' : ''}`} markerEnd="url(#home-map-arrow)" onClick={() => setSelectedEdgeId(edge.edgeId)} />
                           <path d={edgePath(source, target, offset)} className="home-map-hit" onClick={() => setSelectedEdgeId(edge.edgeId)} />
-                          <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label">{label}</text>
+                          <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label" fontSize={0.94 * labelScale}>{label}</text>
                         </g>
                       )
                     })}
@@ -363,12 +412,12 @@ export function CompoundGraphHome({
                 if (!pos) return null
                 return (
                   <g key={node.compoundId} className={`home-map-node ${selected ? 'selected' : neighbor ? 'neighbor' : ''}`}>
-                    {selected && <circle className="selected-pulse" cx={pos.x} cy={pos.y} r={6.2} />}
+                    {selected && <circle className="selected-ring" cx={pos.x} cy={pos.y} r={nodeSize + 1.3} />}
                     <circle
                       cx={pos.x}
                       cy={pos.y}
-                      r={selected ? 3.8 : neighbor ? 3.15 : 2.55}
-                      filter={selected ? 'url(#selected-node-glow)' : 'url(#home-node-glow)'}
+                      r={nodeSize}
+                      filter="url(#home-node-glow)"
                       onPointerDown={(event) => {
                         const point = toSvgPoint(svgRef.current!, event.clientX, event.clientY)
                         dragRef.current = { id: node.compoundId, offsetX: pos.x - point.x, offsetY: pos.y - point.y }
@@ -376,8 +425,7 @@ export function CompoundGraphHome({
                       }}
                       onClick={() => handleNodeSelect(node.compoundId)}
                     />
-                    <text x={pos.x} y={pos.y + 0.6} className="home-map-node-code">{node.name.slice(0, 3).toUpperCase()}</text>
-                    <text x={pos.x} y={pos.y + 10.4} className="home-map-node-name">{shortCompoundLabel(node)}</text>
+                    <text x={pos.x} y={pos.y + nodeSize + 4.8} className="home-map-node-name" fontSize={1.2 * labelScale}>{shortCompoundLabel(node)}</text>
                   </g>
                 )
               })}
@@ -623,6 +671,13 @@ function toSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
 }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)) }
 function shortCompoundLabel(compound: HomeGraphCompound) { return compound.name.length <= 14 ? compound.name : compound.name.split(/\s+/).slice(0, 2).join(' ').replace(/,.*$/, '') }
+
+
+
+
+
+
+
 
 
 

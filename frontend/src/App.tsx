@@ -38,7 +38,7 @@ let graphNodes = mockGraphNodes
 
 const getEntity = (id: string) => entities.find((entity) => entity.id === id)
 
-type View = 'home' | 'network' | 'search' | 'downloads' | 'enzyme'
+type View = 'home' | 'search' | 'downloads' | 'enzyme'
 type SearchKind = 'all' | EntityKind
 type HomeSearchMode = 'enzymeItems' | 'pathways' | 'blast' | 'mapsearch'
 
@@ -56,7 +56,6 @@ const kindIcons: Record<EntityKind, typeof FlaskConical> = {
 
 const navigation = [
   { view: 'home', label: 'Overview', icon: Sparkles },
-  { view: 'network', label: 'Network map', icon: Network },
   { view: 'search', label: 'Search library', icon: Search },
   { view: 'downloads', label: 'Download queue', icon: Download },
 ] as const
@@ -280,7 +279,6 @@ function App() {
               <Icon size={18} />
               <span>{label}</span>
               {itemView === 'downloads' && queueCount > 0 && <span className="nav-count accent">{queueCount}</span>}
-              {itemView === 'network' && <span className="nav-count">01</span>}
             </button>
           ))}
         </nav>
@@ -355,38 +353,12 @@ function App() {
               setSearchKind(looksLikeProteinSequence(nextSearch) ? 'enzyme' : 'all')
               goTo('search')
             }}
-            onOpenNetwork={() => goTo('network')}
+            onOpenNetwork={() => goTo('home')}
             onOpenDownloads={() => goTo('downloads')}
             onOpenEnzyme={(id) => goTo('enzyme', id)}
             onToggleQueue={toggleQueue}
             openRecord={openRecord}
             isQueued={(id) => queuedIds.has(id)}
-          />
-        )}
-
-        {view === 'network' && (
-          <NetworkView
-            query={query}
-            setQuery={setQuery}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
-            selectedSpecies={selectedSpecies}
-            setSelectedSpecies={setSelectedSpecies}
-            selectedClass={selectedClass}
-            setSelectedClass={setSelectedClass}
-            selectedFamily={selectedFamily}
-            setSelectedFamily={setSelectedFamily}
-            clearFilters={clearFilters}
-            zoom={zoom}
-            setZoom={setZoom}
-            showEdgeLabels={showEdgeLabels}
-            setShowEdgeLabels={setShowEdgeLabels}
-            selected={selected}
-            addToQueue={toggleQueue}
-            openRecord={openRecord}
-            visibleNodeIds={visibleNodeIds}
-            onSelectRelated={setSelectedId}
-            isQueued={selected ? queuedIds.has(selected.id) : false}
           />
         )}
 
@@ -429,9 +401,9 @@ function App() {
             removeFromQueue={removeFromQueue}
             clearQueue={clearQueue}
             exportQueue={exportQueue}
-            onOpenNetwork={() => goTo('network')}
+            onOpenNetwork={() => goTo('home')}
             onOpenSearch={() => goTo('search')}
-            onOpenEntity={(id) => goTo('network', id)}
+            onOpenEntity={(id) => { const entity = getEntity(id); if (entity?.kind === 'enzyme') goTo('enzyme', id); else goTo('search', id) }}
             openRecord={openRecord}
           />
         )}
@@ -876,7 +848,7 @@ function DownloadsView({
               <p>The queue is empty.</p>
               <button className="secondary-button" onClick={onOpenNetwork}>
                 <Network size={15} />
-                Browse the network
+                Back to atlas
               </button>
             </div>
           )}
@@ -917,7 +889,7 @@ function DownloadsView({
               </button>
               <button className="secondary-button" onClick={onOpenNetwork}>
                 <Network size={15} />
-                Inspect the graph
+                Return home
               </button>
             </div>
           </div>
@@ -1581,8 +1553,7 @@ function viewLabel(view: View) {
   switch (view) {
     case 'home':
       return 'Overview'
-    case 'network':
-      return 'Network map'
+
     case 'search':
       return 'Search library'
     case 'downloads':
@@ -1631,6 +1602,9 @@ function visibleEdgeCount(visibleNodeIds: Set<string>) {
 }
 
 export default App
+
+
+
 
 
 

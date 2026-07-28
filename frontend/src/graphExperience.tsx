@@ -553,13 +553,13 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued }: 
 
   return (
     <div className="enzyme-detail-page">
-      <section className="detail-hero">
+      <section className="detail-atlas-hero">
         <div>
           <div className="eyebrow"><Dna size={14} /> Enzyme detail</div>
           <h1>{detail?.primaryName || enzymeId}</h1>
           <p>{detail?.organismName || 'Loading detail from the backend...'}</p>
         </div>
-        <div className="detail-hero-actions">
+        <div className="detail-hero-actions atlas-detail-actions">
           <button className="secondary-button" type="button" onClick={onBack}><ArrowLeft size={15} /> Back</button>
           <button className="secondary-button" type="button" onClick={() => onToggleQueue(enzymeId)}>{queued ? <Check size={15} /> : <Download size={15} />}{queued ? 'Queued' : 'Download'}</button>
           <button className="secondary-button" type="button" onClick={handleDownload} disabled={downloadState === 'loading'}>{downloadState === 'loading' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Export record</button>
@@ -671,6 +671,8 @@ function toSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
 }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)) }
 function shortCompoundLabel(compound: HomeGraphCompound) { return compound.name.length <= 14 ? compound.name : compound.name.split(/\s+/).slice(0, 2).join(' ').replace(/,.*$/, '') }
+
+
 
 
 

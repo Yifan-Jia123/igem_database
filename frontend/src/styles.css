@@ -4758,3 +4758,182 @@ body:has(.home-map-page) {
     flex-direction: column;
   }
 }
+
+/* 2026-07-28 enzyme detail atlas polish */
+.detail-atlas-hero .eyebrow {
+  color: rgba(88, 68, 124, 0.72);
+  letter-spacing: 0.08em;
+}
+
+.detail-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.enzyme-detail-page .secondary-button {
+  min-height: 40px;
+  padding: 0 14px;
+  border-color: rgba(121, 102, 157, 0.16);
+  background: rgba(255, 255, 255, 0.74);
+  color: #41325d;
+  box-shadow: none;
+}
+
+.enzyme-detail-page .secondary-button:hover {
+  border-color: rgba(110, 93, 145, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.detail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 12px 15px;
+  border: 1px solid rgba(121, 102, 157, 0.12);
+  border-radius: 16px;
+  background: rgba(252, 250, 255, 0.8);
+  color: #4a3b67;
+  font-size: 13px;
+}
+
+.detail-status.error-state {
+  border-color: rgba(198, 91, 108, 0.22);
+  color: #8d4051;
+  background: rgba(255, 243, 245, 0.88);
+}
+
+.detail-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-link,
+.detail-facts a,
+.detail-copy-list a,
+.reference-links a,
+.link-list a,
+.reaction-card a {
+  color: #5a4a7c;
+  text-decoration: none;
+}
+
+.detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(110, 93, 145, 0.08);
+  font-size: 12px;
+}
+
+.detail-link:hover,
+.detail-facts a:hover,
+.detail-copy-list a:hover,
+.reference-links a:hover,
+.link-list a:hover,
+.reaction-card a:hover {
+  color: #2f2447;
+}
+
+.detail-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid rgba(110, 93, 145, 0.16);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.detail-name-stack h2 {
+  font-size: 32px;
+  line-height: 1.08;
+}
+
+.detail-name-stack p {
+  font-size: 14px;
+}
+
+.enzyme-detail-page .tag-row.compact {
+  gap: 8px;
+}
+
+.enzyme-detail-page .tag-row.compact .tag {
+  background: rgba(110, 93, 145, 0.08);
+  color: #4b3c67;
+  border-color: rgba(121, 102, 157, 0.12);
+}
+
+.detail-reference-list strong,
+.link-list span,
+.reaction-compounds .tag {
+  overflow-wrap: anywhere;
+}
+
+.reference-links a {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(110, 93, 145, 0.08);
+  font-size: 12px;
+}
+
+.link-list a {
+  min-height: 48px;
+  font-size: 13px;
+}
+
+.reaction-list:empty::before {
+  content: 'No reaction records available yet.';
+  display: block;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(247, 243, 251, 0.92);
+  color: rgba(55, 42, 79, 0.64);
+}
+
+.reaction-card-head div {
+  min-width: 0;
+}
+
+.reaction-card-head strong,
+.reaction-meta-grid strong,
+.detail-copy-list strong,
+.detail-facts dd {
+  word-break: break-word;
+}
+
+.reaction-compounds .tag-row {
+  gap: 8px;
+}
+
+.atom-map-wrap {
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 760px) {
+  .detail-card-topline,
+  .detail-hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .enzyme-detail-page .secondary-button,
+  .detail-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .detail-name-stack h2 {
+    font-size: 26px;
+  }
+}

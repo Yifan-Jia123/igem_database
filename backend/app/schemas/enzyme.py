@@ -1,7 +1,7 @@
 from typing import Optional, List
 
 from app.schemas.common import CamelModel
-from app.schemas.gene import GeneSummary
+from app.schemas.gene import GeneSummary, SequenceLink
 from app.schemas.evidence import EvidenceItem
 from app.schemas.compound import CompoundCard
 
@@ -50,7 +50,10 @@ class EnzymeDetail(CamelModel):
     uniprot_url: Optional[str] = None
     organism_name: Optional[str] = None
     sequence: Optional[str] = None
+    length: Optional[int] = None
+    mass: Optional[float] = None
     gene: Optional[GeneSummary] = None
+    sequence_links: List[SequenceLink] = []
     reactions: List[EnzymeReactionItem] = []
     evidence: List[EvidenceItem] = []
     links: List[ExternalLink] = []

@@ -481,11 +481,19 @@ export type HomeGraphData = {
 
 export type EnzymeGeneDetail = {
   geneName?: string | null
-  geneId?: string | null
+  geneRecordId?: string | null
   genbankId?: string | null
   ncbiUrl?: string | null
   enaAccession?: string | null
   proteinAccession?: string | null
+}
+
+export type EnzymeSequenceLink = {
+  category: string
+  accession: string
+  url?: string | null
+  relatedAccession?: string | null
+  relatedUrl?: string | null
 }
 
 export type EnzymeEvidenceDetail = {
@@ -519,14 +527,53 @@ export type EnzymeDetailData = {
   uniprotUrl?: string | null
   organismName?: string | null
   sequence?: string | null
+  length?: number | null
+  mass?: number | null
   gene?: EnzymeGeneDetail | null
+  sequenceLinks: EnzymeSequenceLink[]
   reactions: EnzymeReactionDetail[]
   evidence: EnzymeEvidenceDetail[]
   links: Array<{ label: string; url: string }>
 }
 
-export async function loadHomeGraph(): Promise<HomeGraphData> {
-  return request<HomeGraphData>('/graph?depth=1&limit_nodes=28')
+export type HomeGraphRequest = {
+  centerCompoundId?: string
+  depth?: number
+  limitNodes?: number
+}
+
+export type HomePathwayCard = {
+  pathwayId: string
+  summary: string
+  compoundIds: string[]
+  edgeIds: string[]
+  edgeGroupIds: string[]
+  stepCount: number
+  score?: number | null
+  graph?: HomeGraphData | null
+}
+
+export async function loadHomeGraph(options: HomeGraphRequest = {}): Promise<HomeGraphData> {
+  const params = new URLSearchParams({
+    depth: String(options.depth ?? 1),
+    limit_nodes: String(options.limitNodes ?? 42),
+  })
+  if (options.centerCompoundId) params.set('center_compound_id', options.centerCompoundId)
+  return request<HomeGraphData>(`/graph?${params.toString()}`)
+}
+
+export async function searchHomePathways(startCompoundId: string, endCompoundId: string, maxSteps = 6): Promise<HomePathwayCard[]> {
+  const payload = await request<{ items: HomePathwayCard[] }>('/search/pathways', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      startCompoundId,
+      endCompoundId,
+      maxSteps,
+      limit: 3,
+    }),
+  })
+  return payload.items
 }
 
 export async function loadEnzymeDetail(enzymeId: string): Promise<EnzymeDetailData> {

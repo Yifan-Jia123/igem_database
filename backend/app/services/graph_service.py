@@ -51,9 +51,15 @@ async def build_graph_payload(
     # 4. Build edges and edge groups
     edges, edge_groups = _build_edges_and_groups(edge_records, card_map)
 
-    # 5. Limit nodes if needed
+    # 5. Limit nodes without dropping every drawable edge endpoint
     if limit_nodes and len(cards) > limit_nodes:
-        cards = cards[:limit_nodes]
+        cards, edges, edge_groups = _limit_graph_payload(
+            cards,
+            edges,
+            edge_groups,
+            center.compound_id,
+            limit_nodes,
+        )
 
     return GraphPayload(
         nodes=cards,
@@ -61,6 +67,97 @@ async def build_graph_payload(
         edge_groups=edge_groups,
         focus=FocusPoint(node_id=center.compound_id),
     )
+
+
+def _limit_graph_payload(
+    cards: List[CompoundCard],
+    edges: List[ReactionEdge],
+    edge_groups: List[EdgeGroup],
+    center_id: str,
+    limit_nodes: int,
+) -> Tuple[List[CompoundCard], List[ReactionEdge], List[EdgeGroup]]:
+    card_map = {card.compound_id: card for card in cards}
+    degree_score: Dict[str, int] = {}
+
+    def bump(compound_id: str, value: int = 1) -> None:
+        degree_score[compound_id] = degree_score.get(compound_id, 0) + value
+
+    for edge in edges:
+        bump(edge.source_compound_id)
+        bump(edge.target_compound_id)
+    for group in edge_groups:
+        bump(group.source_compound_id, group.count)
+        bump(group.target_compound_id, group.count)
+
+    selected_ids: Set[str] = set()
+    ordered_ids: List[str] = []
+
+    def add(compound_id: str) -> bool:
+        if compound_id in selected_ids:
+            return True
+        if compound_id not in card_map or len(selected_ids) >= limit_nodes:
+            return False
+        selected_ids.add(compound_id)
+        ordered_ids.append(compound_id)
+        return True
+
+    add(center_id)
+
+    pair_candidates = [
+        (
+            group.source_compound_id,
+            group.target_compound_id,
+            group.count,
+            group.label,
+        )
+        for group in edge_groups
+    ] + [
+        (
+            edge.source_compound_id,
+            edge.target_compound_id,
+            1,
+            edge.label,
+        )
+        for edge in edges
+    ]
+    pair_candidates.sort(key=lambda item: (-item[2], item[3] or "", item[0], item[1]))
+
+    for source_id, target_id, _, _ in pair_candidates:
+        needed = len({compound_id for compound_id in (source_id, target_id) if compound_id not in selected_ids})
+        if len(selected_ids) + needed > limit_nodes:
+            continue
+        add(source_id)
+        add(target_id)
+
+    remaining_cards = sorted(
+        cards,
+        key=lambda card: (-(degree_score.get(card.compound_id, 0)), card.name or "", card.compound_id),
+    )
+    for card in remaining_cards:
+        if len(selected_ids) >= limit_nodes:
+            break
+        add(card.compound_id)
+
+    limited_edges = [
+        edge
+        for edge in edges
+        if edge.source_compound_id in selected_ids and edge.target_compound_id in selected_ids
+    ]
+    visible_edge_ids = {edge.edge_id for edge in limited_edges}
+    limited_edge_groups = [
+        EdgeGroup(
+            edge_group_id=group.edge_group_id,
+            source_compound_id=group.source_compound_id,
+            target_compound_id=group.target_compound_id,
+            label=group.label,
+            count=group.count,
+            edge_ids=[edge_id for edge_id in group.edge_ids if edge_id in visible_edge_ids] or group.edge_ids,
+        )
+        for group in edge_groups
+        if group.source_compound_id in selected_ids and group.target_compound_id in selected_ids
+    ]
+
+    return [card_map[compound_id] for compound_id in ordered_ids], limited_edges, limited_edge_groups
 
 
 async def _pick_default_center(db: AsyncSession) -> Optional[Compound]:

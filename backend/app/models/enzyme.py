@@ -30,5 +30,6 @@ class Enzyme(Base):
     )
 
     genes = relationship("Gene", back_populates="enzyme", lazy="selectin")
+    sequence_links = relationship("GeneSequenceLink", back_populates="enzyme", lazy="noload")
     edges = relationship("EnzymeReactionEdge", back_populates="enzyme", lazy="selectin")
     evidences = relationship("Evidence", back_populates="enzyme", lazy="selectin")

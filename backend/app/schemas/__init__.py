@@ -2,7 +2,7 @@ from app.schemas.common import CamelModel, Pagination, ApiResponse, ApiError, Er
 from app.schemas.compound import CompoundCard, CompoundNode
 from app.schemas.enzyme import EnzymeCard, EnzymeDetail, EnzymeReactionItem, ExternalLink
 from app.schemas.reaction import ReactionDetail
-from app.schemas.gene import GeneSummary
+from app.schemas.gene import GeneSummary, SequenceLink
 from app.schemas.evidence import EvidenceItem
 from app.schemas.graph import GraphPayload, ReactionEdge, EdgeGroup, FocusPoint
 from app.schemas.search import (
@@ -23,7 +23,7 @@ __all__ = [
     "CompoundCard", "CompoundNode",
     "EnzymeCard", "EnzymeDetail", "EnzymeReactionItem", "ExternalLink",
     "ReactionDetail",
-    "GeneSummary", "EvidenceItem",
+    "GeneSummary", "SequenceLink", "EvidenceItem",
     "GraphPayload", "ReactionEdge", "EdgeGroup", "FocusPoint",
     "EntrySearchRequest", "EntrySearchResponse",
     "PathwaySearchRequest", "PathwaySearchResponse", "PathwayCard",

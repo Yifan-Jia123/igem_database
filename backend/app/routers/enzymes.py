@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import ProgrammingError, OperationalError
 
 from app.deps import get_db
-from app.models import Enzyme, Gene, Evidence, EnzymeReactionEdge, Reaction, ReactionCompound, Compound
+from app.models import Enzyme, Gene, GeneSequenceLink, Evidence, EnzymeReactionEdge, Reaction, ReactionCompound, Compound
 from app.schemas.common import ApiResponse
 from app.schemas.enzyme import EnzymeDetail, EnzymeReactionItem, ExternalLink
-from app.schemas.gene import GeneSummary
+from app.schemas.gene import GeneSummary, SequenceLink
 from app.schemas.evidence import EvidenceItem
 from app.schemas.compound import CompoundCard
 from app.utils.compound_filters import displayable_compound_filters
@@ -25,23 +26,54 @@ async def get_enzyme_detail(
     enz = result.scalar()
     if not enz:
         return ApiResponse(success=False, error={"code": "NOT_FOUND", "message": f"Enzyme {enzyme_id} not found"})
+    enzyme_values = {
+        "enzyme_id": enz.enzyme_id,
+        "primary_name": enz.primary_name,
+        "secondary_names": enz.secondary_names or [],
+        "uniprot_id": enz.uniprot_id,
+        "organism_name": enz.organism_name,
+        "sequence": enz.sequence,
+        "length": enz.length,
+        "mass": float(enz.mass) if enz.mass is not None else None,
+    }
 
     # Gene
-    gene_result = await db.execute(select(Gene).where(Gene.enzyme_id == enz.enzyme_id))
+    gene_result = await db.execute(select(Gene).where(Gene.enzyme_id == enzyme_values["enzyme_id"]))
     gene = gene_result.scalar()
     gene_summary = None
+    gene_ncbi_url = None
     if gene:
+        gene_ncbi_url = gene.ncbi_url
         gene_summary = GeneSummary(
             gene_name=gene.gene_name,
-            gene_id=str(gene.gene_id),
+            gene_record_id=str(gene.gene_id),
             genbank_id=gene.genbank_id,
             ncbi_url=gene.ncbi_url,
             ena_accession=gene.ena_accession,
             protein_accession=gene.protein_accession,
         )
 
+    # Sequence links
+    sequence_links = []
+    if await _sequence_link_table_exists(db):
+        seq_link_result = await db.execute(
+            select(GeneSequenceLink)
+            .where(GeneSequenceLink.enzyme_id == enzyme_values["enzyme_id"])
+            .order_by(GeneSequenceLink.link_category, GeneSequenceLink.sequence_link_id)
+        )
+        sequence_links = [
+            SequenceLink(
+                category=link.link_category,
+                accession=link.accession,
+                url=link.url,
+                related_accession=link.related_accession,
+                related_url=link.related_url,
+            )
+            for link in seq_link_result.scalars()
+        ]
+
     # Evidence
-    ev_result = await db.execute(select(Evidence).where(Evidence.enzyme_id == enz.enzyme_id))
+    ev_result = await db.execute(select(Evidence).where(Evidence.enzyme_id == enzyme_values["enzyme_id"]))
     evidences = [
         EvidenceItem(
             doi=e.doi,
@@ -53,7 +85,7 @@ async def get_enzyme_detail(
 
     # Reactions
     edge_result = await db.execute(
-        select(EnzymeReactionEdge).where(EnzymeReactionEdge.enzyme_id == enz.enzyme_id)
+        select(EnzymeReactionEdge).where(EnzymeReactionEdge.enzyme_id == enzyme_values["enzyme_id"])
     )
     edges = edge_result.scalars().all()
     reaction_items = []
@@ -104,24 +136,42 @@ async def get_enzyme_detail(
 
     # External links
     links = []
-    if enz.uniprot_id:
-        links.append(ExternalLink(label="UniProt", url=f"https://www.uniprot.org/uniprotkb/{enz.uniprot_id}"))
-    if gene and gene.ncbi_url:
-        links.append(ExternalLink(label="NCBI", url=gene.ncbi_url))
+    if enzyme_values["uniprot_id"]:
+        links.append(ExternalLink(label="UniProt", url=f"https://www.uniprot.org/uniprotkb/{enzyme_values['uniprot_id']}"))
+    if gene_ncbi_url:
+        links.append(ExternalLink(label="NCBI", url=gene_ncbi_url))
 
     detail = EnzymeDetail(
-        enzyme_id=enz.enzyme_id,
-        database_code=enz.enzyme_id,
-        primary_name=enz.primary_name,
-        secondary_names=enz.secondary_names or [],
-        uniprot_id=enz.uniprot_id,
-        uniprot_url=f"https://www.uniprot.org/uniprotkb/{enz.uniprot_id}" if enz.uniprot_id else None,
-        organism_name=enz.organism_name,
-        sequence=enz.sequence,
+        enzyme_id=enzyme_values["enzyme_id"],
+        database_code=enzyme_values["enzyme_id"],
+        primary_name=enzyme_values["primary_name"],
+        secondary_names=enzyme_values["secondary_names"],
+        uniprot_id=enzyme_values["uniprot_id"],
+        uniprot_url=f"https://www.uniprot.org/uniprotkb/{enzyme_values['uniprot_id']}" if enzyme_values["uniprot_id"] else None,
+        organism_name=enzyme_values["organism_name"],
+        sequence=enzyme_values["sequence"],
+        length=enzyme_values["length"],
+        mass=enzyme_values["mass"],
         gene=gene_summary,
+        sequence_links=sequence_links,
         reactions=reaction_items,
         evidence=evidences,
         links=links,
     )
 
     return ApiResponse(data=detail.model_dump(by_alias=True))
+
+
+async def _sequence_link_table_exists(db: AsyncSession) -> bool:
+    try:
+        result = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() AND table_name = :table_name"
+            ),
+            {"table_name": "gene_sequence_link"},
+        )
+        return bool(result.scalar())
+    except (ProgrammingError, OperationalError):
+        await db.rollback()
+        return False

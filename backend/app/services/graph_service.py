@@ -9,6 +9,7 @@ from app.models import (
 from app.schemas.graph import GraphPayload, ReactionEdge, EdgeGroup, FocusPoint
 from app.schemas.compound import CompoundCard
 from app.schemas.enzyme import EnzymeCard
+from app.utils.compound_filters import displayable_compound_filters
 
 
 DIRECTION_ALLOWS_SUBSTRATE_TO_PRODUCT = {"forward", "reversible", "unknown"}
@@ -28,6 +29,7 @@ async def build_graph_payload(
     if center_compound_id:
         result = await db.execute(
             select(Compound).where(Compound.compound_id == center_compound_id)
+            .where(*displayable_compound_filters())
         )
         center = result.scalar()
     else:
@@ -64,6 +66,8 @@ async def build_graph_payload(
 async def _pick_default_center(db: AsyncSession) -> Optional[Compound]:
     result = await db.execute(
         select(ReactionCompound.compound_id, func.count().label("cnt"))
+        .join(Compound, ReactionCompound.compound_id == Compound.compound_id)
+        .where(*displayable_compound_filters())
         .group_by(ReactionCompound.compound_id)
         .order_by(func.count().desc())
         .limit(1)
@@ -123,10 +127,15 @@ async def _bfs_subgraph(
         )
         rc_result = await db.execute(all_rc_query)
         all_rcs = rc_result.scalars().all()
+        displayable_compound_ids = await _fetch_displayable_compound_ids(
+            db, {rc.compound_id for rc in all_rcs}
+        )
 
         # Group by reaction_id
         rxn_compounds: Dict[str, Tuple[List[str], List[str]]] = {}
         for rc in all_rcs:
+            if rc.compound_id not in displayable_compound_ids:
+                continue
             if rc.reaction_id not in rxn_compounds:
                 rxn_compounds[rc.reaction_id] = ([], [])
             if rc.role.value == "substrate":
@@ -166,6 +175,8 @@ async def _bfs_subgraph(
                 targets = substrates
 
             for target_id in targets:
+                if target_id not in displayable_compound_ids:
+                    continue
                 # Record the edge(s)
                 for ere, enz in rxn_edges.get(reaction.reaction_id, []):
                     # Avoid duplicate edges for same traversal
@@ -194,8 +205,21 @@ async def _bfs_subgraph(
 async def _fetch_compounds(db: AsyncSession, compound_ids: Set[str]) -> List[Compound]:
     result = await db.execute(
         select(Compound).where(Compound.compound_id.in_(list(compound_ids)))
+        .where(*displayable_compound_filters())
     )
     return list(result.scalars().all())
+
+
+async def _fetch_displayable_compound_ids(db: AsyncSession, compound_ids: Set[str]) -> Set[str]:
+    if not compound_ids:
+        return set()
+
+    result = await db.execute(
+        select(Compound.compound_id)
+        .where(Compound.compound_id.in_(list(compound_ids)))
+        .where(*displayable_compound_filters())
+    )
+    return {row[0] for row in result.all()}
 
 
 def _compound_to_card(c: Compound) -> CompoundCard:
@@ -319,6 +343,8 @@ async def expand_edge_group(
 
     from_cpd = parts[1]
     to_cpd = parts[2]
+    if {from_cpd, to_cpd} != await _fetch_displayable_compound_ids(db, {from_cpd, to_cpd}):
+        return []
 
     # Find all edges between these two compounds
     # Query: enzyme_reaction_edge where source compound is from_cpd and target is to_cpd

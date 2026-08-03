@@ -9,6 +9,7 @@ from app.schemas.enzyme import EnzymeDetail, EnzymeReactionItem, ExternalLink
 from app.schemas.gene import GeneSummary
 from app.schemas.evidence import EvidenceItem
 from app.schemas.compound import CompoundCard
+from app.utils.compound_filters import displayable_compound_filters
 
 router = APIRouter()
 
@@ -68,6 +69,7 @@ async def get_enzyme_detail(
             select(ReactionCompound, Compound)
             .join(Compound, ReactionCompound.compound_id == Compound.compound_id)
             .where(ReactionCompound.reaction_id == rxn.reaction_id)
+            .where(*displayable_compound_filters())
         )
         substrates, products = [], []
         for rc, cpd in rc_result.all():

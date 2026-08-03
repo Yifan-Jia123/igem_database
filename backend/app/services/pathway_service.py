@@ -16,6 +16,7 @@ from app.models import (
 from app.schemas.pathway import PathwayCard
 from app.schemas.graph import GraphPayload
 from app.schemas.compound import CompoundCard
+from app.utils.compound_filters import displayable_compound_filters
 
 
 # Direction → which roles can reach which
@@ -234,7 +235,10 @@ async def _build_graph(
         return {}, {}
 
     rc_result = await db.execute(
-        select(ReactionCompound).where(ReactionCompound.reaction_id.in_(reaction_ids))
+        select(ReactionCompound)
+        .join(Compound, ReactionCompound.compound_id == Compound.compound_id)
+        .where(ReactionCompound.reaction_id.in_(reaction_ids))
+        .where(*displayable_compound_filters())
     )
     rc_rows = rc_result.scalars().all()
 

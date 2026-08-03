@@ -11,6 +11,7 @@ from app.models import Enzyme, Reaction, EnzymeReactionEdge
 from app.schemas.enzyme import EnzymeCard
 from app.schemas.common import Pagination
 from app.utils.query_parser import parse_query, SearchClause, SearchCondition, detect_input_type
+from app.utils.compound_filters import EXCLUDED_COMMON_COMPOUND_IDS
 
 
 # Fields sorted by weight (exact ID match → text match)
@@ -21,10 +22,15 @@ FIELD_CONFIG: Dict[str, dict] = {
     "rhea_id":     {"table": "reaction", "alias": "r",   "column": "rhea_id",       "weight": 90},
     "genbank_id":  {"table": "gene",     "alias": "g",   "column": "genbank_id",    "weight": 85},
     "compound_id": {"table": "compound", "alias": "cpd", "column": "compound_id",   "weight": 85},
+    "chebi_id":    {"table": "compound", "alias": "cpd", "column": "chebi_id",      "weight": 85},
     "pubmed_id":   {"table": "evidence", "alias": "ev",  "column": "pubmed_id",     "weight": 80},
     "ec_number":   {"table": "reaction", "alias": "r",   "column": "ec_number",     "weight": 70},
     "primary_name":{"table": "enzyme",   "alias": "e",   "column": "primary_name",  "weight": 50},
     "enzyme_name": {"table": "enzyme",   "alias": "e",   "column": "primary_name",  "weight": 50},
+    "compound_name": {"table": "compound", "alias": "cpd", "column": "name",        "weight": 50},
+    "compound":    {"table": "compound", "alias": "cpd", "column": "name",          "weight": 50},
+    "smiles":      {"table": "compound", "alias": "cpd", "column": "smiles",        "weight": 35},
+    "formula":     {"table": "compound", "alias": "cpd", "column": "formula",       "weight": 35},
     "gene_name":   {"table": "gene",     "alias": "g",   "column": "gene_name",     "weight": 40},
     "organism":    {"table": "enzyme",   "alias": "e",   "column": "organism_name", "weight": 30},
     "species":     {"table": "enzyme",   "alias": "e",   "column": "organism_name", "weight": 30},
@@ -32,7 +38,8 @@ FIELD_CONFIG: Dict[str, dict] = {
 
 ALL_FIELDS = [
     "enzyme_id", "uniprot_id", "rhea_id", "genbank_id",
-    "ec_number", "primary_name", "gene_name",
+    "compound_id", "chebi_id", "ec_number", "primary_name",
+    "compound_name", "gene_name", "organism",
 ]
 
 # JOIN clauses for reaching enzyme table from each table
@@ -46,6 +53,11 @@ TABLE_JOIN = {
                  "JOIN reaction_compound rc ON ere.reaction_id = rc.reaction_id "
                  "JOIN compound cpd ON rc.compound_id = cpd.compound_id"),
     "evidence": "JOIN evidence ev ON e.enzyme_id = ev.enzyme_id",
+}
+
+EXCLUDED_COMPOUND_SQL = ", ".join(f"'{cid}'" for cid in sorted(EXCLUDED_COMMON_COMPOUND_IDS))
+TABLE_FILTER = {
+    "compound": f" AND cpd.compound_id NOT IN ({EXCLUDED_COMPOUND_SQL}) AND cpd.name <> cpd.compound_id",
 }
 
 
@@ -128,6 +140,7 @@ async def _search_single(
     for field in fields_to_search:
         cfg = FIELD_CONFIG[field]
         join_sql = TABLE_JOIN[cfg["table"]]
+        filter_sql = TABLE_FILTER.get(cfg["table"], "")
         alias = cfg["alias"]
         col = cfg["column"]
         weight = cfg["weight"]
@@ -137,7 +150,7 @@ async def _search_single(
         bind_params[p] = value
         union_parts.append(
             f"SELECT e.enzyme_id, {weight} AS score FROM enzyme e {join_sql} "
-            f"WHERE {alias}.{col} = :{p}"
+            f"WHERE {alias}.{col} = :{p}{filter_sql}"
         )
 
         # Prefix match
@@ -145,16 +158,16 @@ async def _search_single(
         bind_params[p] = f"{value}%"
         union_parts.append(
             f"SELECT e.enzyme_id, {weight // 2} AS score FROM enzyme e {join_sql} "
-            f"WHERE {alias}.{col} LIKE :{p}"
+            f"WHERE {alias}.{col} LIKE :{p}{filter_sql}"
         )
 
         # Substring match (only for text fields)
-        if field in ("primary_name", "gene_name", "organism"):
+        if field in ("primary_name", "gene_name", "organism", "species", "compound_name", "compound", "smiles", "formula"):
             p = f"v{idx}"; idx += 1
             bind_params[p] = f"%{value}%"
             union_parts.append(
                 f"SELECT e.enzyme_id, {weight // 4} AS score FROM enzyme e {join_sql} "
-                f"WHERE {alias}.{col} LIKE :{p}"
+                f"WHERE {alias}.{col} LIKE :{p}{filter_sql}"
             )
 
     if not union_parts:

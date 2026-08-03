@@ -1,11 +1,13 @@
 """ETL Step 3: Load reaction + reaction_compound tables."""
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from config import DATA_DIR, DB_URL, DIRECTION_MAP
 
 engine = create_engine(DB_URL)
 
 RHEA_FILE = f"{DATA_DIR}/for_enzyme_detail/child_tables/uniprotkb_rhea.tsv"
+TERPENE_COMPOUNDS_FILE = f"{DATA_DIR}/for_compound_card/uniprotkb_terpene_compounds.tsv"
+GRAPH_NODES_FILE = f"{DATA_DIR}/for_graph/all_nodes.tsv"
 
 
 def parse_chebi_ids(chebi_str):
@@ -22,6 +24,19 @@ def parse_chebi_ids(chebi_str):
     substrates = [x.strip() for x in parts[0].split(";") if x.strip()] if len(parts) >= 1 else []
     products = [x.strip() for x in parts[1].split(";") if x.strip()] if len(parts) >= 2 else []
     return substrates, products
+
+
+def load_allowed_compound_ids():
+    """Return curated terpene compound IDs that are allowed as graph nodes."""
+    allowed = set()
+    for path in (TERPENE_COMPOUNDS_FILE, GRAPH_NODES_FILE):
+        df = pd.read_csv(path, sep="\t", usecols=["ChEBI ID"])
+        allowed.update(
+            str(cid).strip()
+            for cid in df["ChEBI ID"].dropna()
+            if str(cid).strip()
+        )
+    return allowed
 
 
 def load_reactions():
@@ -59,8 +74,10 @@ def load_reactions():
 def load_reaction_compounds():
     """Populate reaction_compound from ChEBI IDs column."""
     df = pd.read_csv(RHEA_FILE, sep="\t")
+    allowed_compound_ids = load_allowed_compound_ids()
 
     rows = []
+    skipped_compounds = set()
     for _, row in df.iterrows():
         rhea_id = row["Rhea ID"]
         if pd.isna(rhea_id) or not str(rhea_id).strip():
@@ -68,9 +85,15 @@ def load_reaction_compounds():
 
         substrates, products = parse_chebi_ids(row.get("ChEBI IDs (equation order)", ""))
         for chebi in substrates:
-            rows.append({"reaction_id": rhea_id, "compound_id": chebi, "role": "substrate"})
+            if chebi in allowed_compound_ids:
+                rows.append({"reaction_id": rhea_id, "compound_id": chebi, "role": "substrate"})
+            else:
+                skipped_compounds.add(chebi)
         for chebi in products:
-            rows.append({"reaction_id": rhea_id, "compound_id": chebi, "role": "product"})
+            if chebi in allowed_compound_ids:
+                rows.append({"reaction_id": rhea_id, "compound_id": chebi, "role": "product"})
+            else:
+                skipped_compounds.add(chebi)
 
     if not rows:
         print("  reaction_compound: no rows to insert")
@@ -78,24 +101,11 @@ def load_reaction_compounds():
 
     rc_df = pd.DataFrame(rows).drop_duplicates()
 
-    # Supplement missing compounds BEFORE inserting reaction_compound (FK constraint)
-    all_chebi_ids = set(rc_df["compound_id"].unique())
-    existing_cmp = pd.read_sql("SELECT compound_id FROM compound", engine)
-    existing_cmp_ids = set(existing_cmp["compound_id"])
-    missing = all_chebi_ids - existing_cmp_ids
-
-    if missing:
-        missing_df = pd.DataFrame({
-            "compound_id": list(missing),
-            "chebi_id": list(missing),
-            "name": [cid for cid in missing],
-        })
-        missing_df.to_sql("compound", engine, if_exists="append", index=False)
-        print(f"  compound (from reaction): {len(missing_df)} new rows (non-terpene)")
-
     cols = ["reaction_id", "compound_id", "role"]
     rc_df[cols].to_sql("reaction_compound", engine, if_exists="append", index=False)
     print(f"  reaction_compound: {len(rc_df)} rows inserted")
+    if skipped_compounds:
+        print(f"  reaction_compound: skipped {len(skipped_compounds)} non-curated ChEBI IDs")
 
 
 if __name__ == "__main__":

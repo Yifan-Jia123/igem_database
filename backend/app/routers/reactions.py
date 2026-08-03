@@ -7,6 +7,7 @@ from app.models import Reaction, ReactionCompound, Compound
 from app.schemas.common import ApiResponse
 from app.schemas.reaction import ReactionDetail
 from app.schemas.compound import CompoundCard
+from app.utils.compound_filters import displayable_compound_filters
 
 router = APIRouter()
 
@@ -27,6 +28,7 @@ async def get_reaction_detail(
         select(ReactionCompound, Compound)
         .join(Compound, ReactionCompound.compound_id == Compound.compound_id)
         .where(ReactionCompound.reaction_id == rxn.reaction_id)
+        .where(*displayable_compound_filters())
     )
     substrates, products = [], []
     for rc, cpd in rc_result.all():

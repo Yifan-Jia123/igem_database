@@ -30,10 +30,21 @@ import {
 } from './api'
 import type { Entity, EntityKind } from './types'
 
-const HOME_MAX_EXPANDED_EDGES = 10
 const HOME_EXPANSION_LIMIT = 36
 const HOME_VIEWBOX_WIDTH = 100
 const HOME_VIEWBOX_HEIGHT = 118
+const HOME_IMPORTANT_LABEL_COUNT = 10
+const HOME_FORCE_ITERATIONS = 340
+const HOME_FORCE_REPULSION = 82
+const HOME_FORCE_LINK_DISTANCE = 32
+const HOME_FORCE_LINK_STRENGTH = 0.0048
+const HOME_FORCE_CENTERING = 0.00055
+const HOME_FORCE_DAMPING = 0.66
+const HOME_FORCE_COLLISION_DISTANCE = 7.2
+const HOME_FORCE_COLLISION_STRENGTH = 0.34
+const HOME_FINAL_COLLISION_DISTANCE = 7.2
+const HOME_FINAL_COLLISION_ITERATIONS = 260
+const HOME_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const homeSearchModes = [
   { id: 'enzymeItems', label: 'Enzyme items' },
   { id: 'pathways', label: 'Pathways' },
@@ -71,6 +82,25 @@ type NodeCard = HomeGraphCompound & {
   degree: number
   x: number
   y: number
+}
+
+type ExpandedEdgeGroup = {
+  key: string
+  sourceId: string
+  targetId: string
+  enzymeId: string
+  label: string
+  directionMode: 'forward' | 'reverse' | 'bidirectional' | 'undirected'
+  edges: HomeGraphEdge[]
+  edgeIds: string[]
+  reactionIds: string[]
+  representative: HomeGraphEdge
+}
+
+type ForceLayoutLink = {
+  sourceId: string
+  targetId: string
+  weight: number
 }
 
 type ExpansionDirection = 'left' | 'right' | 'top' | 'bottom'
@@ -161,8 +191,8 @@ export function CompoundGraphHome({
   const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<Entity | null>(null)
   const [selectedDatasetId, setSelectedDatasetId] = useState<(typeof homeDatasetOptions)[number]['id']>(homeDatasetOptions[0].id)
-  const [nodeSize, setNodeSize] = useState(2.55)
-  const [labelScale, setLabelScale] = useState(1)
+  const [nodeSize, setNodeSize] = useState(1.05)
+  const [labelScale, setLabelScale] = useState(1.22)
   const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
   const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -242,12 +272,18 @@ export function CompoundGraphHome({
   const viewModel = useMemo(() => createHomeViewModel(graph, positions, selectedPairKey, expandedEdges), [graph, positions, selectedPairKey, expandedEdges])
   const selectedPair = viewModel.pairs.find((pair) => pair.key === selectedPairKey) ?? null
   const selectedNode = viewModel.nodes.find((node) => node.compoundId === selectedNodeId) ?? null
-  const pairEdges = selectedPairKey ? (expandedEdges.length > 0 ? expandedEdges : selectedPair?.edges ?? []).slice(0, HOME_MAX_EXPANDED_EDGES) : []
+  const pairEdges = selectedPairKey ? (expandedEdges.length > 0 ? expandedEdges : selectedPair?.edges ?? []) : []
+  const expandedEdgeGroups = useMemo(
+    () => groupExpandedEdgesByEnzyme(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
+    [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
+  )
+  const selectedExpandedGroup = expandedEdgeGroups.find((group) => group.edgeIds.includes(selectedEdgeId || '')) || expandedEdgeGroups[0] || null
   const selectedPairTotal = selectedPair ? Math.max(selectedPair.count, selectedPair.edges.length) : 0
   const visibleEdgeCount = viewModel.pairs.reduce((sum, pair) => sum + Math.max(pair.count, pair.edges.length || 0), 0)
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
   const selectedDataset = homeDatasetOptions.find((item) => item.id === selectedDatasetId) ?? homeDatasetOptions[0]
-  const selectedEdge = pairEdges.find((edge) => edge.edgeId === selectedEdgeId) || pairEdges[0] || null
+  const importantLabelIds = useMemo(() => pickImportantHomeLabelIds(viewModel.nodes), [viewModel.nodes])
+  const selectedEdge = selectedExpandedGroup?.representative || pairEdges.find((edge) => edge.edgeId === selectedEdgeId) || pairEdges[0] || null
   const trimmedSearchValue = searchValue.trim()
   const localSearchSuggestions = useMemo(
     () => buildHomeSearchSuggestions(trimmedSearchValue, graph, viewModel.pairs, searchFilter),
@@ -518,7 +554,7 @@ export function CompoundGraphHome({
     setSearchFeedback(null)
     focusCameraOnPair(pair)
     if (pair.edges.length > 0 && pair.edges.length === pair.count) {
-      const nextEdges = pair.edges.slice(0, HOME_MAX_EXPANDED_EDGES)
+      const nextEdges = pair.edges
       const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
       setExpandedEdges(nextEdges)
       setSelectedEdgeId(selected?.edgeId ?? null)
@@ -529,7 +565,7 @@ export function CompoundGraphHome({
       setExpandedLoading(true)
       try {
         const edges = await loadExpandedEdgeGroup(pair.edgeGroupId)
-        const nextEdges = (edges.length > 0 ? edges : pair.edges).slice(0, HOME_MAX_EXPANDED_EDGES)
+        const nextEdges = edges.length > 0 ? edges : pair.edges
         const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
         setExpandedEdges(nextEdges)
         setSelectedEdgeId(selected?.edgeId ?? null)
@@ -539,7 +575,7 @@ export function CompoundGraphHome({
       }
       return
     }
-    const nextEdges = pair.edges.slice(0, HOME_MAX_EXPANDED_EDGES)
+    const nextEdges = pair.edges
     const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
     setExpandedEdges(nextEdges)
     setSelectedEdgeId(selected?.edgeId ?? null)
@@ -720,7 +756,7 @@ export function CompoundGraphHome({
       setSelectedPairKey(pair.key)
       setSelectedNodeId(null)
       setActivePathway(null)
-      const nextEdges = (match.edges.length > 0 ? match.edges : pair.edges).slice(0, HOME_MAX_EXPANDED_EDGES)
+      const nextEdges = match.edges.length > 0 ? match.edges : pair.edges
       setExpandedEdges(nextEdges)
       setSelectedEdgeId(nextEdges[0]?.edgeId ?? null)
       setHighlightedNodeIds(new Set([pair.sourceId, pair.targetId]))
@@ -938,14 +974,14 @@ export function CompoundGraphHome({
               <div className="control-group">
                 <label htmlFor="home-node-size">Node size</label>
                 <div className="control-slider-row">
-                  <input id="home-node-size" className="control-slider" type="range" min="2" max="4.2" step="0.1" value={nodeSize} onChange={(event) => setNodeSize(Number(event.target.value))} />
+                  <input id="home-node-size" className="control-slider" type="range" min="0.7" max="2.8" step="0.05" value={nodeSize} onChange={(event) => setNodeSize(Number(event.target.value))} />
                   <span className="control-value">{nodeSize.toFixed(1)}</span>
                 </div>
               </div>
               <div className="control-group">
                 <label htmlFor="home-label-size">Label size</label>
                 <div className="control-slider-row">
-                  <input id="home-label-size" className="control-slider" type="range" min="0.8" max="1.45" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
+                  <input id="home-label-size" className="control-slider" type="range" min="0.85" max="2.1" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
                   <span className="control-value">{labelScale.toFixed(2)}</span>
                 </div>
               </div>
@@ -976,14 +1012,14 @@ export function CompoundGraphHome({
             onPointerCancel={finishMapPan}
           >
             <defs>
-              <marker id="home-map-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <marker id="home-map-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
                 <path d="M0,0 L8,4 L0,8 z" fill="rgba(249, 238, 201, 0.82)" />
               </marker>
               <filter id="home-node-glow" x="-60%" y="-60%" width="220%" height="220%">
-                <feDropShadow dx="0" dy="0" stdDeviation="1.4" floodColor="rgba(247, 240, 214, 0.65)" />
+                <feDropShadow dx="0" dy="0" stdDeviation="0.62" floodColor="rgba(247, 240, 214, 0.54)" />
               </filter>
               <filter id="selected-node-glow" x="-80%" y="-80%" width="260%" height="260%">
-                <feDropShadow dx="0" dy="0" stdDeviation="2.1" floodColor="rgba(250, 214, 242, 0.75)" />
+                <feDropShadow dx="0" dy="0" stdDeviation="0.95" floodColor="rgba(250, 214, 242, 0.72)" />
               </filter>
             </defs>
             <rect className="home-map-pan-layer" x="0" y="0" width={HOME_VIEWBOX_WIDTH} height={HOME_VIEWBOX_HEIGHT} />
@@ -996,11 +1032,12 @@ export function CompoundGraphHome({
                   if (!source || !target) return null
                   const pairGroupId = pair.edgeGroupId || pair.key
                   const isExpanded = selectedPairKey === pair.key && pairEdges.length > 0
-                  const edgeItems = isExpanded ? pairEdges : pair.edges
-                  const offsets = edgeItems.length > 1 ? edgeItems.map((_, index) => (index - (edgeItems.length - 1) / 2) * 3.2) : [0]
+                  const expandedItems = expandedEdgeGroups
+                  const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 3.2) : [0]
                   const pairLineLabel = pair.count > 1 ? `enzyme*${pair.count}` : pair.edges[0]?.card?.primaryName || 'enzyme'
                   const highlightedPair = highlightedEdgeGroupIds.has(pairGroupId) || pair.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
                   const pathwayPair = Boolean(activePathway && (activePathway.edgeGroupIds.includes(pairGroupId) || pair.edgeIds.some((edgeId) => activePathway.edgeIds.includes(edgeId))))
+                  const showPairLabel = selectedPairKey === pair.key || highlightedPair || pathwayPair
                   return (
                     <g key={pair.key} className="home-map-edge-group">
                       {!isExpanded && (
@@ -1013,25 +1050,26 @@ export function CompoundGraphHome({
                             onClick={(event) => { event.stopPropagation(); void handlePairClick(pair) }}
                           />
                           <path d={edgePath(source, target, 0)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void handlePairClick(pair) }} />
-                          <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className="home-edge-label" fontSize={1.02 * labelScale}>{pairLineLabel}</text>
+                          <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className={`home-edge-label ${showPairLabel ? 'is-visible' : ''}`} fontSize={1.02 * labelScale}>{pairLineLabel}</text>
                         </>
                       )}
-                      {isExpanded && edgeItems.map((edge, index) => {
+                      {isExpanded && expandedItems.map((edge, index) => {
                         const offset = offsets[index] ?? 0
-                        const label = edge.card?.primaryName || edge.label
-                        const highlightedEdge = highlightedPair || highlightedEdgeIds.has(edge.edgeId)
-                        const pathwayEdge = Boolean(activePathway?.edgeIds.includes(edge.edgeId))
+                        const highlightedEdge = highlightedPair || edge.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
+                        const pathwayEdge = Boolean(activePathway?.edgeIds.some((edgeId) => edge.edgeIds.includes(edgeId)))
+                        const selectedEdgeGroup = edge.edgeIds.includes(selectedEdgeId || '')
                         return (
-                          <g key={edge.edgeId}>
+                          <g key={edge.key}>
                             <path
                               d={edgePath(source, target, offset)}
-                              className={`expanded-edge live-expanded-edge ${selectedEdgeId === edge.edgeId ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
-                              markerEnd="url(#home-map-arrow)"
+                              className={`expanded-edge live-expanded-edge ${selectedEdgeGroup ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
+                              markerStart={edge.directionMode === 'reverse' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
+                              markerEnd={edge.directionMode === 'forward' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               onPointerDown={(event) => event.stopPropagation()}
-                              onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.edgeId) }}
+                              onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }}
                             />
-                            <path d={edgePath(source, target, offset)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.edgeId) }} />
-                            <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label" fontSize={0.94 * labelScale}>{label}</text>
+                            <path d={edgePath(source, target, offset)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }} />
+                            <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label" fontSize={0.94 * labelScale}>{edge.label}</text>
                           </g>
                         )
                       })}
@@ -1049,6 +1087,7 @@ export function CompoundGraphHome({
                   const neighbor = selectedNeighborIds.has(node.compoundId) && !selected && !pairEndpoint
                   const pos = positions[node.compoundId]
                   if (!pos) return null
+                  const showNodeLabel = importantLabelIds.has(node.compoundId) || selected || highlighted || pathway || pairEndpoint || neighbor
                   return (
                     <g key={node.compoundId} className={`home-map-node ${selected || pairEndpoint ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${pathway ? 'pathway' : ''} ${neighbor ? 'neighbor' : ''} ${activeNodeDragId === node.compoundId ? 'dragging' : ''}`}>
                       <circle
@@ -1062,7 +1101,7 @@ export function CompoundGraphHome({
                         onPointerCancel={finishNodeDrag}
                       />
                       <title>{node.name}</title>
-                      <text x={pos.x} y={pos.y + nodeSize + 4.8} className="home-map-node-name" fontSize={1.05 * labelScale}>
+                      <text x={pos.x} y={pos.y + nodeSize + 6.3} className={`home-map-node-name ${showNodeLabel ? 'is-visible' : ''}`} fontSize={2.35 * labelScale}>
                         {wrapCompoundLabel(node.name).map((line, lineIndex) => (
                           <tspan key={`${node.compoundId}:label:${lineIndex}`} x={pos.x} dy={lineIndex === 0 ? 0 : '1.2em'}>{line}</tspan>
                         ))}
@@ -1112,27 +1151,29 @@ export function CompoundGraphHome({
             <div className="stack-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>{compoundName(selectedPair.sourceId)} <ChevronRight size={14} /> {compoundName(selectedPair.targetId)}</strong>
-                <span>{expandedLoading ? 'Loading enzyme paths...' : `${pairEdges.length} / ${selectedPairTotal} enzyme paths`}</span>
+                <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes / ${pairEdges.length || selectedPairTotal} reactions`}</span>
               </div>
               <button className="stack-close-button" type="button" onClick={clearPairSelection} title="Close enzyme list">
                 <X size={18} />
               </button>
             </div>
-            {pairEdges.map((edge) => {
+            {expandedEdgeGroups.map((group) => {
+              const edge = group.representative
               const enzymeId = edge.card?.enzymeId || edge.enzymeId
               const queued = isQueued(enzymeId)
               return (
-                <article key={edge.edgeId} className={`enzyme-card ${selectedEdgeId === edge.edgeId ? 'selected' : ''}`}>
+                <article key={group.key} className={`enzyme-card ${group.edgeIds.includes(selectedEdgeId || '') ? 'selected' : ''}`}>
                   <button className="card-check" type="button" onClick={() => onToggleQueue(enzymeId)}>
                     {queued ? <Check size={18} /> : <Download size={18} />}
                   </button>
-                  <button className="enzyme-card-copy" type="button" onClick={() => setSelectedEdgeId(edge.edgeId)}>
+                  <button className="enzyme-card-copy" type="button" onClick={() => setSelectedEdgeId(group.representative.edgeId)}>
                     <h3>{edge.card?.primaryName || edge.label}</h3>
                     <p>{edge.card?.organismName || 'Unknown organism'}</p>
-                    <p>{edge.card?.reactionEquation || edge.label}</p>
+                    <p>{group.reactionIds.length > 1 ? `${group.reactionIds.length} reactions` : edge.card?.reactionEquation || edge.label}</p>
+                    {group.reactionIds.length > 1 && <p>{group.reactionIds.slice(0, 4).join(', ')}{group.reactionIds.length > 4 ? '...' : ''}</p>}
                   </button>
                   <div className="enzyme-card-meta">
-                    <strong>{edge.card?.uniprotId || edge.card?.databaseCode || enzymeId}</strong>
+                    <strong>{group.label}</strong>
                     <span>{edge.card?.ecNumber || 'EC n/a'}</span>
                     <small>{edge.card?.databaseCode || enzymeId}</small>
                     <button type="button" onClick={() => onOpenEnzyme(enzymeId)}>Open detail</button>
@@ -1378,7 +1419,7 @@ function createHomeLayout(graph: HomeGraphData | null) {
   if (!graph || graph.nodes.length === 0) return { nodes: [] as HomeGraphCompound[], positions: {} as Record<string, Point>, pairs: [] as PairEntry[] }
   const score = buildHomeDegreeScore(graph)
   const nodes = [...graph.nodes].sort((a, b) => (score.get(b.compoundId) || 0) - (score.get(a.compoundId) || 0) || a.name.localeCompare(b.name))
-  const positions = createInitialHomePositions(nodes)
+  const positions = createInitialHomePositions(nodes, graph)
   const visibleIds = new Set(nodes.map((node) => node.compoundId))
   return { nodes, positions, pairs: buildHomePairs(graph, visibleIds) }
 }
@@ -1411,49 +1452,287 @@ function buildHomeDegreeScore(graph: HomeGraphData) {
   return score
 }
 
-function createInitialHomePositions(nodes: HomeGraphCompound[]) {
-  const positions: Record<string, Point> = {}
-  const center = { x: 50, y: 58 }
-  nodes.forEach((node, index) => {
-    if (index === 0) {
-      positions[node.compoundId] = center
-      return
-    }
-    let ringStart = 1
-    let ring = 1
-    while (index >= ringStart + homeRingCapacity(ring)) {
-      ringStart += homeRingCapacity(ring)
-      ring += 1
-    }
-    const ringIndex = index - ringStart
-    const ringCount = Math.min(homeRingCapacity(ring), nodes.length - ringStart)
-    const angleOffset = ring % 2 === 0 ? Math.PI / Math.max(ringCount, 1) : 0
-    const angle = -Math.PI / 2 + angleOffset + (Math.PI * 2 * ringIndex) / Math.max(ringCount, 1)
-    const radius = 18 + ring * 12
-    positions[node.compoundId] = {
-      x: clamp(center.x + Math.cos(angle) * radius * 0.82, 5.5, HOME_VIEWBOX_WIDTH - 5.5),
-      y: clamp(center.y + Math.sin(angle) * radius * 0.94, 7, HOME_VIEWBOX_HEIGHT - 7),
-    }
-  })
-  return positions
+function pickImportantHomeLabelIds(nodes: NodeCard[]) {
+  return new Set(
+    [...nodes]
+      .sort((a, b) => b.degree - a.degree || a.name.localeCompare(b.name))
+      .slice(0, HOME_IMPORTANT_LABEL_COUNT)
+      .map((node) => node.compoundId),
+  )
 }
 
-function homeRingCapacity(ring: number) {
-  if (ring === 1) return 8
-  if (ring === 2) return 14
-  return 20 + (ring - 3) * 8
+function createInitialHomePositions(nodes: HomeGraphCompound[], graph: HomeGraphData) {
+  const positions: Record<string, Point> = {}
+  const velocities: Record<string, Point> = {}
+  const center = { x: 50, y: 58 }
+  const visibleIds = new Set(nodes.map((node) => node.compoundId))
+  const links = buildForceLayoutLinks(graph, visibleIds)
+  const degreeScore = buildHomeDegreeScore(graph)
+  const total = Math.max(nodes.length, 1)
+
+  nodes.forEach((node, index) => {
+    const jitter = stableJitter(node.compoundId)
+    const angle = index * HOME_GOLDEN_ANGLE + jitter.x * 0.18
+    const radius = 8 + Math.sqrt((index + 0.5) / total) * 50
+    positions[node.compoundId] = {
+      x: center.x + Math.cos(angle) * radius * 0.86 + jitter.x * 2.5,
+      y: center.y + Math.sin(angle) * radius * 0.96 + jitter.y * 2.5,
+    }
+    velocities[node.compoundId] = { x: 0, y: 0 }
+  })
+
+  for (let iteration = 0; iteration < HOME_FORCE_ITERATIONS; iteration += 1) {
+    const heat = 1 - iteration / HOME_FORCE_ITERATIONS
+    for (let first = 0; first < nodes.length; first += 1) {
+      for (let second = first + 1; second < nodes.length; second += 1) {
+        const source = nodes[first]
+        const target = nodes[second]
+        if (!source || !target) continue
+        const sourcePoint = positions[source.compoundId]
+        const targetPoint = positions[target.compoundId]
+        const sourceVelocity = velocities[source.compoundId]
+        const targetVelocity = velocities[target.compoundId]
+        if (!sourcePoint || !targetPoint || !sourceVelocity || !targetVelocity) continue
+        let dx = sourcePoint.x - targetPoint.x
+        let dy = sourcePoint.y - targetPoint.y
+        if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
+          const jitter = stableJitter(`${source.compoundId}:${target.compoundId}`)
+          dx = jitter.x || 0.1
+          dy = jitter.y || 0.1
+        }
+        const distanceSq = clamp(dx * dx + dy * dy, 12, 2200)
+        const distance = Math.sqrt(distanceSq)
+        const force = (HOME_FORCE_REPULSION * heat) / distanceSq
+        const forceX = (dx / distance) * force
+        const forceY = (dy / distance) * force
+        sourceVelocity.x += forceX
+        sourceVelocity.y += forceY
+        targetVelocity.x -= forceX
+        targetVelocity.y -= forceY
+
+        const sourceDegree = degreeScore.get(source.compoundId) || 1
+        const targetDegree = degreeScore.get(target.compoundId) || 1
+        const collisionDistance = HOME_FORCE_COLLISION_DISTANCE + Math.min(2.2, Math.log2(sourceDegree + targetDegree + 1) * 0.28)
+        if (distance < collisionDistance) {
+          const collisionForce = (collisionDistance - distance) * HOME_FORCE_COLLISION_STRENGTH * (0.45 + heat)
+          const collisionX = (dx / distance) * collisionForce
+          const collisionY = (dy / distance) * collisionForce
+          sourceVelocity.x += collisionX
+          sourceVelocity.y += collisionY
+          targetVelocity.x -= collisionX
+          targetVelocity.y -= collisionY
+        }
+      }
+    }
+
+    links.forEach((link) => {
+      const sourcePoint = positions[link.sourceId]
+      const targetPoint = positions[link.targetId]
+      const sourceVelocity = velocities[link.sourceId]
+      const targetVelocity = velocities[link.targetId]
+      if (!sourcePoint || !targetPoint || !sourceVelocity || !targetVelocity) return
+      const dx = targetPoint.x - sourcePoint.x
+      const dy = targetPoint.y - sourcePoint.y
+      const distance = Math.max(Math.hypot(dx, dy), 0.001)
+      const sourceDegree = degreeScore.get(link.sourceId) || 1
+      const targetDegree = degreeScore.get(link.targetId) || 1
+      const degreeBoost = Math.min(7, Math.log2(sourceDegree + targetDegree + 1))
+      const targetDistance = HOME_FORCE_LINK_DISTANCE + degreeBoost
+      const force = (distance - targetDistance) * HOME_FORCE_LINK_STRENGTH * Math.min(2.2, Math.sqrt(link.weight))
+      const forceX = (dx / distance) * force
+      const forceY = (dy / distance) * force
+      sourceVelocity.x += forceX
+      sourceVelocity.y += forceY
+      targetVelocity.x -= forceX
+      targetVelocity.y -= forceY
+    })
+
+    nodes.forEach((node) => {
+      const point = positions[node.compoundId]
+      const velocity = velocities[node.compoundId]
+      if (!point || !velocity) return
+      velocity.x += (center.x - point.x) * HOME_FORCE_CENTERING
+      velocity.y += (center.y - point.y) * HOME_FORCE_CENTERING
+      velocity.x *= HOME_FORCE_DAMPING
+      velocity.y *= HOME_FORCE_DAMPING
+      point.x += velocity.x
+      point.y += velocity.y
+    })
+  }
+
+  return relaxHomePositionCollisions(normalizeHomePositions(positions))
+}
+
+function buildForceLayoutLinks(graph: HomeGraphData, visibleIds: Set<string>): ForceLayoutLink[] {
+  const links = new Map<string, ForceLayoutLink>()
+  const add = (sourceId: string, targetId: string, weight: number) => {
+    if (sourceId === targetId || !visibleIds.has(sourceId) || !visibleIds.has(targetId)) return
+    const key = canonicalCompoundPairKey(sourceId, targetId)
+    const current = links.get(key)
+    if (current) {
+      current.weight += weight
+      return
+    }
+    links.set(key, { sourceId, targetId, weight })
+  }
+
+  graph.edgeGroups.forEach((group) => add(group.sourceCompoundId, group.targetCompoundId, Math.max(1, group.count)))
+  graph.edges.forEach((edge) => add(edge.sourceCompoundId, edge.targetCompoundId, 1))
+  return [...links.values()]
+}
+
+function normalizeHomePositions(positions: Record<string, Point>) {
+  const points = Object.values(positions)
+  if (points.length === 0) return positions
+  const minX = Math.min(...points.map((point) => point.x))
+  const maxX = Math.max(...points.map((point) => point.x))
+  const minY = Math.min(...points.map((point) => point.y))
+  const maxY = Math.max(...points.map((point) => point.y))
+  const width = Math.max(maxX - minX, 1)
+  const height = Math.max(maxY - minY, 1)
+  const scaleX = ((HOME_VIEWBOX_WIDTH - 13) / width) * 0.96
+  const scaleY = ((HOME_VIEWBOX_HEIGHT - 18) / height) * 0.96
+  const sourceCenter = { x: minX + width / 2, y: minY + height / 2 }
+  const targetCenter = { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 }
+  const normalized: Record<string, Point> = {}
+  Object.entries(positions).forEach(([compoundId, point]) => {
+    normalized[compoundId] = {
+      x: clamp(targetCenter.x + (point.x - sourceCenter.x) * scaleX, 5.5, HOME_VIEWBOX_WIDTH - 5.5),
+      y: clamp(targetCenter.y + (point.y - sourceCenter.y) * scaleY, 7, HOME_VIEWBOX_HEIGHT - 7),
+    }
+  })
+  return normalized
+}
+
+function relaxHomePositionCollisions(positions: Record<string, Point>) {
+  const next = Object.fromEntries(Object.entries(positions).map(([compoundId, point]) => [compoundId, { ...point }])) as Record<string, Point>
+  const entries = Object.entries(next)
+  for (let iteration = 0; iteration < HOME_FINAL_COLLISION_ITERATIONS; iteration += 1) {
+    let moved = false
+    const heat = 1 - iteration / HOME_FINAL_COLLISION_ITERATIONS
+    for (let first = 0; first < entries.length; first += 1) {
+      for (let second = first + 1; second < entries.length; second += 1) {
+        const [sourceId, source] = entries[first] || []
+        const [targetId, target] = entries[second] || []
+        if (!sourceId || !targetId || !source || !target) continue
+        let dx = source.x - target.x
+        let dy = source.y - target.y
+        let distance = Math.hypot(dx, dy)
+        if (distance < 0.001) {
+          const jitter = stableJitter(`${sourceId}:${targetId}:final`)
+          dx = jitter.x || 0.1
+          dy = jitter.y || 0.1
+          distance = Math.hypot(dx, dy)
+        }
+        if (distance >= HOME_FINAL_COLLISION_DISTANCE) continue
+        const shift = ((HOME_FINAL_COLLISION_DISTANCE - distance) / 2) * (0.35 + heat * 0.65)
+        const shiftX = (dx / distance) * shift
+        const shiftY = (dy / distance) * shift
+        source.x += shiftX
+        source.y += shiftY
+        target.x -= shiftX
+        target.y -= shiftY
+        moved = true
+      }
+    }
+    entries.forEach(([, point]) => {
+      point.x = clamp(point.x, 5.5, HOME_VIEWBOX_WIDTH - 5.5)
+      point.y = clamp(point.y, 7, HOME_VIEWBOX_HEIGHT - 7)
+    })
+    if (!moved) break
+  }
+  return next
 }
 
 function createHomeViewModel(graph: HomeGraphData | null, positions: Record<string, Point>, selectedPairKey: string | null, expandedEdges: HomeGraphEdge[]) {
   if (!graph) return { nodes: [] as NodeCard[], pairs: [] as PairEntry[] }
-  const base = createHomeLayout(graph)
-  const nodes = base.nodes.map((node) => ({ ...node, degree: graph.edges.filter((edge) => edge.sourceCompoundId === node.compoundId || edge.targetCompoundId === node.compoundId).length, x: positions[node.compoundId]?.x ?? base.positions[node.compoundId]?.x ?? 50, y: positions[node.compoundId]?.y ?? base.positions[node.compoundId]?.y ?? 50 }))
-  const pairMap = new Map(base.pairs.map((pair) => [pair.key, pair]))
+  const visibleIds = new Set(graph.nodes.map((node) => node.compoundId))
+  const pairs = buildHomePairs(graph, visibleIds)
+  const score = buildHomeDegreeScore(graph)
+  const nodes = [...graph.nodes]
+    .sort((a, b) => (score.get(b.compoundId) || 0) - (score.get(a.compoundId) || 0) || a.name.localeCompare(b.name))
+    .map((node) => ({ ...node, degree: score.get(node.compoundId) || 0, x: positions[node.compoundId]?.x ?? 50, y: positions[node.compoundId]?.y ?? 50 }))
+  const pairMap = new Map(pairs.map((pair) => [pair.key, pair]))
   if (selectedPairKey && expandedEdges.length > 0) {
     const selectedPair = pairMap.get(selectedPairKey)
     if (selectedPair) pairMap.set(selectedPairKey, { ...selectedPair, edges: expandedEdges, count: Math.max(expandedEdges.length, selectedPair.count) })
   }
   return { nodes, pairs: [...pairMap.values()] }
+}
+
+function groupExpandedEdgesByEnzyme(edges: HomeGraphEdge[], referenceSourceId = edges[0]?.sourceCompoundId, referenceTargetId = edges[0]?.targetCompoundId): ExpandedEdgeGroup[] {
+  const groups = new Map<string, ExpandedEdgeGroup>()
+  edges.forEach((edge) => {
+    const enzymeId = edge.card?.enzymeId || edge.enzymeId
+    const key = `${canonicalCompoundPairKey(edge.sourceCompoundId, edge.targetCompoundId)}::${enzymeId}`
+    const current = groups.get(key)
+    if (!current) {
+      groups.set(key, {
+        key,
+        sourceId: referenceSourceId || edge.sourceCompoundId,
+        targetId: referenceTargetId || edge.targetCompoundId,
+        enzymeId,
+        label: edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId,
+        directionMode: directionModeForEdges([edge], referenceSourceId, referenceTargetId),
+        edges: [edge],
+        edgeIds: [edge.edgeId],
+        reactionIds: [edge.reactionId],
+        representative: edge,
+      })
+      return
+    }
+    const nextEdges = [...current.edges, edge]
+    current.edges = nextEdges
+    current.edgeIds = Array.from(new Set([...current.edgeIds, edge.edgeId]))
+    current.reactionIds = Array.from(new Set([...current.reactionIds, edge.reactionId]))
+    current.directionMode = directionModeForEdges(nextEdges, current.sourceId, current.targetId)
+    if (!current.label && (edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId)) current.label = edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId
+  })
+
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
+}
+
+function canonicalCompoundPairKey(sourceId: string, targetId: string) {
+  return [sourceId, targetId].sort().join('::')
+}
+
+function directionModeForEdges(edges: HomeGraphEdge[], sourceId = edges[0]?.sourceCompoundId, targetId = edges[0]?.targetCompoundId): ExpandedEdgeGroup['directionMode'] {
+  let hasForward = false
+  let hasReverse = false
+  let hasDirected = false
+  edges.forEach((edge) => {
+    const normalized = normalizeEdgeDirection(edge.direction)
+    const reversedAgainstGroup = edge.sourceCompoundId === targetId && edge.targetCompoundId === sourceId
+    if (normalized === 'bidirectional') {
+      hasForward = true
+      hasReverse = true
+      hasDirected = true
+      return
+    }
+    if (normalized === 'forward') {
+      if (reversedAgainstGroup) hasReverse = true
+      else hasForward = true
+      hasDirected = true
+      return
+    }
+    if (normalized === 'reverse') {
+      if (reversedAgainstGroup) hasForward = true
+      else hasReverse = true
+      hasDirected = true
+    }
+  })
+  if (hasForward && hasReverse) return 'bidirectional'
+  if (hasForward) return 'forward'
+  if (hasReverse) return 'reverse'
+  return hasDirected ? 'bidirectional' : 'undirected'
+}
+
+function normalizeEdgeDirection(direction: string | null | undefined) {
+  const clean = normalizeSearchText(direction)
+  if (clean === 'forward') return 'forward'
+  if (clean === 'reverse') return 'reverse'
+  if (clean === 'reversible' || clean === 'bidirectional' || clean === 'both') return 'bidirectional'
+  return 'undirected'
 }
 
 function buildHomeSearchSuggestions(query: string, graph: HomeGraphData | null, pairs: PairEntry[], filter: HomeSearchFilter): HomeSearchSuggestion[] {

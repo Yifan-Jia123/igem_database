@@ -540,6 +540,7 @@ export type HomeGraphRequest = {
   centerCompoundId?: string
   depth?: number
   limitNodes?: number
+  selectionMode?: 'global'
 }
 
 export type HomePathwayCard = {
@@ -556,9 +557,10 @@ export type HomePathwayCard = {
 export async function loadHomeGraph(options: HomeGraphRequest = {}): Promise<HomeGraphData> {
   const params = new URLSearchParams({
     depth: String(options.depth ?? 1),
-    limit_nodes: String(options.limitNodes ?? 42),
+    limit_nodes: String(options.limitNodes ?? (options.centerCompoundId ? 42 : 120)),
   })
   if (options.centerCompoundId) params.set('center_compound_id', options.centerCompoundId)
+  if (!options.centerCompoundId) params.set('selection_mode', options.selectionMode ?? 'global')
   return request<HomeGraphData>(`/graph?${params.toString()}`)
 }
 

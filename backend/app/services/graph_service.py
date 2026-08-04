@@ -21,9 +21,18 @@ async def build_graph_payload(
     center_compound_id: Optional[str] = None,
     depth: int = 2,
     limit_nodes: Optional[int] = None,
+    selection_mode: Optional[str] = None,
     source_types: Optional[List[str]] = None,
     review_statuses: Optional[List[str]] = None,
 ) -> GraphPayload:
+
+    if not center_compound_id and selection_mode == "global":
+        return await _build_global_graph_payload(
+            db,
+            limit_nodes=limit_nodes,
+            source_types=source_types,
+            review_statuses=review_statuses,
+        )
 
     # 1. Select center compound
     if center_compound_id:
@@ -73,7 +82,7 @@ def _limit_graph_payload(
     cards: List[CompoundCard],
     edges: List[ReactionEdge],
     edge_groups: List[EdgeGroup],
-    center_id: str,
+    center_id: Optional[str],
     limit_nodes: int,
 ) -> Tuple[List[CompoundCard], List[ReactionEdge], List[EdgeGroup]]:
     card_map = {card.compound_id: card for card in cards}
@@ -101,7 +110,8 @@ def _limit_graph_payload(
         ordered_ids.append(compound_id)
         return True
 
-    add(center_id)
+    if center_id:
+        add(center_id)
 
     pair_candidates = [
         (
@@ -122,12 +132,25 @@ def _limit_graph_payload(
     ]
     pair_candidates.sort(key=lambda item: (-item[2], item[3] or "", item[0], item[1]))
 
+    selected_pair_keys: Set[Tuple[str, str]] = set()
+    selected_pair_counts: Dict[str, int] = {}
+    max_pairs_per_compound = max(6, min(10, limit_nodes // 12)) if center_id is None else None
+
     for source_id, target_id, _, _ in pair_candidates:
+        if max_pairs_per_compound is not None:
+            if (
+                selected_pair_counts.get(source_id, 0) >= max_pairs_per_compound
+                or selected_pair_counts.get(target_id, 0) >= max_pairs_per_compound
+            ):
+                continue
         needed = len({compound_id for compound_id in (source_id, target_id) if compound_id not in selected_ids})
         if len(selected_ids) + needed > limit_nodes:
             continue
-        add(source_id)
-        add(target_id)
+        if add(source_id) and add(target_id):
+            selected_pair_keys.add((source_id, target_id))
+            if max_pairs_per_compound is not None:
+                selected_pair_counts[source_id] = selected_pair_counts.get(source_id, 0) + 1
+                selected_pair_counts[target_id] = selected_pair_counts.get(target_id, 0) + 1
 
     remaining_cards = sorted(
         cards,
@@ -142,6 +165,7 @@ def _limit_graph_payload(
         edge
         for edge in edges
         if edge.source_compound_id in selected_ids and edge.target_compound_id in selected_ids
+        and (center_id is not None or (edge.source_compound_id, edge.target_compound_id) in selected_pair_keys)
     ]
     visible_edge_ids = {edge.edge_id for edge in limited_edges}
     limited_edge_groups = [
@@ -155,6 +179,7 @@ def _limit_graph_payload(
         )
         for group in edge_groups
         if group.source_compound_id in selected_ids and group.target_compound_id in selected_ids
+        and (center_id is not None or (group.source_compound_id, group.target_compound_id) in selected_pair_keys)
     ]
 
     return [card_map[compound_id] for compound_id in ordered_ids], limited_edges, limited_edge_groups
@@ -176,6 +201,110 @@ async def _pick_default_center(db: AsyncSession) -> Optional[Compound]:
         select(Compound).where(Compound.compound_id == row[0])
     )
     return result.scalar()
+
+
+async def _build_global_graph_payload(
+    db: AsyncSession,
+    limit_nodes: Optional[int],
+    source_types: Optional[List[str]],
+    review_statuses: Optional[List[str]],
+) -> GraphPayload:
+    compounds = await _fetch_all_displayable_compounds(db)
+    if not compounds:
+        return GraphPayload()
+
+    displayable_ids = {compound.compound_id for compound in compounds}
+    rc_query = select(ReactionCompound, Reaction).join(
+        Reaction, ReactionCompound.reaction_id == Reaction.reaction_id
+    ).where(ReactionCompound.compound_id.in_(displayable_ids))
+
+    if source_types:
+        rc_query = rc_query.where(Reaction.source_type.in_(source_types))
+    if review_statuses:
+        rc_query = rc_query.where(Reaction.review_status.in_(review_statuses))
+
+    rc_result = await db.execute(rc_query)
+    rc_reaction_pairs = rc_result.all()
+
+    reaction_map: Dict[str, Reaction] = {}
+    rxn_compounds: Dict[str, Tuple[List[str], List[str]]] = {}
+    for rc, reaction in rc_reaction_pairs:
+        if rc.compound_id not in displayable_ids:
+            continue
+        reaction_map[reaction.reaction_id] = reaction
+        if reaction.reaction_id not in rxn_compounds:
+            rxn_compounds[reaction.reaction_id] = ([], [])
+        substrates, products = rxn_compounds[reaction.reaction_id]
+        target_list = substrates if rc.role.value == "substrate" else products
+        if rc.compound_id not in target_list:
+            target_list.append(rc.compound_id)
+
+    reaction_ids = [
+        reaction_id
+        for reaction_id, (substrates, products) in rxn_compounds.items()
+        if substrates and products
+    ]
+    if not reaction_ids:
+        cards = [_compound_to_card(compound) for compound in compounds]
+        return GraphPayload(nodes=cards[:limit_nodes] if limit_nodes else cards)
+
+    edge_query = select(EnzymeReactionEdge, Enzyme).join(
+        Enzyme, EnzymeReactionEdge.enzyme_id == Enzyme.enzyme_id
+    ).where(EnzymeReactionEdge.reaction_id.in_(reaction_ids))
+
+    if source_types:
+        edge_query = edge_query.where(EnzymeReactionEdge.source_type.in_(source_types))
+    if review_statuses:
+        edge_query = edge_query.where(EnzymeReactionEdge.review_status.in_(review_statuses))
+
+    edge_result = await db.execute(edge_query)
+    edge_rows = edge_result.all()
+
+    edge_records: List[dict] = []
+    for ere, enz in edge_rows:
+        reaction = reaction_map.get(ere.reaction_id)
+        if not reaction:
+            continue
+        substrates, products = rxn_compounds.get(ere.reaction_id, ([], []))
+        direction = reaction.direction.value if reaction.direction else "unknown"
+        pairs: List[Tuple[str, str]] = []
+        if direction in DIRECTION_ALLOWS_SUBSTRATE_TO_PRODUCT:
+            pairs.extend((source_id, target_id) for source_id in substrates for target_id in products if source_id != target_id)
+        if direction in DIRECTION_ALLOWS_PRODUCT_TO_SUBSTRATE:
+            pairs.extend((source_id, target_id) for source_id in products for target_id in substrates if source_id != target_id)
+
+        for source_id, target_id in pairs:
+            edge_records.append({
+                "from_cpd": source_id,
+                "to_cpd": target_id,
+                "edge_id": ere.edge_id,
+                "enzyme_id": ere.enzyme_id,
+                "enzyme": enz,
+                "reaction_id": reaction.reaction_id,
+                "reaction": reaction,
+                "direction": direction,
+                "source_type": ere.source_type.value if ere.source_type else "swiss_prot",
+                "review_status": ere.review_status.value if ere.review_status else "official",
+            })
+
+    cards = [_compound_to_card(compound) for compound in compounds]
+    card_map = {card.compound_id: card for card in cards}
+    edges, edge_groups = _build_edges_and_groups(edge_records, card_map)
+
+    if limit_nodes and len(cards) > limit_nodes:
+        cards, edges, edge_groups = _limit_graph_payload(
+            cards,
+            edges,
+            edge_groups,
+            None,
+            limit_nodes,
+        )
+
+    return GraphPayload(
+        nodes=cards,
+        edges=edges,
+        edge_groups=edge_groups,
+    )
 
 
 async def _bfs_subgraph(
@@ -302,6 +431,14 @@ async def _bfs_subgraph(
 async def _fetch_compounds(db: AsyncSession, compound_ids: Set[str]) -> List[Compound]:
     result = await db.execute(
         select(Compound).where(Compound.compound_id.in_(list(compound_ids)))
+        .where(*displayable_compound_filters())
+    )
+    return list(result.scalars().all())
+
+
+async def _fetch_all_displayable_compounds(db: AsyncSession) -> List[Compound]:
+    result = await db.execute(
+        select(Compound)
         .where(*displayable_compound_filters())
     )
     return list(result.scalars().all())

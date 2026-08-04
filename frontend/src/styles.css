@@ -2929,6 +2929,20 @@ body:has(.graph-home-page) {
   cursor: pointer;
 }
 
+.home-edge-label {
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.home-edge-label.is-visible,
+.home-map-edge-group:hover .home-edge-label {
+  opacity: 0.72;
+}
+
+.expanded-edge-label {
+  opacity: 0.86;
+}
+
 .expanded-edge,
 .search-result-edge {
   fill: none;
@@ -2975,6 +2989,20 @@ body:has(.graph-home-page) {
   font-size: 1.6px;
   text-anchor: middle;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease, fill 0.16s ease;
+}
+
+.home-map-node:hover text,
+.home-map-node text.is-visible {
+  opacity: 0.78;
+}
+
+.home-map-node.selected text,
+.home-map-node.highlighted text,
+.home-map-node.pathway text {
+  fill: rgba(255, 255, 255, 0.92);
+  opacity: 0.92;
 }
 
 .selected-pulse {
@@ -5566,4 +5594,20 @@ body:has(.home-map-page) {
     max-height: 42vh;
     border-radius: 14px;
   }
+}
+
+.home-map-node-name {
+  fill: rgba(255, 252, 232, 0.96);
+  paint-order: stroke;
+  stroke: rgba(36, 30, 58, 0.86);
+  stroke-width: 0.48px;
+}
+
+.home-map-node:hover text,
+.home-map-node text.is-visible {
+  opacity: 0.94;
+}
+
+.home-edge-label {
+  opacity: 0;
 }

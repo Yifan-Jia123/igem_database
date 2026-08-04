@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -19,6 +19,7 @@ import {
   loadExpandedEdgeGroup,
   loadEnzymeDetail,
   loadHomeGraph,
+  searchApiEntries,
   searchHomePathways,
   type EnzymeDetailData,
   type EnzymeSequenceLink,
@@ -27,6 +28,7 @@ import {
   type HomeGraphEdge,
   type HomePathwayCard,
 } from './api'
+import type { Entity, EntityKind } from './types'
 
 const HOME_MAX_EXPANDED_EDGES = 10
 const HOME_EXPANSION_LIMIT = 36
@@ -43,7 +45,14 @@ const homeDatasetOptions = [
   { id: 'comparative_sets', label: 'Comparative sets', detail: 'Coming soon', disabled: true },
   { id: 'literature_merge', label: 'Literature merge', detail: 'Coming soon', disabled: true },
 ] as const
+const homeSearchFilters = [
+  { id: 'all', label: 'All' },
+  { id: 'compound', label: 'Compounds' },
+  { id: 'enzyme', label: 'Enzymes' },
+  { id: 'reaction', label: 'Reactions' },
+] as const
 type HomeSearchMode = (typeof homeSearchModes)[number]['id']
+type HomeSearchFilter = (typeof homeSearchFilters)[number]['id']
 
 type Point = { x: number; y: number }
 
@@ -72,6 +81,35 @@ type PanState = {
   startClientY: number
   originCamera: Point
   moved: boolean
+}
+
+type NodeDragState = {
+  pointerId: number
+  nodeId: string
+  startClientX: number
+  startClientY: number
+  originPoint: Point
+  moved: boolean
+}
+
+type PanelDragState = {
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  originPoint: Point
+}
+
+type HomeSearchSuggestion = {
+  id: string
+  kind: EntityKind
+  title: string
+  subtitle: string
+  nodeId?: string
+  pairKey?: string
+  edgeId?: string
+  enzymeId?: string
+  reactionId?: string
+  entity?: Entity
 }
 
 type GraphSearchMatch =
@@ -117,11 +155,20 @@ export function CompoundGraphHome({
   const [datasetOpen, setDatasetOpen] = useState(false)
   const [controlsOpen, setControlsOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [searchFilter, setSearchFilter] = useState<HomeSearchFilter>('all')
+  const [librarySuggestions, setLibrarySuggestions] = useState<HomeSearchSuggestion[]>([])
+  const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
+  const [selectedLibraryItem, setSelectedLibraryItem] = useState<Entity | null>(null)
   const [selectedDatasetId, setSelectedDatasetId] = useState<(typeof homeDatasetOptions)[number]['id']>(homeDatasetOptions[0].id)
   const [nodeSize, setNodeSize] = useState(2.55)
   const [labelScale, setLabelScale] = useState(1)
+  const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
+  const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<PanState | null>(null)
+  const nodeDragRef = useRef<NodeDragState | null>(null)
+  const panelDragRef = useRef<PanelDragState | null>(null)
   const graphRef = useRef<HomeGraphData | null>(null)
   const positionsRef = useRef<Record<string, Point>>({})
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
@@ -167,6 +214,31 @@ export function CompoundGraphHome({
     cameraRef.current = camera
   }, [camera])
 
+  useEffect(() => {
+    const movePanel = (event: PointerEvent) => {
+      const dragState = panelDragRef.current
+      if (!dragState || dragState.pointerId !== event.pointerId) return
+      const nextPoint = clampPanelPosition({
+        x: dragState.originPoint.x + event.clientX - dragState.startClientX,
+        y: dragState.originPoint.y + event.clientY - dragState.startClientY,
+      })
+      setPanelPosition(nextPoint)
+    }
+    const finishPanel = (event: PointerEvent) => {
+      const dragState = panelDragRef.current
+      if (!dragState || dragState.pointerId !== event.pointerId) return
+      panelDragRef.current = null
+    }
+    window.addEventListener('pointermove', movePanel)
+    window.addEventListener('pointerup', finishPanel)
+    window.addEventListener('pointercancel', finishPanel)
+    return () => {
+      window.removeEventListener('pointermove', movePanel)
+      window.removeEventListener('pointerup', finishPanel)
+      window.removeEventListener('pointercancel', finishPanel)
+    }
+  }, [])
+
   const viewModel = useMemo(() => createHomeViewModel(graph, positions, selectedPairKey, expandedEdges), [graph, positions, selectedPairKey, expandedEdges])
   const selectedPair = viewModel.pairs.find((pair) => pair.key === selectedPairKey) ?? null
   const selectedNode = viewModel.nodes.find((node) => node.compoundId === selectedNodeId) ?? null
@@ -176,6 +248,63 @@ export function CompoundGraphHome({
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
   const selectedDataset = homeDatasetOptions.find((item) => item.id === selectedDatasetId) ?? homeDatasetOptions[0]
   const selectedEdge = pairEdges.find((edge) => edge.edgeId === selectedEdgeId) || pairEdges[0] || null
+  const trimmedSearchValue = searchValue.trim()
+  const localSearchSuggestions = useMemo(
+    () => buildHomeSearchSuggestions(trimmedSearchValue, graph, viewModel.pairs, searchFilter),
+    [trimmedSearchValue, graph, viewModel.pairs, searchFilter],
+  )
+  const visibleSearchSuggestions = useMemo(() => {
+    const localKeys = new Set(localSearchSuggestions.map((item) => item.id))
+    const remoteItems = librarySuggestions.filter((item) => {
+      if (searchFilter !== 'all' && item.kind !== searchFilter) return false
+      return !localKeys.has(item.id)
+    })
+    return [...localSearchSuggestions, ...remoteItems].slice(0, 10)
+  }, [localSearchSuggestions, librarySuggestions, searchFilter])
+  const showSearchSuggestions = mode !== 'blast' && searchFocused && trimmedSearchValue.length > 0
+  const panelStyle: CSSProperties | undefined = panelPosition
+    ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' }
+    : undefined
+
+  useEffect(() => {
+    if (mode === 'blast' || (searchFilter !== 'all' && searchFilter !== 'enzyme') || trimmedSearchValue.length < 2) {
+      setLibrarySuggestions([])
+      setLibrarySearchLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setLibrarySearchLoading(true)
+    const timer = window.setTimeout(() => {
+      searchApiEntries({ q: trimmedSearchValue, pageSize: 8 })
+        .then((items) => {
+          if (cancelled) return
+          setLibrarySuggestions(
+            items
+              .filter((item) => item.kind === 'enzyme')
+              .map((item) => ({
+                id: `library:enzyme:${item.id}`,
+                kind: 'enzyme' as const,
+                title: item.name,
+                subtitle: [item.subtitle, item.species].filter(Boolean).join(' · ') || item.id,
+                enzymeId: item.id,
+                entity: item,
+              })),
+          )
+        })
+        .catch(() => {
+          if (!cancelled) setLibrarySuggestions([])
+        })
+        .finally(() => {
+          if (!cancelled) setLibrarySearchLoading(false)
+        })
+    }, 180)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [mode, searchFilter, trimmedSearchValue])
 
   const focusCameraOnPoint = (point: Point, target: Point = { x: 58, y: 56 }) => {
     const nextCamera = { x: target.x - point.x, y: target.y - point.y }
@@ -195,28 +324,27 @@ export function CompoundGraphHome({
     focusCameraOnPoint({ x: (source.x + targetNode.x) / 2, y: (source.y + targetNode.y) / 2 }, target)
   }
 
-  const expandFromViewportEdge = async (direction: ExpansionDirection) => {
+  const expandFromNodeAtEdge = async (nodeId: string, direction: ExpansionDirection) => {
     if (expandingRef.current) return
     const currentGraph = graphRef.current
     if (!currentGraph) return
-    const seedId = chooseExpansionSeed(currentGraph, positionsRef.current, direction, expansionKeysRef.current)
-    if (!seedId) return
-    const expansionKey = `${direction}:${seedId}`
+    const expansionKey = `${nodeId}:${direction}`
     if (expansionKeysRef.current.has(expansionKey)) return
     expandingRef.current = true
     expansionKeysRef.current.add(expansionKey)
     setMapExpanding(true)
     try {
-      const payload = await loadHomeGraph({ centerCompoundId: seedId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
+      const payload = await loadHomeGraph({ centerCompoundId: nodeId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
       const merged = mergeHomeGraph(graphRef.current, payload)
       const previousPositionCount = Object.keys(positionsRef.current).length
-      const nextPositions = addExpansionPositions(positionsRef.current, payload, seedId, direction)
+      const nextPositions = addExpansionPositions(positionsRef.current, payload, nodeId, direction)
       const addedCount = Object.keys(nextPositions).length - previousPositionCount
       graphRef.current = merged
       positionsRef.current = nextPositions
       setGraph(merged)
       setPositions(nextPositions)
-      setSearchFeedback(addedCount > 0 ? `Expanded around ${compoundName(seedId)} (+${addedCount})` : `No new compounds beyond ${compoundName(seedId)}`)
+      setHighlightedNodeIds(new Set([nodeId]))
+      setSearchFeedback(addedCount > 0 ? `Expanded around ${compoundName(nodeId)} (+${addedCount})` : `No new compounds beyond ${compoundName(nodeId)}`)
     } catch (err) {
       setSearchFeedback(err instanceof Error ? err.message : 'Unable to expand this map area.')
     } finally {
@@ -225,9 +353,11 @@ export function CompoundGraphHome({
     }
   }
 
-  const maybeExpandMapAtViewportEdge = () => {
-    const direction = getViewportExpansionDirection(positionsRef.current, cameraRef.current)
-    if (direction) void expandFromViewportEdge(direction)
+  const maybeExpandNodeAtViewportEdge = (nodeId: string) => {
+    const point = positionsRef.current[nodeId]
+    if (!point) return
+    const direction = getNodeExpansionDirection(point, cameraRef.current)
+    if (direction) void expandFromNodeAtEdge(nodeId, direction)
   }
 
   const handleMapPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -243,6 +373,10 @@ export function CompoundGraphHome({
   }
 
   const handleMapPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (nodeDragRef.current) {
+      updateNodeDrag(event.pointerId, event.clientX, event.clientY)
+      return
+    }
     const panState = panRef.current
     const svg = svgRef.current
     if (!panState || panState.pointerId !== event.pointerId || !svg) return
@@ -256,11 +390,117 @@ export function CompoundGraphHome({
   }
 
   const finishMapPan = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (nodeDragRef.current) {
+      finishNodeDragByPointer(event.pointerId)
+      return
+    }
     const panState = panRef.current
     if (!panState || panState.pointerId !== event.pointerId) return
     panRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
-    if (panState.moved) maybeExpandMapAtViewportEdge()
+  }
+
+  const handleNodePointerDown = (event: ReactPointerEvent<SVGCircleElement>, node: NodeCard, point: Point) => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    setSelectedNodeId(null)
+    setSelectedPairKey(null)
+    setExpandedEdges([])
+    setSelectedEdgeId(null)
+    setActivePathway(null)
+    setSelectedLibraryItem(null)
+    nodeDragRef.current = {
+      pointerId: event.pointerId,
+      nodeId: node.compoundId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      originPoint: point,
+      moved: false,
+    }
+    setActiveNodeDragId(node.compoundId)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const updateNodeDrag = (pointerId: number, clientX: number, clientY: number) => {
+    const dragState = nodeDragRef.current
+    const svg = svgRef.current
+    if (!dragState || dragState.pointerId !== pointerId || !svg) return false
+    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY)
+    if (Math.abs(delta.x) > 0.35 || Math.abs(delta.y) > 0.35) dragState.moved = true
+    const nextPoint = {
+      x: dragState.originPoint.x + delta.x,
+      y: dragState.originPoint.y + delta.y,
+    }
+    const nextPositions = {
+      ...positionsRef.current,
+      [dragState.nodeId]: nextPoint,
+    }
+    positionsRef.current = nextPositions
+    setPositions(nextPositions)
+    const direction = getNodeExpansionDirection(nextPoint, cameraRef.current)
+    if (dragState.moved && direction) void expandFromNodeAtEdge(dragState.nodeId, direction)
+    return true
+  }
+
+  const finishNodeDragByPointer = (pointerId: number) => {
+    const dragState = nodeDragRef.current
+    if (!dragState || dragState.pointerId !== pointerId) return false
+    nodeDragRef.current = null
+    setActiveNodeDragId(null)
+    if (dragState.moved) {
+      maybeExpandNodeAtViewportEdge(dragState.nodeId)
+      return true
+    }
+    handleNodeSelect(dragState.nodeId)
+    return true
+  }
+
+  const handleNodePointerMove = (event: ReactPointerEvent<SVGCircleElement>) => {
+    if (!nodeDragRef.current) return
+    event.stopPropagation()
+    updateNodeDrag(event.pointerId, event.clientX, event.clientY)
+  }
+
+  const finishNodeDrag = (event: ReactPointerEvent<SVGCircleElement>) => {
+    if (!nodeDragRef.current) return
+    event.stopPropagation()
+    finishNodeDragByPointer(event.pointerId)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
+  const handlePanelPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('button, a, input, textarea, select')) return
+    const panel = event.currentTarget.closest('.map-draggable-panel')
+    if (!(panel instanceof HTMLElement)) return
+    const rect = panel.getBoundingClientRect()
+    const originPoint = panelPosition || { x: rect.left, y: rect.top }
+    panelDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      originPoint,
+    }
+    setPanelPosition(originPoint)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const handlePanelPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = panelDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+    const nextPoint = clampPanelPosition({
+      x: dragState.originPoint.x + event.clientX - dragState.startClientX,
+      y: dragState.originPoint.y + event.clientY - dragState.startClientY,
+    })
+    setPanelPosition(nextPoint)
+  }
+
+  const finishPanelDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = panelDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+    panelDragRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
   useEffect(() => {
@@ -268,19 +508,21 @@ export function CompoundGraphHome({
     setSelectedEdgeId(pairEdges[0]?.edgeId ?? null)
   }, [pairEdges, selectedEdgeId])
 
-  const handlePairClick = async (pair: PairEntry) => {
+  const selectPair = async (pair: PairEntry, targetEdge?: { edgeId?: string; enzymeId?: string; reactionId?: string }) => {
     setSelectedPairKey(pair.key)
     setSelectedNodeId(null)
     setActivePathway(null)
+    setSelectedLibraryItem(null)
     setHighlightedNodeIds(new Set([pair.sourceId, pair.targetId]))
     setHighlightedEdgeGroupIds(new Set([pair.edgeGroupId || pair.key]))
     setSearchFeedback(null)
     focusCameraOnPair(pair)
     if (pair.edges.length > 0 && pair.edges.length === pair.count) {
       const nextEdges = pair.edges.slice(0, HOME_MAX_EXPANDED_EDGES)
+      const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
       setExpandedEdges(nextEdges)
-      setSelectedEdgeId(nextEdges[0]?.edgeId ?? null)
-      setHighlightedEdgeIds(new Set(nextEdges.map((edge) => edge.edgeId)))
+      setSelectedEdgeId(selected?.edgeId ?? null)
+      setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
       return
     }
     if (pair.edgeGroupId) {
@@ -288,18 +530,24 @@ export function CompoundGraphHome({
       try {
         const edges = await loadExpandedEdgeGroup(pair.edgeGroupId)
         const nextEdges = (edges.length > 0 ? edges : pair.edges).slice(0, HOME_MAX_EXPANDED_EDGES)
+        const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
         setExpandedEdges(nextEdges)
-        setSelectedEdgeId(nextEdges[0]?.edgeId ?? null)
-        setHighlightedEdgeIds(new Set(nextEdges.map((edge) => edge.edgeId)))
+        setSelectedEdgeId(selected?.edgeId ?? null)
+        setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
       } finally {
         setExpandedLoading(false)
       }
       return
     }
     const nextEdges = pair.edges.slice(0, HOME_MAX_EXPANDED_EDGES)
+    const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
     setExpandedEdges(nextEdges)
-    setSelectedEdgeId(nextEdges[0]?.edgeId ?? null)
-    setHighlightedEdgeIds(new Set(nextEdges.map((edge) => edge.edgeId)))
+    setSelectedEdgeId(selected?.edgeId ?? null)
+    setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
+  }
+
+  const handlePairClick = async (pair: PairEntry) => {
+    await selectPair(pair)
   }
 
   const clearPairSelection = () => {
@@ -311,6 +559,7 @@ export function CompoundGraphHome({
     setHighlightedEdgeIds(new Set())
     setHighlightedEdgeGroupIds(new Set())
     setActivePathway(null)
+    setSelectedLibraryItem(null)
     setSearchFeedback(null)
   }
 
@@ -320,6 +569,7 @@ export function CompoundGraphHome({
     setExpandedEdges([])
     setSelectedEdgeId(null)
     setActivePathway(null)
+    setSelectedLibraryItem(null)
     setHighlightedNodeIds(new Set([compoundId]))
     setHighlightedEdgeIds(new Set())
     setHighlightedEdgeGroupIds(new Set())
@@ -340,7 +590,91 @@ export function CompoundGraphHome({
     setHighlightedEdgeIds(new Set())
     setHighlightedEdgeGroupIds(new Set())
     setActivePathway(null)
+    setSelectedLibraryItem(null)
     setSearchFeedback(null)
+  }
+
+  const handleSearchSuggestionSelect = async (suggestion: HomeSearchSuggestion) => {
+    setSearchValue(suggestion.title)
+    setSearchFocused(false)
+    setSelectedLibraryItem(null)
+    if (suggestion.kind === 'compound' && suggestion.nodeId) {
+      handleNodeSelect(suggestion.nodeId)
+      setSearchFeedback(`Focused compound: ${suggestion.title}`)
+      return
+    }
+
+    if ((suggestion.kind === 'reaction' || suggestion.kind === 'enzyme') && suggestion.pairKey) {
+      const pair = viewModel.pairs.find((item) => item.key === suggestion.pairKey)
+      if (pair) {
+        await selectPair(pair, { edgeId: suggestion.edgeId, enzymeId: suggestion.enzymeId, reactionId: suggestion.reactionId })
+        setSearchFeedback(`Focused ${suggestion.kind}: ${suggestion.title}`)
+        return
+      }
+    }
+
+    if (suggestion.kind === 'enzyme' && suggestion.enzymeId) {
+      await focusLibraryEnzymeSuggestion(suggestion)
+      return
+    }
+
+    setSearchFeedback('This result is not connected to the loaded map yet.')
+  }
+
+  const focusLibraryEnzymeSuggestion = async (suggestion: HomeSearchSuggestion) => {
+    if (suggestion.entity) setSelectedLibraryItem(suggestion.entity)
+    if (!suggestion.enzymeId) return
+    setMapExpanding(true)
+    try {
+      const detail = await loadEnzymeDetail(suggestion.enzymeId)
+      const reaction = detail.reactions.find((item) => item.substrates.length > 0 && item.products.length > 0)
+      if (!reaction) {
+        setSearchFeedback(`Found enzyme: ${detail.primaryName}`)
+        return
+      }
+      const sourceId = reaction.substrates[0]?.compoundId
+      const targetId = reaction.products[0]?.compoundId
+      if (!sourceId || !targetId) {
+        setSearchFeedback(`Found enzyme: ${detail.primaryName}`)
+        return
+      }
+
+      const payload = await loadHomeGraph({ centerCompoundId: sourceId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
+      const merged = mergeHomeGraph(graphRef.current, payload)
+      const seedPoint = positionsRef.current[sourceId] || {
+        x: 42 - cameraRef.current.x,
+        y: 54 - cameraRef.current.y,
+      }
+      const seededPositions = {
+        ...positionsRef.current,
+        [sourceId]: seedPoint,
+      }
+      const nextPositions = addExpansionPositions(seededPositions, payload, sourceId, 'right')
+      graphRef.current = merged
+      positionsRef.current = nextPositions
+      setGraph(merged)
+      setPositions(nextPositions)
+
+      const pair = findPairForEndpoints(merged, sourceId, targetId)
+      if (pair) {
+        await selectPair(pair, { enzymeId: suggestion.enzymeId, reactionId: reaction.reactionId })
+        setSearchFeedback(`Focused enzyme: ${detail.primaryName}`)
+      } else {
+        setSelectedNodeId(sourceId)
+        setSelectedPairKey(null)
+        setExpandedEdges([])
+        setSelectedEdgeId(null)
+        setHighlightedNodeIds(new Set([sourceId, targetId]))
+        setHighlightedEdgeIds(new Set())
+        setHighlightedEdgeGroupIds(new Set())
+        focusCameraOnNode(sourceId)
+        setSearchFeedback(`Loaded neighborhood for ${detail.primaryName}`)
+      }
+    } catch (err) {
+      setSearchFeedback(err instanceof Error ? err.message : 'Unable to locate this enzyme on the map.')
+    } finally {
+      setMapExpanding(false)
+    }
   }
 
   const handleSearchSubmit = async () => {
@@ -358,7 +692,11 @@ export function CompoundGraphHome({
       await handlePathwaySearch(trimmed)
       return
     }
-    handleGraphSearch(trimmed)
+    if (visibleSearchSuggestions.length > 0) {
+      await handleSearchSuggestionSelect(visibleSearchSuggestions[0])
+      return
+    }
+    setSearchFeedback('No matching result in the loaded map yet.')
   }
 
   const handleGraphSearch = (query: string) => {
@@ -537,15 +875,52 @@ export function CompoundGraphHome({
           )}
           <input
             value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onChange={(event) => {
+              setSearchValue(event.target.value)
+              setSearchFocused(true)
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') void handleSearchSubmit()
+              if (event.key === 'Escape') setSearchFocused(false)
             }}
             placeholder={searchPlaceholder}
           />
           <button className="home-search-submit" type="button" onClick={() => void handleSearchSubmit()} title="Search">
             <Search size={34} />
           </button>
+          {showSearchSuggestions && (
+            <div className="home-search-suggestions" onPointerDown={(event) => event.preventDefault()}>
+              <div className="home-search-filter-row">
+                {homeSearchFilters.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    className={searchFilter === filter.id ? 'is-active' : ''}
+                    onClick={() => setSearchFilter(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <div className="home-search-result-list">
+                {visibleSearchSuggestions.map((suggestion) => (
+                  <button key={suggestion.id} type="button" onClick={() => void handleSearchSuggestionSelect(suggestion)}>
+                    <span className={`home-result-kind ${suggestion.kind}`}>{suggestion.kind}</span>
+                    <span>
+                      <strong>{suggestion.title}</strong>
+                      <small>{suggestion.subtitle}</small>
+                    </span>
+                  </button>
+                ))}
+                {visibleSearchSuggestions.length === 0 && (
+                  <div className="home-search-empty">
+                    {librarySearchLoading ? 'Searching...' : 'No matching entries in the current map.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
@@ -675,14 +1050,16 @@ export function CompoundGraphHome({
                   const pos = positions[node.compoundId]
                   if (!pos) return null
                   return (
-                    <g key={node.compoundId} className={`home-map-node ${selected || pairEndpoint ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${pathway ? 'pathway' : ''} ${neighbor ? 'neighbor' : ''}`}>
+                    <g key={node.compoundId} className={`home-map-node ${selected || pairEndpoint ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${pathway ? 'pathway' : ''} ${neighbor ? 'neighbor' : ''} ${activeNodeDragId === node.compoundId ? 'dragging' : ''}`}>
                       <circle
                         cx={pos.x}
                         cy={pos.y}
                         r={nodeSize}
                         filter={selected || highlighted || pathway || pairEndpoint ? 'url(#selected-node-glow)' : 'url(#home-node-glow)'}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onClick={(event) => { event.stopPropagation(); handleNodeSelect(node.compoundId) }}
+                        onPointerDown={(event) => handleNodePointerDown(event, node, pos)}
+                        onPointerMove={handleNodePointerMove}
+                        onPointerUp={finishNodeDrag}
+                        onPointerCancel={finishNodeDrag}
                       />
                       <title>{node.name}</title>
                       <text x={pos.x} y={pos.y + nodeSize + 4.8} className="home-map-node-name" fontSize={1.05 * labelScale}>
@@ -699,8 +1076,8 @@ export function CompoundGraphHome({
         )}
 
         {!selectedPair && selectedNode && (
-          <div className="compound-popover live-compound-popover">
-            <div className="popover-heading">
+          <div className="compound-popover live-compound-popover map-draggable-panel" style={panelStyle}>
+            <div className="popover-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <strong>{selectedNode.name}</strong>
               <div className="popover-heading-actions">
                 {selectedNode.chebiUrl ? (
@@ -731,8 +1108,8 @@ export function CompoundGraphHome({
         )}
 
         {selectedPair && (
-          <div className="enzyme-card-stack live-enzyme-stack">
-            <div className="stack-heading">
+          <div className="enzyme-card-stack live-enzyme-stack map-draggable-panel" style={panelStyle}>
+            <div className="stack-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>{compoundName(selectedPair.sourceId)} <ChevronRight size={14} /> {compoundName(selectedPair.targetId)}</strong>
                 <span>{expandedLoading ? 'Loading enzyme paths...' : `${pairEdges.length} / ${selectedPairTotal} enzyme paths`}</span>
@@ -767,8 +1144,8 @@ export function CompoundGraphHome({
         )}
 
         {activePathway && !selectedPair && !selectedNode && (
-          <div className="pathway-result-card live-pathway-card">
-            <div className="stack-heading pathway-heading">
+          <div className="pathway-result-card live-pathway-card map-draggable-panel" style={panelStyle}>
+            <div className="stack-heading pathway-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>Pathway result</strong>
                 <span>{activePathway.stepCount} steps</span>
@@ -783,6 +1160,34 @@ export function CompoundGraphHome({
                 <span key={`${activePathway.pathwayId}:${compoundId}:${index}`}>{compoundName(compoundId)}</span>
               ))}
             </div>
+          </div>
+        )}
+
+        {selectedLibraryItem && !selectedPair && !selectedNode && !activePathway && (
+          <div className="library-result-card live-library-card map-draggable-panel" style={panelStyle}>
+            <div className="stack-heading library-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
+              <div>
+                <strong>{selectedLibraryItem.name}</strong>
+                <span>{selectedLibraryItem.subtitle}</span>
+              </div>
+              <button className="stack-close-button" type="button" onClick={() => setSelectedLibraryItem(null)} title="Close result card">
+                <X size={18} />
+              </button>
+            </div>
+            <p>{selectedLibraryItem.description}</p>
+            <div className="library-field-list">
+              {selectedLibraryItem.fields.slice(0, 6).map((field) => (
+                <div key={`${selectedLibraryItem.id}:${field.label}`}>
+                  <span>{field.label}</span>
+                  <strong>{field.value}</strong>
+                </div>
+              ))}
+            </div>
+            {selectedLibraryItem.kind === 'enzyme' && (
+              <button className="library-open-button" type="button" onClick={() => onOpenEnzyme(selectedLibraryItem.id)}>
+                Open detail
+              </button>
+            )}
           </div>
         )}
 
@@ -1051,6 +1456,113 @@ function createHomeViewModel(graph: HomeGraphData | null, positions: Record<stri
   return { nodes, pairs: [...pairMap.values()] }
 }
 
+function buildHomeSearchSuggestions(query: string, graph: HomeGraphData | null, pairs: PairEntry[], filter: HomeSearchFilter): HomeSearchSuggestion[] {
+  if (!graph) return []
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return []
+  const suggestions: HomeSearchSuggestion[] = []
+  const includeKind = (kind: EntityKind) => filter === 'all' || filter === kind
+  const compoundNames = new Map(graph.nodes.map((node) => [node.compoundId, node.name]))
+
+  if (includeKind('compound')) {
+    graph.nodes.forEach((node) => {
+      const values = [node.name, node.compoundId, node.chebiId, node.formula, node.smiles]
+      if (!homeValuesMatch(normalizedQuery, values)) return
+      suggestions.push({
+        id: `compound:${node.compoundId}`,
+        kind: 'compound',
+        title: node.name,
+        subtitle: node.chebiId || node.compoundId,
+        nodeId: node.compoundId,
+      })
+    })
+  }
+
+  pairs.forEach((pair) => {
+    const sourceName = compoundNames.get(pair.sourceId) || pair.sourceId
+    const targetName = compoundNames.get(pair.targetId) || pair.targetId
+    if (includeKind('reaction')) {
+      const pairValues = [pair.label, pair.edgeGroupId, pair.sourceId, pair.targetId, sourceName, targetName]
+      const representativeEdge = pair.edges[0]
+      const edgeValues = representativeEdge
+        ? [representativeEdge.reactionId, representativeEdge.card?.reactionEquation, representativeEdge.direction, representativeEdge.sourceType, representativeEdge.reviewStatus]
+        : []
+      if (homeValuesMatch(normalizedQuery, [...pairValues, ...edgeValues])) {
+        suggestions.push({
+          id: `reaction:${pair.edgeGroupId || pair.key}`,
+          kind: 'reaction',
+          title: representativeEdge?.card?.reactionEquation || pair.label,
+          subtitle: `${sourceName} -> ${targetName}`,
+          pairKey: pair.key,
+          reactionId: representativeEdge?.reactionId,
+        })
+      }
+    }
+
+    if (includeKind('enzyme')) {
+      pair.edges.forEach((edge) => {
+        const values = [
+          edge.enzymeId,
+          edge.label,
+          edge.card?.primaryName,
+          edge.card?.uniprotId,
+          edge.card?.databaseCode,
+          edge.card?.organismName,
+          edge.card?.ecNumber,
+          edge.reactionId,
+          edge.card?.reactionEquation,
+        ]
+        if (!homeValuesMatch(normalizedQuery, values)) return
+        suggestions.push({
+          id: `enzyme:${edge.enzymeId}:${edge.edgeId}`,
+          kind: 'enzyme',
+          title: edge.card?.primaryName || edge.label,
+          subtitle: [edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId, `${sourceName} -> ${targetName}`].filter(Boolean).join(' · '),
+          pairKey: pair.key,
+          edgeId: edge.edgeId,
+          enzymeId: edge.enzymeId,
+          reactionId: edge.reactionId,
+        })
+      })
+    }
+  })
+
+  const unique = new Map(suggestions.map((item) => [item.id, item]))
+  return [...unique.values()]
+    .sort((a, b) => searchSuggestionScore(b, normalizedQuery) - searchSuggestionScore(a, normalizedQuery) || a.title.localeCompare(b.title))
+    .slice(0, 8)
+}
+
+function homeValuesMatch(normalizedQuery: string, values: Array<string | number | null | undefined>) {
+  return values.some((value) => normalizeSearchText(value).includes(normalizedQuery))
+}
+
+function searchSuggestionScore(suggestion: HomeSearchSuggestion, normalizedQuery: string) {
+  const title = normalizeSearchText(suggestion.title)
+  const subtitle = normalizeSearchText(suggestion.subtitle)
+  if (title === normalizedQuery) return 100
+  if (title.startsWith(normalizedQuery)) return 80
+  if (subtitle === normalizedQuery) return 70
+  if (subtitle.startsWith(normalizedQuery)) return 50
+  return 10
+}
+
+function findPairForEndpoints(graph: HomeGraphData, sourceId: string, targetId: string) {
+  const visibleIds = new Set(graph.nodes.map((node) => node.compoundId))
+  const pairs = buildHomePairs(graph, visibleIds)
+  return pairs.find((pair) => pair.sourceId === sourceId && pair.targetId === targetId)
+    || pairs.find((pair) => pair.sourceId === targetId && pair.targetId === sourceId)
+    || null
+}
+
+function pickTargetEdge(edges: HomeGraphEdge[], target?: { edgeId?: string; enzymeId?: string; reactionId?: string }) {
+  if (!target) return null
+  return edges.find((edge) => target.edgeId && edge.edgeId === target.edgeId)
+    || edges.find((edge) => target.enzymeId && edge.enzymeId === target.enzymeId)
+    || edges.find((edge) => target.reactionId && edge.reactionId === target.reactionId)
+    || null
+}
+
 function mergeHomeGraph(base: HomeGraphData | null, addition: HomeGraphData | null): HomeGraphData {
   const seed = base || { nodes: [], edges: [], edgeGroups: [] }
   if (!addition) return seed
@@ -1265,6 +1777,32 @@ function edgePath(source: Point, target: Point, offset = 0) {
   const nx = -dy / length
   const ny = dx / length
   return `M ${source.x} ${source.y} Q ${midX + nx * offset} ${midY + ny * offset} ${target.x} ${target.y}`
+}
+function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number) {
+  const rect = svg.getBoundingClientRect()
+  return {
+    x: ((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
+    y: ((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
+  }
+}
+function getNodeExpansionDirection(point: Point, camera: Point): ExpansionDirection | null {
+  const viewportPoint = { x: point.x + camera.x, y: point.y + camera.y }
+  const margin = 14
+  const distances: Array<{ direction: ExpansionDirection; distance: number }> = [
+    { direction: 'left', distance: viewportPoint.x },
+    { direction: 'right', distance: HOME_VIEWBOX_WIDTH - viewportPoint.x },
+    { direction: 'top', distance: viewportPoint.y },
+    { direction: 'bottom', distance: HOME_VIEWBOX_HEIGHT - viewportPoint.y },
+  ]
+  const closest = distances.sort((a, b) => a.distance - b.distance)[0]
+  return closest && closest.distance <= margin ? closest.direction : null
+}
+function clampPanelPosition(point: Point) {
+  if (typeof window === 'undefined') return point
+  return {
+    x: clamp(point.x, 8, Math.max(8, window.innerWidth - 120)),
+    y: clamp(point.y, 8, Math.max(8, window.innerHeight - 84)),
+  }
 }
 function clamp(value: number, min: number, max: number) { return Math.min(max, Math.max(min, value)) }
 function wrapCompoundLabel(name: string) {

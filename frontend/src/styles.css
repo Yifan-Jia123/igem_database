@@ -5348,3 +5348,222 @@ body:has(.home-map-page) {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Home graph search, node drag, draggable cards */
+.home-search-bar {
+  overflow: visible;
+  z-index: 8;
+}
+
+.home-search-suggestions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 10;
+  overflow: hidden;
+  border: 1px solid rgba(255, 248, 241, 0.2);
+  border-radius: 18px;
+  background: rgba(245, 242, 248, 0.96);
+  color: #2d243f;
+  box-shadow: 0 18px 42px rgba(22, 16, 34, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.home-search-filter-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(92, 74, 129, 0.12);
+}
+
+.home-search-filter-row button {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid rgba(92, 74, 129, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  color: #3b304f;
+  font-size: 12px;
+}
+
+.home-search-filter-row button.is-active {
+  background: rgba(92, 74, 129, 0.18);
+  border-color: rgba(92, 74, 129, 0.3);
+}
+
+.home-search-result-list {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.home-search-result-list button {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 14px;
+  border: 0;
+  border-top: 1px solid rgba(92, 74, 129, 0.08);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.home-search-result-list button:first-child {
+  border-top: 0;
+}
+
+.home-search-result-list button:hover {
+  background: rgba(92, 74, 129, 0.1);
+}
+
+.home-search-result-list strong,
+.home-search-result-list small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-search-result-list strong {
+  color: #2d243f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.home-search-result-list small {
+  margin-top: 3px;
+  color: rgba(45, 36, 63, 0.62);
+  font-size: 12px;
+}
+
+.home-result-kind {
+  width: 74px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: #2d243f;
+  font-size: 11px;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.home-result-kind.compound {
+  background: rgba(132, 201, 184, 0.28);
+}
+
+.home-result-kind.enzyme {
+  background: rgba(246, 210, 134, 0.32);
+}
+
+.home-result-kind.reaction {
+  background: rgba(214, 183, 234, 0.34);
+}
+
+.home-search-empty {
+  padding: 18px;
+  color: rgba(45, 36, 63, 0.62);
+  font-size: 13px;
+  text-align: center;
+}
+
+.home-map-node circle {
+  cursor: grab;
+}
+
+.home-map-node.dragging circle {
+  cursor: grabbing;
+}
+
+.map-draggable-panel {
+  touch-action: auto;
+}
+
+.map-panel-drag-handle {
+  cursor: move;
+  user-select: none;
+}
+
+.live-library-card {
+  left: auto;
+  right: 18px;
+  top: 214px;
+  width: min(408px, calc(100vw - 36px));
+  max-height: calc(100vh - 292px);
+  overflow: auto;
+  z-index: 6;
+  border-radius: 14px 0 0 14px;
+}
+
+.library-result-card {
+  position: absolute;
+  padding: 60px 18px 18px;
+  color: #fff8f1;
+  background: rgba(33, 31, 42, 0.9);
+  border: 1px solid rgba(255, 248, 241, 0.14);
+  box-shadow: 0 18px 48px rgba(28, 20, 42, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.library-result-card p {
+  margin: 0 0 14px;
+  color: rgba(255, 248, 241, 0.78);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.library-heading strong,
+.library-heading span {
+  color: #fff8f1;
+}
+
+.library-field-list {
+  display: grid;
+  gap: 8px;
+}
+
+.library-field-list div {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 248, 241, 0.08);
+}
+
+.library-field-list span {
+  color: rgba(255, 248, 241, 0.56);
+  font-size: 11px;
+}
+
+.library-field-list strong {
+  color: rgba(255, 248, 241, 0.9);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.library-open-button {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 248, 241, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 248, 241, 0.1);
+  color: #fff8f1;
+}
+
+@media (max-width: 1100px) {
+  .live-library-card {
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: 84px;
+    width: auto;
+    max-height: 42vh;
+    border-radius: 14px;
+  }
+}

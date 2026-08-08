@@ -1,0 +1,635 @@
+ChEBI ID	Name	SMILES	Molecular Mass	ChEBI URL
+CHEBI:10115	zingiberene	CC(C)=CCC[C@H](C)[C@@H]1C=CC(C)=CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10115
+CHEBI:10213	alpha-amyrin	C[C@H]1[C@H](C)CC[C@]2(C)CC[C@]3(C)C(=CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@]43C)[C@H]12	426.729	https://www.ebi.ac.uk/chebi/CHEBI:10213
+CHEBI:10216	cedr-8-ene	CC1=CC[C@@]23C[C@@H]1C(C)(C)[C@@H]2CC[C@H]3C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10216
+CHEBI:10221	alpha-copaene	CC1=CC[C@H]2[C@H]3C1[C@@]2(C)CC[C@H]3C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10221
+CHEBI:10278	alpha-eudesmol	CC1=CCC[C@]2(C)CC[C@@H](C(C)(C)O)C[C@@H]12	222.372	https://www.ebi.ac.uk/chebi/CHEBI:10278
+CHEBI:10280	(E,E)-alpha-farnesene	C=C/C(C)=C/C/C=C(\C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10280
+CHEBI:10334	alpha-terpinene	CC1=CC=C(C(C)C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:10334
+CHEBI:10352	beta-amyrin	CC1(C)CC[C@]2(C)CC[C@]3(C)C(=CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@]43C)[C@@H]2C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:10352
+CHEBI:10357	(-)-beta-caryophyllene	C=C1CC/C=C(\C)CC[C@@H]2[C@@H]1CC2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10357
+CHEBI:10363	beta-cubebene	C=C1CC[C@@]23[C@@H]([C@@H]12)[C@H](C(C)C)CC[C@H]3C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10363
+CHEBI:10417	beta-eudesmol	C=C1CCC[C@]2(C)CC[C@@H](C(C)(C)O)C[C@@H]12	222.372	https://www.ebi.ac.uk/chebi/CHEBI:10417
+CHEBI:10418	trans-beta-farnesene	C=CC(=C)CC/C=C(\C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10418
+CHEBI:10440	(-)-beta-santalene	C=C1[C@@H]2CC[C@@H](C2)[C@@]1(C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10440
+CHEBI:10443	(+)-beta-selinene	C=C(C)[C@@H]1CC[C@@]2(C)CCCC(=C)[C@@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:10443
+CHEBI:10577	gamma-terpinene	CC1=CCC(C(C)C)=CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:10577
+CHEBI:10782	(S)-(-)-perillyl alcohol	C=C(C)[C@@H]1CC=C(CO)CC1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:10782
+CHEBI:1156	2-hydroxyestrone	C[C@]12CC[C@@H]3C4=C(C=C(O)C(O)=C4)CC[C@H]3[C@@H]1CCC2=O	286.371	https://www.ebi.ac.uk/chebi/CHEBI:1156
+CHEBI:128	(S)-(-)-alpha-terpineol	CC1=CC[C@@H](C(C)(C)O)CC1	154.253	https://www.ebi.ac.uk/chebi/CHEBI:128
+CHEBI:128753	(2E)-4-hydroxy-3-methylbut-2-enyl diphosphate(3-)	C/C(=C\COP(=O)([O-])OP(=O)([O-])[O-])CO	259.067	https://www.ebi.ac.uk/chebi/CHEBI:128753
+CHEBI:128769	isopentenyl diphosphate(3-)	C=C(C)CCOP(=O)([O-])OP(=O)([O-])[O-]	243.068	https://www.ebi.ac.uk/chebi/CHEBI:128769
+CHEBI:129	(-)-beta-phellandrene	C=C1C=C[C@@H](C(C)C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:129
+CHEBI:131856	3,5-dimethylorsellinate	CC1=C(C)C(C(=O)[O-])=C(O)C(C)=C1O	195.194	https://www.ebi.ac.uk/chebi/CHEBI:131856
+CHEBI:131857	(3R)-farnesyl-2,3,5-trimethyl-6-oxido-4-oxocyclohexa-1,5-diene-1-carboxylate	CC(C)=CCC/C(C)=C/CC/C(C)=C/C[C@@]1(C)C(=O)C(C)=C([O-])C(C(=O)[O-])=C1C	398.543	https://www.ebi.ac.uk/chebi/CHEBI:131857
+CHEBI:131964	(14S,15R)-EET(1-)	CCCCC[C@H]1O[C@H]1C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131964
+CHEBI:131965	(14R,15S)-EET(1-)	CCCCC[C@@H]1O[C@@H]1C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131965
+CHEBI:131969	(11S,12R)-EET(1-)	CCCCC/C=C\C[C@H]1O[C@H]1C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131969
+CHEBI:131970	(11R,12S)-EET(1-)	CCCCC/C=C\C[C@@H]1O[C@@H]1C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131970
+CHEBI:131974	(8S,9R)-EET(1-)	CCCCC/C=C\C/C=C\C[C@H]1O[C@H]1C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131974
+CHEBI:131975	(8R,9S)-EET(1-)	CCCCC/C=C\C/C=C\C[C@@H]1O[C@@H]1C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:131975
+CHEBI:132024	19-HETrE(1-)	CC(O)CCCCCC/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	321.481	https://www.ebi.ac.uk/chebi/CHEBI:132024
+CHEBI:132025	21-HDoHE(1-)	CC(O)/C=C\C/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCC(=O)[O-]	343.487	https://www.ebi.ac.uk/chebi/CHEBI:132025
+CHEBI:132830	delta-elemene	C=C[C@@]1(C)CCC(C(C)C)=C[C@@H]1C(=C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:132830
+CHEBI:132831	beta-maaliene	CC1=C2[C@H]3[C@@H](CC[C@]2(C)CCC1)C3(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:132831
+CHEBI:133345	10-HETE(1-)	CCCCC/C=C\C/C=C\C(O)/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:133345
+CHEBI:136410	(4Z,7Z,10Z,13Z,16Z,19R,20S)-19,20-epoxydocosapentaenoate	CC[C@@H]1O[C@@H]1C/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCC(=O)[O-]	343.487	https://www.ebi.ac.uk/chebi/CHEBI:136410
+CHEBI:136411	(4Z,7Z,10Z,13Z,16Z,19S,20R)-19,20-epoxydocosapentaenoate	CC[C@H]1O[C@H]1C/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCC(=O)[O-]	343.487	https://www.ebi.ac.uk/chebi/CHEBI:136411
+CHEBI:136439	(5Z,11Z,14Z,17Z)-8,9-epoxyicosatetraenoate	CC/C=C\C/C=C\C/C=C\CC1OC1C/C=C\CCCC(=O)[O-]	317.449	https://www.ebi.ac.uk/chebi/CHEBI:136439
+CHEBI:136441	(5Z,8Z,14Z,17Z)-11,12-epoxyicosatetraenoate	CC/C=C\C/C=C\CC1OC1C/C=C\C/C=C\CCCC(=O)[O-]	317.449	https://www.ebi.ac.uk/chebi/CHEBI:136441
+CHEBI:136443	(5Z,8Z,11Z,17Z)-14,15-epoxyicosatetraenoate	CC/C=C\CC1OC1C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	317.449	https://www.ebi.ac.uk/chebi/CHEBI:136443
+CHEBI:136524	13-HETE(1-)	CCCCC/C=C\C(O)/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:136524
+CHEBI:136654	13(S)-HETE(1-)	CCCCC/C=C\[C@H](O)/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:136654
+CHEBI:136655	13(R)-HODE(1-)	CCCCC[C@@H](O)/C=C/C=C\CCCCCCCC(=O)[O-]	295.443	https://www.ebi.ac.uk/chebi/CHEBI:136655
+CHEBI:13705	acetoacetate	CC(=O)CC(=O)[O-]	101.081	https://www.ebi.ac.uk/chebi/CHEBI:13705
+CHEBI:137522	(+)-isoafricanol	C[C@@H]1CC[C@H]2[C@]3(C)C[C@@H]3CC(C)(C)C[C@@]12O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:137522
+CHEBI:137523	(-)-spiroviolene	C[C@@H]1CC[C@H](C)[C@@]12CC[C@@H]1C2=C[C@@]2(C)CCC(C)(C)[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:137523
+CHEBI:137528	tsukubadiene	C/C1=C/C[C@H]2C(C)(C)CC[C@]2(C)/C=C2\[C@@H](CC[C@@H]2C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:137528
+CHEBI:137530	(2S,3R,6S,9S)-(-)-protoillud-7-ene	CC1=C[C@@H]2CC(C)(C)C[C@@H]2[C@@]2(C)CC[C@@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:137530
+CHEBI:137531	(3S)-(+)-asterisca-2(9),6-diene	C/C1=C/CC[C@H](C)C2=C(C1)CC(C)(C)C2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:137531
+CHEBI:137533	(-)-alpha-amorphene	CC1=C[C@H]2[C@@H](CC1)C(C)=CC[C@H]2C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:137533
+CHEBI:137535	(+)-corvol ether A	CC(C)[C@]12CC[C@H](C)[C@H]3CC[C@](C)(C[C@H]31)O2	222.372	https://www.ebi.ac.uk/chebi/CHEBI:137535
+CHEBI:137536	(+)-corvol ether B	CC(C)[C@@H]1O[C@]2(C)CC[C@@H]3[C@@H](C)CC[C@@]31C2	222.372	https://www.ebi.ac.uk/chebi/CHEBI:137536
+CHEBI:137562	(+)-eremophilene	C=C(C)[C@H]1CCC2=CCC[C@@H](C)[C@]2(C)C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:137562
+CHEBI:137563	(1R,4R,5S)-(-)-guaia-6,10(14)-diene	C=C1CCC(C(C)C)=C[C@@H]2[C@H](C)CC[C@@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:137563
+CHEBI:137564	(+)-(1(10)E,4E,6S,7R)-germacradien-6-ol	C/C1=C\[C@@H](O)[C@@H](C(C)C)CC/C(C)=C/CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:137564
+CHEBI:137565	(3E,7E)-dolabella-3,7-dien-18-ol	C/C1=C\C[C@@]2(C)CC[C@@H](C(C)(C)O)[C@@H]2CC/C(C)=C/CC1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:137565
+CHEBI:138037	10-epi-juneol	C=C1CCC[C@@]2(C)CC[C@@H](C(C)C)[C@H](O)[C@@H]12	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138037
+CHEBI:138039	(3E,7E)-dolathalia-3,7,11-triene	C/C1=C\CC2(C)CCC(C)(C)C=C2CC/C(C)=C/CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138039
+CHEBI:138040	7-epi-alpha-eudesmol	CC1=CCC[C@]2(C)CC[C@H](C(C)(C)O)C[C@@H]12	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138040
+CHEBI:138041	(+)-4-epi-cubebol	CC(C)[C@H]1CC[C@H](C)[C@]23CC[C@](C)(O)[C@H]2[C@H]13	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138041
+CHEBI:138042	tau-cadinol	CC1=C[C@@H]2[C@@H](CC1)[C@@](C)(O)CC[C@H]2C(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138042
+CHEBI:138043	(2E,6E)-hedycaryol	C/C1=C\C[C@H](C(C)(C)O)CC/C(C)=C/CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138043
+CHEBI:138044	(2Z,6E)-hedycaryol	C/C1=C/C[C@H](C(C)(C)O)CC/C(C)=C/CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138044
+CHEBI:138045	(-)-10-epi-cubebol	CC(C)[C@@H]1CC[C@H](C)[C@@]23CC[C@](C)(O)[C@@H]2[C@@H]13	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138045
+CHEBI:138046	sesterfisherol	C/C1=C2\CC[C@@H](C)[C@@H]2CC[C@H](C)[C@H]2C[C@@]3(C)CC[C@H](C(C)C)[C@@H]3C[C@]12O	358.610	https://www.ebi.ac.uk/chebi/CHEBI:138046
+CHEBI:138047	beta-thujene	CC1C=CC2(C(C)C)CC12	136.238	https://www.ebi.ac.uk/chebi/CHEBI:138047
+CHEBI:138048	stellata-2,6,19-triene	C=C(C)[C@H]1CC[C@]2(C)[C@@H]1CC[C@]1(C)C/C=C(\C)CC/C=C(\C)CC[C@H]12	340.595	https://www.ebi.ac.uk/chebi/CHEBI:138048
+CHEBI:138049	guaia-4,6-diene	CC1=C2C=C(C(C)C)CCC(C)C2CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:138049
+CHEBI:138050	pseudolaratriene	CC(C)=CC/C=C(/C)[C@@H]1CC[C@@]2(C)CC=C(C)CC[C@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138050
+CHEBI:138051	selina-4(15),7(11)-diene	C=C1CCC[C@]2(C)CCC(=C(C)C)C[C@@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:138051
+CHEBI:138165	(+)-(2S,3R,9R)-pristinol	C/C1=C2\CC[C@@H](C)[C@@H]2CC(C)(C)C[C@@H](O)C1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138165
+CHEBI:138166	nezukol	C=C[C@@]1(C)CC[C@H]2[C@@](O)(CC[C@H]3C(C)(C)CCC[C@@]32C)C1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:138166
+CHEBI:138167	5-hydroxy-alpha-gurjunene	CC1CC[C@@H]2[C@H](C)CC[C@@H]3[C@@H](C3(C)C)C12O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:138167
+CHEBI:138219	ent-atiserene	C=C1C[C@]23CC[C@H]1C[C@H]2[C@]1(C)CCCC(C)(C)[C@H]1CC3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138219
+CHEBI:138223	ent-copal-8-ol diphosphate(3-)	C/C(=C\COP(=O)([O-])OP(=O)([O-])[O-])CC[C@H]1[C@]2(C)CCCC(C)(C)[C@H]2CC[C@]1(C)O	465.440	https://www.ebi.ac.uk/chebi/CHEBI:138223
+CHEBI:138224	(13R)-epi-8,13-epoxylabd-14-ene	C=C[C@@]1(C)CC[C@H]2[C@]3(C)CCCC(C)(C)[C@H]3CC[C@]2(C)O1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:138224
+CHEBI:138226	beta-geranylfarnesene	C=CC(=C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CCC=C(C)C	340.595	https://www.ebi.ac.uk/chebi/CHEBI:138226
+CHEBI:138227	beta-hexaprene	C=CC(=C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CCC=C(C)C	408.714	https://www.ebi.ac.uk/chebi/CHEBI:138227
+CHEBI:138228	beta-heptaprene	C=CC(=C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC/C=C(\C)CCC=C(C)C	476.833	https://www.ebi.ac.uk/chebi/CHEBI:138228
+CHEBI:138232	peregrinol diphosphate(3-)	C/C(=C\COP(=O)([O-])OP(=O)([O-])[O-])CC[C@@]1(O)[C@H](C)CC[C@H]2C(C)(C)CCC[C@@]21C	465.440	https://www.ebi.ac.uk/chebi/CHEBI:138232
+CHEBI:138233	9,13(R)-epoxylabd-14-ene	C=C[C@@]1(C)CC[C@@]2(O1)[C@H](C)CC[C@H]1C(C)(C)CCC[C@@]12C	290.491	https://www.ebi.ac.uk/chebi/CHEBI:138233
+CHEBI:138234	(13R)-manoyl oxide	C=C[C@@]1(C)CC[C@H]2[C@@]3(C)CCCC(C)(C)[C@@H]3CC[C@@]2(C)O1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:138234
+CHEBI:138247	cycloaraneosene	C=C1CCC2=C(C(C)C)CC[C@@]2(C)C[C@@H]2[C@H](C)CC[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138247
+CHEBI:138301	labda-7,13(16),14-triene	C=CC(=C)CC[C@H]1C(C)=CC[C@H]2C(C)(C)CCC[C@]12C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138301
+CHEBI:138302	(12E)-labda-8(17),12,14-triene	C=C/C(C)=C/C[C@H]1C(=C)CC[C@H]2C(C)(C)CCC[C@]12C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138302
+CHEBI:138303	alpha-onocerin	C=C1CC[C@H]2C(C)(C)[C@@H](O)CC[C@]2(C)[C@H]1CC[C@H]1C(=C)CC[C@H]2C(C)(C)[C@@H](O)CC[C@]12C	442.728	https://www.ebi.ac.uk/chebi/CHEBI:138303
+CHEBI:138305	(21S)-21,22-epoxypolypoda-8(26)-13,17-trien-3beta-ol	C=C1CC[C@H]2C(C)(C)[C@@H](O)CC[C@]2(C)[C@H]1CC/C=C(\C)CC/C=C(\C)CC[C@@H]1OC1(C)C	442.728	https://www.ebi.ac.uk/chebi/CHEBI:138305
+CHEBI:138307	(3S,22S)-2,3:22,23-diepoxy-2,3,22,23-tetrahydrosqualene	C/C(=C\CC/C=C(\C)CC/C=C(\C)CC[C@@H]1OC1(C)C)CC/C=C(\C)CC[C@@H]1OC1(C)C	442.728	https://www.ebi.ac.uk/chebi/CHEBI:138307
+CHEBI:138310	(-)-kolavenyl diphosphate(3-)	CC1=CCC[C@@H]2[C@@](C)(CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-])[C@H](C)CC[C@@]12C	447.425	https://www.ebi.ac.uk/chebi/CHEBI:138310
+CHEBI:138311	(+)-kolavenyl diphosphate(3-)	CC1=CCC[C@H]2[C@](C)(CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-])[C@@H](C)CC[C@]12C	447.425	https://www.ebi.ac.uk/chebi/CHEBI:138311
+CHEBI:138383	(4S,7R)-7-isopropyl-4-methyloxepan-2-one	CC(C)[C@H]1CC[C@H](C)CC(=O)O1	170.252	https://www.ebi.ac.uk/chebi/CHEBI:138383
+CHEBI:138596	(4S,7S)-7-hydroxy-4-isopropenyl-7-methyloxepan-2-one	C=C(C)[C@H]1CC[C@@](C)(O)OC(=O)C1	184.235	https://www.ebi.ac.uk/chebi/CHEBI:138596
+CHEBI:138597	(4R,7R)-7-hydroxy-4-isopropenyl-7-methyloxepan-2-one	C=C(C)[C@@H]1CC[C@](C)(O)OC(=O)C1	184.235	https://www.ebi.ac.uk/chebi/CHEBI:138597
+CHEBI:138656	rhizathalene A	C=C(C)[C@H]1CC[C@]2(C)CC[C@@H](C)[C@]3(CC=C(C)CC3)[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:138656
+CHEBI:138726	3'-unsubstituted flavone	*C1=CC(*)=C(C2=C(*)C(=O)C3=C(O2)C(*)=C(*)C(*)=C3*)C(*)=C1*	213.168	https://www.ebi.ac.uk/chebi/CHEBI:138726
+CHEBI:139032	nerylneryl diphosphate(3-)	CC(C)=CCC/C(C)=C\CC/C(C)=C\CC/C(C)=C\COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:139032
+CHEBI:139494	beta-pinacene	C/C1=C/C=C(/C(C)C)CC/C(C)=C/CC/C(C)=C/CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:139494
+CHEBI:140184	hydroxyfenbendazole	COC(=O)NC1=NC2=CC(SC3=CC=C(O)C=C3)=CC=C2N1	315.354	https://www.ebi.ac.uk/chebi/CHEBI:140184
+CHEBI:140564	delta-cadinene	CC1=CC2C(=C(C)CCC2C(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:140564
+CHEBI:141020	cyclooctat-9-en-5,7-diol	CC(C)[C@H]1CC[C@]2(C)C[C@H]3[C@@H]([C@H](O)C[C@H]3C)[C@@](C)(O)C/C=C/12	306.490	https://www.ebi.ac.uk/chebi/CHEBI:141020
+CHEBI:141283	(6E)-nerolidol	C=CC(C)(O)CC/C=C(\C)CCC=C(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:141283
+CHEBI:141820	3beta-hydroxy-15,16-epoxydolabrene	C=C1[C@@H](O)CC[C@H]2[C@]3(C)CC[C@](C)(C4CO4)C[C@H]3CC[C@]12C	304.474	https://www.ebi.ac.uk/chebi/CHEBI:141820
+CHEBI:141821	15,16-epoxydolabrene	C=C1CCC[C@H]2[C@]3(C)CC[C@](C)(C4CO4)C[C@H]3CC[C@]12C	288.475	https://www.ebi.ac.uk/chebi/CHEBI:141821
+CHEBI:141822	dolabradiene	C=C[C@@]1(C)CC[C@]2(C)[C@H](CC[C@]3(C)C(=C)CCC[C@@H]23)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:141822
+CHEBI:141852	zealexin A1(1-)	CC1(C)CCC=C([C@@H]2CC=C(C(=O)[O-])CC2)C1	233.331	https://www.ebi.ac.uk/chebi/CHEBI:141852
+CHEBI:142491	R-H	*[H]	1.008	https://www.ebi.ac.uk/chebi/CHEBI:142491
+CHEBI:142536	7-epi-ent-eudesmane-5,11-diol	C[C@H]1CCC[C@@]2(C)CC[C@@H](C(C)(C)O)C[C@]12O	240.387	https://www.ebi.ac.uk/chebi/CHEBI:142536
+CHEBI:142537	(-)-5-epi-eremophilene	C=C(C)[C@@H]1CCC2=CCC[C@H](C)[C@]2(C)C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:142537
+CHEBI:142541	hydropyrene	C=C1C[C@@]2(C)CCC[C@@]3(C)CC[C@@H]4[C@H]([C@@H]32)[C@H]1CC[C@H]4C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:142541
+CHEBI:142542	hydropyrenol	C[C@@H]1CC[C@@H]2[C@@H]3[C@H]1CC[C@]1(C)CCC[C@](C)(C[C@]2(C)O)[C@@H]31	290.491	https://www.ebi.ac.uk/chebi/CHEBI:142542
+CHEBI:142543	isoelisabethatriene	CC(C)=CCC[C@@H](C)[C@@H]1CC[C@@H](C)C2=C1C=C(C)CC2	272.476	https://www.ebi.ac.uk/chebi/CHEBI:142543
+CHEBI:142592	(E)-non-2-enal	CCCCCC/C=C/C=O	140.226	https://www.ebi.ac.uk/chebi/CHEBI:142592
+CHEBI:143197	culmorin	CC1(C)CCC[C@]2(C)[C@@H]3[C@H]1[C@@H](O)[C@@]2(C)C[C@H]3O	238.371	https://www.ebi.ac.uk/chebi/CHEBI:143197
+CHEBI:143550	sesquisabinene B	C=C1CC[C@]2([C@@H](C)CCC=C(C)C)C[C@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:143550
+CHEBI:143551	sesquisabinene A	C=C1CC[C@]2([C@H](C)CCC=C(C)C)C[C@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:143551
+CHEBI:143779	valerianol	C[C@@H]1CCC=C2CC[C@@H](C(C)(C)O)C[C@]21C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:143779
+CHEBI:143898	(R,R)-chrysanthemol	CC(C)=C[C@@H]1[C@@H](CO)C1(C)C	154.253	https://www.ebi.ac.uk/chebi/CHEBI:143898
+CHEBI:143905	dihydroartemisinate	CC1=C[C@H]2[C@@H](CC1)[C@H](C)CC[C@H]2[C@@H](C)C(=O)[O-]	235.347	https://www.ebi.ac.uk/chebi/CHEBI:143905
+CHEBI:143908	(E)-non-2-enoate	CCCCCC/C=C/C(=O)[O-]	155.217	https://www.ebi.ac.uk/chebi/CHEBI:143908
+CHEBI:143949	(R)-lavandulyl diphosphate(3-)	C=C(C)[C@@H](CC=C(C)C)COP(=O)([O-])OP(=O)([O-])[O-]	311.187	https://www.ebi.ac.uk/chebi/CHEBI:143949
+CHEBI:143951	(Z,S)-jasmolone	CC/C=C\CC1=C(C)[C@@H](O)CC1=O	180.247	https://www.ebi.ac.uk/chebi/CHEBI:143951
+CHEBI:143952	(Z,S)-cinerolone	C/C=C\CC1=C(C)[C@@H](O)CC1=O	166.220	https://www.ebi.ac.uk/chebi/CHEBI:143952
+CHEBI:144481	(S)-8-oxocitronellyl enol	C/C(C=O)=C\CC[C@H](C)/C=C/O	168.236	https://www.ebi.ac.uk/chebi/CHEBI:144481
+CHEBI:145543	viteagnusin D	C=CC(C)(O)CC[C@@]1(O)[C@H](C)CC[C@H]2C(C)(C)CCC[C@@]21C	308.506	https://www.ebi.ac.uk/chebi/CHEBI:145543
+CHEBI:145549	labd-13(16),14-diene-9-ol	C=CC(=C)CC[C@@]1(O)[C@H](C)CC[C@H]2C(C)(C)CCC[C@@]21C	290.491	https://www.ebi.ac.uk/chebi/CHEBI:145549
+CHEBI:145566	syn-isopimara-7,15-diene	C=C[C@@]1(C)CC[C@@H]2C(=CC[C@H]3C(C)(C)CCC[C@]23C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:145566
+CHEBI:145806	(R)-(+)-perillyl alcohol	C=C(C)[C@H]1CC=C(CO)CC1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:145806
+CHEBI:146152	ilicicolinate B	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC1=C(O)C(C(=O)[O-])=C(C)C=C1O	371.497	https://www.ebi.ac.uk/chebi/CHEBI:146152
+CHEBI:146153	ilicicolin B	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC1=C(O)C(C=O)=C(C)C=C1O	356.506	https://www.ebi.ac.uk/chebi/CHEBI:146153
+CHEBI:146154	ilicicolin A(1-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC1=C(O)C(C=O)=C(C)C(Cl)=C1[O-]	389.943	https://www.ebi.ac.uk/chebi/CHEBI:146154
+CHEBI:146155	ilicicolin A epoxide(1-)	CC1=C(C=O)C(O)=C(C/C=C(\C)CC/C=C(\C)CC[C@@H]2OC2(C)C)C([O-])=C1Cl	405.942	https://www.ebi.ac.uk/chebi/CHEBI:146155
+CHEBI:146156	ilicicolin C(1-)	CC1=C(Cl)C([O-])=C(C/C=C(\C)CC[C@@]2(C)[C@H](C)CCC(=O)[C@@H]2C)C(O)=C1C=O	405.942	https://www.ebi.ac.uk/chebi/CHEBI:146156
+CHEBI:146157	ascochlorin(1-)	CC1=C(Cl)C([O-])=C(C/C=C(C)/C=C/[C@@]2(C)[C@H](C)CCC(=O)[C@@H]2C)C(O)=C1C=O	403.926	https://www.ebi.ac.uk/chebi/CHEBI:146157
+CHEBI:146158	16-hydroxy-ilicicolin A epoxide(1-)	CC1=C(C=O)C(O)=C(C/C=C(\C)CC/C=C(\C)[C@@H](O)C[C@@H]2OC2(C)C)C([O-])=C1Cl	421.941	https://www.ebi.ac.uk/chebi/CHEBI:146158
+CHEBI:146159	ascofuranol(1-)	CC1=C(C=O)C(O)=C(C/C=C(\C)CC/C=C(\C)[C@@H]2C[C@H](O)C(C)(C)O2)C([O-])=C1Cl	421.941	https://www.ebi.ac.uk/chebi/CHEBI:146159
+CHEBI:146160	ascofuranone(1-)	CC1=C(C=O)C(O)=C(C/C=C(\C)CC/C=C(\C)[C@@H]2CC(=O)C(C)(C)O2)C([O-])=C1Cl	419.925	https://www.ebi.ac.uk/chebi/CHEBI:146160
+CHEBI:149665	(5S,9S,10S)-drim-7-en-11-yl diphosphate(3-)	CC1=CC[C@H]2C(C)(C)CCC[C@]2(C)[C@H]1COP(=O)([O-])OP(=O)([O-])[O-]	379.306	https://www.ebi.ac.uk/chebi/CHEBI:149665
+CHEBI:149703	nicotinyl-CoA(4-)	CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)C1=CC=CN=C1	868.605	https://www.ebi.ac.uk/chebi/CHEBI:149703
+CHEBI:149707	2-oxo-6-(pyridin-3-yl)-2H-pyran-4-olate	O=C1C=C([O-])C=C(C2=CC=CN=C2)O1	188.162	https://www.ebi.ac.uk/chebi/CHEBI:149707
+CHEBI:149708	2-oxo-3-[(2E,6E)-farnesyl]-6-(pyridin-3-yl)-2H-pyran-4-olate	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC1=C([O-])C=C(C2=CC=CN=C2)OC1=O	392.519	https://www.ebi.ac.uk/chebi/CHEBI:149708
+CHEBI:149709	2-oxo-3-[(8S)-epoxy-(2E,6E)-farnesyl]-6-(pyridin-3-yl)-2H-pyran-4-olate	C/C(=C\CC1=C([O-])C=C(C2=CC=CN=C2)OC1=O)CC/C=C(\C)CC[C@@H]1OC1(C)C	408.518	https://www.ebi.ac.uk/chebi/CHEBI:149709
+CHEBI:149710	deacetylpyripyropene E	CC1(C)[C@@H](O)CC[C@]2(C)[C@H]3CC4=C(C=C(C5=CC=CN=C5)OC4=O)O[C@]3(C)CC[C@@H]12	409.526	https://www.ebi.ac.uk/chebi/CHEBI:149710
+CHEBI:15382	(4R)-limonene	C=C(C)[C@H]1CC=C(C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:15382
+CHEBI:15383	(4S)-limonene	C=C(C)[C@@H]1CC=C(C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:15383
+CHEBI:15384	limonene	C=C(C)C1CC=C(C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:15384
+CHEBI:15385	(+)-delta-cadinene	CC1=C[C@@H]2C(=C(C)CC[C@H]2C(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:15385
+CHEBI:15388	(+)-trans-carveol	C=C(C)[C@H]1CC=C(C)[C@H](O)C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:15388
+CHEBI:15389	(-)-trans-carveol	C=C(C)[C@@H]1CC=C(C)[C@@H](O)C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:15389
+CHEBI:15392	(1R)-bornane-2,5-dione	CC1(C)[C@H]2CC(=O)[C@]1(C)CC2=O	166.220	https://www.ebi.ac.uk/chebi/CHEBI:15392
+CHEBI:15398	(+)-exo-5-hydroxycamphor	CC1(C)[C@H]2CC(=O)[C@]1(C)C[C@H]2O	168.236	https://www.ebi.ac.uk/chebi/CHEBI:15398
+CHEBI:15399	(+)-carvone	C=C(C)[C@H]1CC=C(C)C(=O)C1	150.221	https://www.ebi.ac.uk/chebi/CHEBI:15399
+CHEBI:154	(+)-dihydrocarvone	C=C(C)[C@@H]1CC[C@@H](C)C(=O)C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:154
+CHEBI:15400	(-)-carvone	C=C(C)[C@@H]1CC=C(C)C(=O)C1	150.221	https://www.ebi.ac.uk/chebi/CHEBI:15400
+CHEBI:15401	(+)-dihydrokaempferol	O=C1C2=C(O)C=C(O)C=C2O[C@H](C2=CC=C(O)C=C2)[C@H]1O	288.255	https://www.ebi.ac.uk/chebi/CHEBI:15401
+CHEBI:15405	(-)-endo-fenchol	CC1(C)[C@@H]2CC[C@@](C)(C2)[C@@H]1O	154.253	https://www.ebi.ac.uk/chebi/CHEBI:15405
+CHEBI:15408	(-)-isopiperitenone	C=C(C)[C@H]1CCC(C)=CC1=O	150.221	https://www.ebi.ac.uk/chebi/CHEBI:15408
+CHEBI:15410	(-)-menthone	CC(C)[C@@H]1CC[C@@H](C)CC1=O	154.253	https://www.ebi.ac.uk/chebi/CHEBI:15410
+CHEBI:15415	ent-kaurene	C=C1C[C@@]23CC[C@@H]4C(C)(C)CCC[C@@]4(C)[C@@H]2CC[C@@H]1C3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:15415
+CHEBI:15420	perillyl alcohol	C=C(C)C1CC=C(CO)CC1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:15420
+CHEBI:15421	perillyl aldehyde	C=C(C)C1CC=C(C=O)CC1	150.221	https://www.ebi.ac.uk/chebi/CHEBI:15421
+CHEBI:15440	squalene	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C=C(\C)CC/C=C(\C)CCC=C(C)C	410.730	https://www.ebi.ac.uk/chebi/CHEBI:15440
+CHEBI:15441	(S)-2,3-epoxysqualene	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C=C(\C)CC/C=C(\C)CC[C@@H]1OC1(C)C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:15441
+CHEBI:155906	dauca-4,7-diene	CC1=CC[C@@H]2C(=C(C)C)CC[C@@]2(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:155906
+CHEBI:155907	asperaculane D(1-)	CC1=CC[C@@H]2/C(=C(\C)C(=O)[O-])CC[C@@]2(C)CC1	233.331	https://www.ebi.ac.uk/chebi/CHEBI:155907
+CHEBI:155909	asperaculane E(1-)	CC1=CC[C@@H]2/C(=C(\C)C(=O)[O-])CC[C@@]2(C)[C@@H](O)C1	249.330	https://www.ebi.ac.uk/chebi/CHEBI:155909
+CHEBI:155910	aculene D	CCC1=CC(=O)[C@]2(C)[C@@H]1CC=C(C)C[C@@H]2O	220.312	https://www.ebi.ac.uk/chebi/CHEBI:155910
+CHEBI:155911	asperaculane G(1-)	CC1=CC[C@@H]2/C(=C(\C)C(=O)[O-])C[C@@H](O)[C@@]2(C)[C@@H](O)C1	265.329	https://www.ebi.ac.uk/chebi/CHEBI:155911
+CHEBI:155912	aculene C	CCC1=CC(=O)[C@]2(C)C1=CC=C(C)C[C@@H]2O	218.296	https://www.ebi.ac.uk/chebi/CHEBI:155912
+CHEBI:155913	aculene B(1+)	CCC1=CC(=O)[C@@]2(C)[C@@H](OC(=O)[C@@H]3CCC[NH2+]3)CC(C)=CC[C@H]12	318.437	https://www.ebi.ac.uk/chebi/CHEBI:155913
+CHEBI:155914	aculene A(1+)	CCC1=CC(=O)[C@]2(C)C1=CC=C(C)C[C@@H]2OC(=O)[C@@H]1CCC[NH2+]1	316.421	https://www.ebi.ac.uk/chebi/CHEBI:155914
+CHEBI:156223	(-)-delta-cadinol	CC1=C[C@H]2[C@H](C(C)C)CC[C@@](C)(O)[C@H]2CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:156223
+CHEBI:156237	phomopsene	CC1=C2CC[C@H](C)[C@]23C[C@@]2(C)CCC(C)(C)[C@H]2[C@@H]3CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:156237
+CHEBI:156343	preaustinoid A2	C=C1[C@@]2(C)C[C@H]3[C@]4(C)C=CC(=O)OC(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	458.551	https://www.ebi.ac.uk/chebi/CHEBI:156343
+CHEBI:156346	preaustinoid A3	C=C1[C@@]2(C)CC3=C(C)[C@]4(C=CC(=O)OC4(C)C)CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	456.535	https://www.ebi.ac.uk/chebi/CHEBI:156346
+CHEBI:156350	protoaustinoid A	C=C1[C@@]2(C)C[C@H]3[C@]4(C)CC[C@@H](O)C(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@H](C)C2=O	430.585	https://www.ebi.ac.uk/chebi/CHEBI:156350
+CHEBI:156380	protoaustinoid B	C=C1[C@@]2(C)C[C@H]3[C@]4(C)CCC(=O)C(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@H](C)C2=O	428.569	https://www.ebi.ac.uk/chebi/CHEBI:156380
+CHEBI:156409	verruculide C	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC1=C2C[C@@H](C)OC(=O)C2=C(O)C=C1O	398.543	https://www.ebi.ac.uk/chebi/CHEBI:156409
+CHEBI:156410	verruculide C epoxide	C/C(=C\CC1=C2C[C@@H](C)OC(=O)C2=C(O)C=C1O)CC/C=C(\C)CC[C@@H]1OC1(C)C	414.542	https://www.ebi.ac.uk/chebi/CHEBI:156410
+CHEBI:156411	3-hydroxypentacecilide A	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@]4(C)OC3=CC(O)=C2C(=O)O1	414.542	https://www.ebi.ac.uk/chebi/CHEBI:156411
+CHEBI:156412	chrodrimanin C	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)CCC(=O)C(C)(C)[C@@H]5CC[C@]4(C)OC3=CC(O)=C2C(=O)O1	412.526	https://www.ebi.ac.uk/chebi/CHEBI:156412
+CHEBI:156413	verruculide A	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)C=CC(=O)C(C)(C)[C@@H]5CC[C@]4(C)OC3=CC(O)=C2C(=O)O1	410.510	https://www.ebi.ac.uk/chebi/CHEBI:156413
+CHEBI:156414	chrodrimanin T	C[C@H]1OC(=O)C2=C(O)C=C3O[C@@]4(C)CC[C@H]5C(C)(C)C(=O)C=C[C@]5(C)[C@@H]4CC3=C2[C@H]1O	426.509	https://www.ebi.ac.uk/chebi/CHEBI:156414
+CHEBI:156415	chrodrimanin F	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5C[C@H](O)[C@]4(C)OC3=CC(O)=C2C(=O)O1	430.541	https://www.ebi.ac.uk/chebi/CHEBI:156415
+CHEBI:156416	chrodrimanin H	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)CCC(=O)C(C)(C)[C@@H]5C[C@H](O)[C@]4(C)OC3=CC(O)=C2C(=O)O1	428.525	https://www.ebi.ac.uk/chebi/CHEBI:156416
+CHEBI:156417	chrodrimanin E	C[C@@H]1CC2=C3C[C@H]4[C@@]5(C)C=CC(=O)C(C)(C)[C@@H]5C[C@H](O)[C@]4(C)OC3=CC(O)=C2C(=O)O1	426.509	https://www.ebi.ac.uk/chebi/CHEBI:156417
+CHEBI:156418	chrodrimanin A	C[C@H]1OC(=O)C2=C(O)C=C3O[C@@]4(C)[C@@H](O)C[C@H]5C(C)(C)C(=O)C=C[C@]5(C)[C@@H]4CC3=C2[C@H]1O	442.508	https://www.ebi.ac.uk/chebi/CHEBI:156418
+CHEBI:156420	chrodrimanin B	CC(=O)O[C@@H]1C2=C3C[C@H]4[C@@]5(C)C=CC(=O)C(C)(C)[C@@H]5C[C@H](O)[C@]4(C)OC3=CC(O)=C2C(=O)O[C@@H]1C	484.545	https://www.ebi.ac.uk/chebi/CHEBI:156420
+CHEBI:156459	asnovolin A	COC(=O)[C@@H]1C(=O)C(C)=C2O[C@@]3(C[C@]2(C)[C@H]1C)[C@@H](C)CC[C@H]1C(C)(C)OC(=O)CC[C@@]13C	446.584	https://www.ebi.ac.uk/chebi/CHEBI:156459
+CHEBI:156460	novofumigatonin	C[C@H]1CC[C@H]2C(C)(C)OC(=O)C=C[C@]2(CO)[C@]12C[C@]1(C)[C@@H](C)[C@H]3C(=O)O[C@@]4(C)O[C@@]1(O[C@@H]34)O2	462.539	https://www.ebi.ac.uk/chebi/CHEBI:156460
+CHEBI:156464	chermesin D(1-)	CC1=C2O[C@@]3(C[C@]2(C)C(C)=C(C(=O)[O-])C1=O)[C@@H](C)CC[C@H]1C(C)(C)C(=O)CC[C@@]13C	413.534	https://www.ebi.ac.uk/chebi/CHEBI:156464
+CHEBI:156465	asnovolin H(1-)	CC1=C2O[C@@]3(C[C@]2(C)C(C)=C(C(=O)[O-])C1=O)[C@@H](C)CC[C@H]1C(C)(C)[C@@H](O)CC[C@@]13C	415.550	https://www.ebi.ac.uk/chebi/CHEBI:156465
+CHEBI:15861	trichodiene	C=C1CCC[C@]1(C)[C@]1(C)CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:15861
+CHEBI:16113	cholesterol	CC(C)CCC[C@@H](C)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C	386.664	https://www.ebi.ac.uk/chebi/CHEBI:16113
+CHEBI:16162	o-orsellinate	CC1=C(C(=O)[O-])C(O)=CC(O)=C1	167.140	https://www.ebi.ac.uk/chebi/CHEBI:16162
+CHEBI:162247	2-cis,6-trans-farnesyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C\COP(=O)([O-])OP(=O)([O-])[O-]	379.306	https://www.ebi.ac.uk/chebi/CHEBI:162247
+CHEBI:16368	6-hydroxymellein	C[C@@H]1CC2=CC(O)=CC(O)=C2C(=O)O1	194.186	https://www.ebi.ac.uk/chebi/CHEBI:16368
+CHEBI:16377	sabinene hydrate	CC(C)C12CCC(C)(O)C1C2	154.253	https://www.ebi.ac.uk/chebi/CHEBI:16377
+CHEBI:16431	limonene 1,2-epoxide	C=C(C)C1CCC2(C)OC2C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:16431
+CHEBI:16458	triacetate lactone	CC1=CC(O)=CC(=O)O1	126.111	https://www.ebi.ac.uk/chebi/CHEBI:16458
+CHEBI:16469	17beta-estradiol	C[C@]12CC[C@@H]3C4=CC=C(O)C=C4CC[C@H]3[C@@H]1CC[C@@H]2O	272.388	https://www.ebi.ac.uk/chebi/CHEBI:16469
+CHEBI:16521	lanosterol	CC(C)=CCC[C@@H](C)[C@H]1CC[C@@]2(C)C3=C(CC[C@]12C)[C@@]1(C)CC[C@H](O)C(C)(C)[C@@H]1CC3	426.729	https://www.ebi.ac.uk/chebi/CHEBI:16521
+CHEBI:166	(+)-isodihydrocarvone	C=C(C)[C@@H]1CC[C@H](C)C(=O)C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:166
+CHEBI:16619	(2-trans,6-trans)-farnesol	CC(C)=CCC/C(C)=C/CC/C(C)=C/CO	222.372	https://www.ebi.ac.uk/chebi/CHEBI:16619
+CHEBI:166670	Allo-Aromadendrene	C=C1CCC2C([C@@H]3[C@H](C)CC[C@H]13)C2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:166670
+CHEBI:167323	koraiol	CC1(C)C[C@H]2[C@@H]1CC[C@](C)(O)[C@H]1CC[C@]21C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:167323
+CHEBI:167324	(-)-alpha-acorenol	CC1=CC[C@@]2(CC1)[C@H](C)CC[C@H]2C(C)(C)O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:167324
+CHEBI:167379	trichobrasilenol	C/C(CO)=C1/CC(C)(C)C[C@@H]2[C@@H]1CC[C@@H]2C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:167379
+CHEBI:167380	african-3-ene	CC1=CC[C@@H]2[C@@H]1CC(C)(C)C[C@H]1C[C@]12C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:167380
+CHEBI:167381	african-1-ene	C[C@@H]1CC[C@@H]2C1=CC(C)(C)C[C@H]1C[C@]12C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:167381
+CHEBI:167397	(-)-Aristolene	CC1CCCC2=CCC3C(C3(C)C)C21C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:167397
+CHEBI:167398	1(10)-Aristolene	CC1CCC=C2CCC3C(C3(C)C)C21C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:167398
+CHEBI:167454	stellatate	C=C(C)[C@H]1CC[C@]2(C)[C@@H]1CC[C@]1(C)C/C=C(\C(=O)[O-])CC/C=C(\C)CC[C@H]12	369.569	https://www.ebi.ac.uk/chebi/CHEBI:167454
+CHEBI:167511	preasperterpenoid A	CC1=C2C[C@@]3(C)CC[C@]4(C)CC[C@H](C(C)C)[C@H]4[C@@H]3[C@H]3C[C@@]3(C)[C@@H]2CC1	340.595	https://www.ebi.ac.uk/chebi/CHEBI:167511
+CHEBI:167512	asperterpenoid A(1-)	CC(C)[C@H]1CC[C@@]2(C)CC[C@]3(CO)CC4=C(C(=O)[O-])CC[C@H]4[C@]4(C)C[C@@H]4[C@H]3[C@H]12	385.568	https://www.ebi.ac.uk/chebi/CHEBI:167512
+CHEBI:167513	asperterpenoid B(2-)	CC(C)[C@H]1CC[C@@]2(C)CC[C@]3(C(=O)[O-])CC4=C(C(=O)[O-])CC[C@H]4[C@]4(C)C[C@@H]4[C@H]3[C@H]12	398.543	https://www.ebi.ac.uk/chebi/CHEBI:167513
+CHEBI:167514	asperterpenoid C(1-)	CC(C)[C@H]1C[C@@H](O)[C@@]2(C)CC[C@]3(CO)CC4=C(C(=O)[O-])CC[C@H]4[C@]4(C)C[C@@H]4[C@H]3[C@H]12	401.567	https://www.ebi.ac.uk/chebi/CHEBI:167514
+CHEBI:167518	quiannulatene	CC1=C2C[C@]3(C)CC[C@@H](C(C)C)[C@H]3C[C@@H]2[C@@]23CC[C@@H](C)[C@@H]2CC[C@@]13C	340.595	https://www.ebi.ac.uk/chebi/CHEBI:167518
+CHEBI:167519	quiannulatate	CC1=C2C[C@]3(C(=O)[O-])CC[C@@H](C(C)C)[C@H]3C[C@@H]2[C@@]23CC[C@@H](C)[C@@H]2CC[C@@]13C	369.569	https://www.ebi.ac.uk/chebi/CHEBI:167519
+CHEBI:167548	ophiobolin C	CC(C)=CCC[C@H](C)[C@H]1CC[C@]2(C)C[C@H]3[C@H](C(=O)C[C@@]3(C)O)/C(C=O)=C\C[C@@H]12	386.576	https://www.ebi.ac.uk/chebi/CHEBI:167548
+CHEBI:167682	(3R)-[(10S)-11-epoxyfarnesyl]-2,3,5-trimethyl-6-oxido-4-oxocyclohexa-1,5-diene-1-carboxylate	CC1=C([O-])C(C(=O)[O-])=C(C)[C@@](C)(C/C=C(\C)CC/C=C(\C)CC[C@@H]2OC2(C)C)C1=O	414.542	https://www.ebi.ac.uk/chebi/CHEBI:167682
+CHEBI:167683	asnovolin J	COC(=O)[C@@H]1C(=O)C(C)=C2O[C@@]3(C[C@]2(C)[C@H]1C)[C@@H](C)CC[C@H]1C(C)(C)C(=O)CC[C@@]13C	430.585	https://www.ebi.ac.uk/chebi/CHEBI:167683
+CHEBI:167684	asnovolin I(1-)	CC1=C2O[C@@]3(C[C@]2(C)C(C)=C(C(=O)[O-])C1=O)[C@@H](C)CC[C@H]1C(C)(C)OC(=O)CC[C@@]13C	429.533	https://www.ebi.ac.uk/chebi/CHEBI:167684
+CHEBI:167685	asnovolin K	COC(=O)C1=C(C)[C@@]2(C)C[C@]3(OC2=C(C)C1=O)[C@@H](C)CC[C@H]1C(C)(C)OC(=O)CC[C@@]13C	444.568	https://www.ebi.ac.uk/chebi/CHEBI:167685
+CHEBI:167687	fumigatonoid A	COC(=O)[C@@H]1C(=O)[C@@](C)(O)[C@@]23OOC[C@]45CCC(=O)OC(C)(C)[C@@H]4CC[C@H](C)[C@]5(C[C@]2(C)[C@H]1C)O3	494.581	https://www.ebi.ac.uk/chebi/CHEBI:167687
+CHEBI:167688	fumigatonoid B	C[C@H]1CC[C@H]2C(C)(C)OC(=O)CC[C@@]23COO[C@@]24O[C@@]13C[C@]2(C)[C@@H](C)[C@H]1C(=O)O[C@]4(C)[C@H]1O	464.555	https://www.ebi.ac.uk/chebi/CHEBI:167688
+CHEBI:167689	fumigatonoid C	C[C@H]1CC[C@H]2C(C)(C)OC(=O)CC[C@@]23CO[C@]24O[C@]5(C)OC(=O)[C@@H]([C@@H]5O)[C@H](C)[C@@]2(C)C[C@]13O4	464.555	https://www.ebi.ac.uk/chebi/CHEBI:167689
+CHEBI:167691	chermesin D methyl ester	COC(=O)C1=C(C)[C@@]2(C)C[C@]3(OC2=C(C)C1=O)[C@@H](C)CC[C@H]1C(C)(C)C(=O)CC[C@@]13C	428.569	https://www.ebi.ac.uk/chebi/CHEBI:167691
+CHEBI:16832	kievitone	CC(C)=CCC1=C2OCC(C3=C(O)C=C(O)C=C3)C(=O)C2=C(O)C=C1O	356.374	https://www.ebi.ac.uk/chebi/CHEBI:16832
+CHEBI:16980	geranial	CC(C)=CCC/C(C)=C/C=O	152.237	https://www.ebi.ac.uk/chebi/CHEBI:16980
+CHEBI:169979	(+)-trans-isopiperitenol	C=C(C)[C@@H]1CCC(C)=C[C@H]1O	152.237	https://www.ebi.ac.uk/chebi/CHEBI:169979
+CHEBI:170011	prekainate(1-)	CC(C)=CC[NH2+][C@@H](CCC(=O)[O-])C(=O)[O-]	214.241	https://www.ebi.ac.uk/chebi/CHEBI:170011
+CHEBI:17030	cycloartenol	CC(C)=CCC[C@@H](C)[C@H]1CC[C@@]2(C)[C@@H]3CC[C@H]4C(C)(C)[C@@H](O)CC[C@@]45C[C@@]35CC[C@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:17030
+CHEBI:17219	limonene-1,2-diol	C=C(C)C1CCC(C)(O)C(O)C1	170.252	https://www.ebi.ac.uk/chebi/CHEBI:17219
+CHEBI:17221	beta-myrcene	C=CC(=C)CCC=C(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:17221
+CHEBI:17231	m-cresol	CC1=CC=CC(O)=C1	108.140	https://www.ebi.ac.uk/chebi/CHEBI:17231
+CHEBI:172365	N-geranyl-L-glutamate(1-)	CC(C)=CCC/C(C)=C/C[NH2+][C@@H](CCC(=O)[O-])C(=O)[O-]	282.360	https://www.ebi.ac.uk/chebi/CHEBI:172365
+CHEBI:172366	N-(7'-carboxy-7'-demethylgeranyl)-L-glutamate(2-)	C/C(=C\C[NH2+][C@@H](CCC(=O)[O-])C(=O)[O-])CC/C=C(\C)C(=O)[O-]	311.334	https://www.ebi.ac.uk/chebi/CHEBI:172366
+CHEBI:17251	pentalenene	CC1=C[C@@H]2CC(C)(C)C[C@@]23[C@H](C)CC[C@@H]13	204.357	https://www.ebi.ac.uk/chebi/CHEBI:17251
+CHEBI:17263	estrone	C[C@]12CC[C@@H]3C4=C(C=C(O)C=C4)CC[C@H]3[C@@H]1CCC2=O	270.372	https://www.ebi.ac.uk/chebi/CHEBI:17263
+CHEBI:172925	beta-acoradiene	C=C(C)[C@@H]1CC[C@@H](C)[C@@]12CC=C(C)CC2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:172925
+CHEBI:172926	alpha-acoradiene	C=C(C)[C@@H]1CC[C@@H](C)[C@]12CC=C(C)CC2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:172926
+CHEBI:172939	astellifadiene	C=C(C)[C@H]1CC[C@@]2(C)CC[C@]3(C)C[C@@H]4C[C@](C)(C/C=C\3[C@H]12)CC[C@@H]4C	340.595	https://www.ebi.ac.uk/chebi/CHEBI:172939
+CHEBI:173121	(1S,6S,7R)-sesquipiperitol	CC(C)=CCC[C@@H](C)[C@@H]1CCC(C)=C[C@H]1O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:173121
+CHEBI:17447	geraniol	CC(C)=CCC/C(C)=C/CO	154.253	https://www.ebi.ac.uk/chebi/CHEBI:17447
+CHEBI:17529	kievitone hydrate	CC(C)(O)CCC1=C2OCC(C3=C(O)C=C(O)C=C3)C(=O)C2=C(O)C=C1O	374.389	https://www.ebi.ac.uk/chebi/CHEBI:17529
+CHEBI:175763	2-trans,6-trans-farnesyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	379.306	https://www.ebi.ac.uk/chebi/CHEBI:175763
+CHEBI:17580	linalool	C=CC(C)(O)CCC=C(C)C	154.253	https://www.ebi.ac.uk/chebi/CHEBI:17580
+CHEBI:17695	casbene	C/C1=C\CC/C(C)=C/C2C(CC/C(C)=C/CC1)C2(C)C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:17695
+CHEBI:176971	N-(8'-hydroxygeranyl)-L-glutamate(1-)	C/C(=C\CC/C(C)=C/C[NH2+][C@@H](CCC(=O)[O-])C(=O)[O-])CO	298.359	https://www.ebi.ac.uk/chebi/CHEBI:176971
+CHEBI:176972	N-(8'-oxogeranyl)-L-glutamate(1-)	C/C(C=O)=C\CC/C(C)=C/C[NH2+][C@@H](CCC(=O)[O-])C(=O)[O-]	296.343	https://www.ebi.ac.uk/chebi/CHEBI:176972
+CHEBI:177888	variediene	C/C1=C2\C[C@@]3(C)CCC(C)(C)[C@H]3[C@@H]2CC/C(C)=C/CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:177888
+CHEBI:177897	penichrysol	C[C@H]1CC[C@@H](O)[C@]2(C)CC[C@H]3[C@@H]4C(C)(C)CC[C@]4(C)C[C@]132	290.491	https://www.ebi.ac.uk/chebi/CHEBI:177897
+CHEBI:178033	gamma-gurjunene	C=C(C)C1C=C2C(C)CCC2C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:178033
+CHEBI:17846	(S)-naringenin	O=C1C[C@@H](C2=CC=C(O)C=C2)OC2=CC(O)=CC(O)=C12	272.256	https://www.ebi.ac.uk/chebi/CHEBI:17846
+CHEBI:17935	octanal	CCCCCCCC=O	128.215	https://www.ebi.ac.uk/chebi/CHEBI:17935
+CHEBI:17948	(+)-taxifolin	O=C1C2=C(C=C(O)C=C2O)O[C@H](C2=CC=C(O)C(O)=C2)[C@H]1O	304.254	https://www.ebi.ac.uk/chebi/CHEBI:17948
+CHEBI:18130	(-)-5-oxo-1,2-campholide	CC1(C)[C@H]2CC(=O)O[C@]1(C)CC2=O	182.219	https://www.ebi.ac.uk/chebi/CHEBI:18130
+CHEBI:188453	beta-ylangene	C=C1CC[C@@H]2[C@@H]3C1[C@]2(C)CC[C@H]3C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:188453
+CHEBI:191385	fusoxypene A	CC(C)[C@@H]1CC[C@@]2(C)CC3=C(C[C@H]12)[C@]1(C)[C@H]2CC[C@@H](C)[C@]21CC[C@H]3C	340.595	https://www.ebi.ac.uk/chebi/CHEBI:191385
+CHEBI:191386	fusoxypene B	C=C1CC[C@@]23[C@H](C)CC[C@@H]2[C@@]3(C)[C@@H]2C[C@@H]3[C@H](C(C)C)CC[C@@]3(C)C[C@@H]12	340.595	https://www.ebi.ac.uk/chebi/CHEBI:191386
+CHEBI:191387	fusoxypene C	C/C1=C\C[C@]2(C)CC[C@@H](C(C)C)[C@H]2C/C=C(\C)[C@@H]2CC[C@@H](C)/C2=C/C1	340.595	https://www.ebi.ac.uk/chebi/CHEBI:191387
+CHEBI:191388	(-)-astellatene	C=C1[C@@]23CC[C@@H](C)[C@@H]4C[C@]5(C)CC[C@@H](C(C)C)[C@H]5C[C@@]14[C@H]2CC[C@H]3C	340.595	https://www.ebi.ac.uk/chebi/CHEBI:191388
+CHEBI:191389	preaspterpenacid acid I	CC(C)[C@H]1CC[C@]2(C)C[C@@H]3[C@@H](C)CC[C@@]45[C@@H](CC[C@@H]4C)[C@]5(C)[C@@]3(O)C[C@@H]12	358.610	https://www.ebi.ac.uk/chebi/CHEBI:191389
+CHEBI:191390	preaspterpenacid acid II	CC(C)[C@H]1CC[C@]2(C)C[C@@H]3[C@@H](C)CC[C@@]45[C@@H](CC[C@@H]4C)[C@]5(CO)[C@@]3(O)C[C@@H]12	374.609	https://www.ebi.ac.uk/chebi/CHEBI:191390
+CHEBI:192746	alpha-springene	C=C/C(C)=C/C/C=C(\C)CC/C=C(\C)CCC=C(C)C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:192746
+CHEBI:192978	talaropentaene	CC(C)=CCC/C(C)=C/CCC(C)C1=CC[C@]2(C)C/C=C(\C)CC/C=C(\C)CC[C@@H]12	408.714	https://www.ebi.ac.uk/chebi/CHEBI:192978
+CHEBI:192980	macrophomene	C/C1=C\CC/C(C)=C/CC/C(C)=C/[C@@H]2[C@@H](CC/C(C)=C/CC/C(C)=C/CC1)C2(C)C	408.714	https://www.ebi.ac.uk/chebi/CHEBI:192980
+CHEBI:192981	colleterpenol	CC(C)=CCC/C(C)=C/CC[C@](C)(O)[C@H]1C/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:192981
+CHEBI:192990	(5R,12R,14S)-dolasta-1(15),8-diene	C=C1CCC[C@]2(C)CCC3=C(C(C)C)CC[C@]3(C)C[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:192990
+CHEBI:192991	delta-araneosene	C/C1=C\C[C@@]2(C)CCC(C(C)C)=C2CC/C(C)=C/CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:192991
+CHEBI:192996	discoidol	C[C@H]1CCCC2=CCC(C(C)(C)O)C[C@]21C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:192996
+CHEBI:193072	(-)-beta-barbatene	C=C1CC[C@@]2(C)C[C@@H]1[C@@]1(C)CCC[C@@]21C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:193072
+CHEBI:193073	(S)-nephthenol	C/C1=C\CC/C(C)=C/C[C@@H](C(C)(C)O)CC/C(C)=C/CC1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:193073
+CHEBI:193074	beta-araneosene	CC(C)=C1CC[C@@]2(C)C/C=C(\C)CC/C=C(\C)CC[C@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:193074
+CHEBI:193079	[(1'E)-5'-(3',3'-dimethyloxiran-2'-yl)-3'-hydroxy-3'-methylpent-1'-en-1'-yl]-quinolinone B	COC1=CC=C([C@@]2(O)C3=C(C=CC(/C=C/C(C)(O)CCC4OC4(C)C)=C3O)NC(=O)[C@@H]2OC)C=C1	483.561	https://www.ebi.ac.uk/chebi/CHEBI:193079
+CHEBI:193086	(+)-beta-barbatene	C=C1CC[C@]2(C)C[C@H]1[C@]1(C)CCC[C@]21C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:193086
+CHEBI:193096	discodiene	C[C@H]1CCCC2=CC=CC[C@]21C	162.276	https://www.ebi.ac.uk/chebi/CHEBI:193096
+CHEBI:193107	N(6),N(6)-dimethyl-L-lysinium	C[NH+](C)CCCC[C@H]([NH3+])C(=O)[O-]	175.252	https://www.ebi.ac.uk/chebi/CHEBI:193107
+CHEBI:193108	N,N-dimethyl-cadaverine(+2)	C[NH+](C)CCCCC[NH3+]	132.251	https://www.ebi.ac.uk/chebi/CHEBI:193108
+CHEBI:193109	(6S)-6-ammonio-3,3-dimethyl-2-oxoheptanedioate	CC(C)(CC[C@H]([NH3+])C(=O)[O-])C(=O)C(=O)[O-]	216.213	https://www.ebi.ac.uk/chebi/CHEBI:193109
+CHEBI:193158	talarodiene	C/C1=C/CC2=CC(C)(C)CC[C@]2(C)C[C@H]2[C@@H](C)CC[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:193158
+CHEBI:193165	5-dehydrofumagillol	CO[C@@H]1C(=O)CC[C@]2(CO2)[C@H]1[C@@]1(C)O[C@@H]1CC=C(C)C	280.364	https://www.ebi.ac.uk/chebi/CHEBI:193165
+CHEBI:193166	(+)-exo-beta-bergamotene	C=C1CC[C@H]2C[C@@H]1[C@]2(C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:193166
+CHEBI:193517	5-dehydro-6-demethoxyfumagillol	CC(C)=CC[C@H]1O[C@]1(C)[C@H]1CC(=O)CC[C@]12CO2	250.338	https://www.ebi.ac.uk/chebi/CHEBI:193517
+CHEBI:193518	5-dehydro-6-demethoxy-6-hydroxyfumagillol	CC(C)=CC[C@H]1O[C@]1(C)[C@H]1[C@H](O)C(=O)CC[C@]12CO2	266.337	https://www.ebi.ac.uk/chebi/CHEBI:193518
+CHEBI:193520	prefumagillin	C/C=C/C=C/C=C/C=C/C=C/C(=O)O[C@@H]1CC[C@]2(CO2)[C@@H]([C@@]2(C)O[C@@H]2CC=C(C)C)[C@@H]1OC	454.607	https://www.ebi.ac.uk/chebi/CHEBI:193520
+CHEBI:193561	(1'E,3'E)-5-(3,3-dimethyloxiran-2-yl)-3-methylhexa-1,3-dienyl-quinolinone B	COC1=CC=C([C@@]2(O)C3=C(C=CC(/C=C/C(C)=C/CC4OC4(C)C)=C3O)NC(=O)[C@@H]2OC)C=C1	465.546	https://www.ebi.ac.uk/chebi/CHEBI:193561
+CHEBI:194019	fumagillin(1-)	CO[C@@H]1[C@H](OC(=O)/C=C/C=C/C=C/C=C/C(=O)[O-])CC[C@]2(CO2)[C@H]1[C@@]1(C)O[C@@H]1CC=C(C)C	457.543	https://www.ebi.ac.uk/chebi/CHEBI:194019
+CHEBI:194020	(6S)-3,3-dimethyl-5,6-dihydro-4H-pyridine-2,6-dicarboxylate	CC1(C)CC[C@@H](C(=O)[O-])N=C1C(=O)[O-]	197.190	https://www.ebi.ac.uk/chebi/CHEBI:194020
+CHEBI:194025	(6S)-3,3-dimethylpiperidinium-2,6-dicarboxylate	CC1(C)CC[C@@H](C(=O)[O-])[NH2+]C1C(=O)[O-]	200.214	https://www.ebi.ac.uk/chebi/CHEBI:194025
+CHEBI:194026	(2S)-5,5-dimethylpiperidinium-2-carboxylate	CC1(C)CC[C@@H](C(=O)[O-])[NH2+]C1	157.213	https://www.ebi.ac.uk/chebi/CHEBI:194026
+CHEBI:194028	(1R,4R,5S)-acoradiene	C=C(C)[C@H]1CC[C@@H](C)[C@]12CC=C(C)CC2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:194028
+CHEBI:194090	pre-flavunoidine(2+)	CC1CCC2C13CCC1(C)OC2(C)C([NH2+]CCCCC[NH+](C)C)C1C3	350.591	https://www.ebi.ac.uk/chebi/CHEBI:194090
+CHEBI:194091	flavunoidine(2+)	CC1CCC2C3(C)OC4(C)CC(OC(=O)[C@@H]5CCC(C)(C)CN5)C12CC4C3[NH2+]CCCCC[NH+](C)C	505.788	https://www.ebi.ac.uk/chebi/CHEBI:194091
+CHEBI:195495	10-hydroxy-pre-flavunoidine	CC1CCC2C3(C)OC4(C)CC(O)C12CC4C3[NH2+]CCCCC[NH+](C)C	366.590	https://www.ebi.ac.uk/chebi/CHEBI:195495
+CHEBI:195527	2,6,9-trimethyl-13-oxatetracyclo[6.3.1.1(6,9).0(1,5)]tridecane carbocation	CC1CCC2C3(C)[CH+]C4CC12CCC4(C)O3	219.348	https://www.ebi.ac.uk/chebi/CHEBI:195527
+CHEBI:20	(+)-camphene	C=C1[C@H]2CC[C@H](C2)C1(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:20
+CHEBI:201384	sartorypyrone D	[H][C@@]1(CC/C(C)=C/CC/C(C)=C/Cc2c(O)cc(C)oc2=O)C(=C)CC[C@H](O)C1(C)C	414.586	https://www.ebi.ac.uk/chebi/CHEBI:201384
+CHEBI:203993	Sartorypyrone A	C=C1CC[C@H](OC(C)=O)C(C)(C)[C@@H]1CC/C(C)=C/CC/C(C)=C/CC1=C(O)C=C(C)OC1=O	456.623	https://www.ebi.ac.uk/chebi/CHEBI:203993
+CHEBI:219774	bonnadiene	CC1=C[C@H]2[C@@H](C(C)C)CCC(C)=C3CC[C@@H](C)[C@@]32CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:219774
+CHEBI:219780	allokutznerene	CC1=C2C[C@@]3(C)CCC(C)(C)[C@H]3[C@@H]3CC[C@H](C)[C@]23CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:219780
+CHEBI:226390	Cattleyene	C[C@@H]1CCC2=C3C[C@@]4(C)CCC(C)(C)[C@H]4[C@@H]3CC[C@]21C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:226390
+CHEBI:228	(4R,7R)-4-isopropenyl-7-methyloxepan-2-one	C=C(C)[C@@H]1CC[C@@H](C)OC(=O)C1	168.236	https://www.ebi.ac.uk/chebi/CHEBI:228
+CHEBI:228261	(R,2E)-alpha-cericerene	CC(C)=CC/C=C(\C)[C@H]1C/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC1	340.595	https://www.ebi.ac.uk/chebi/CHEBI:228261
+CHEBI:228367	sesterfisherate	C/C1=C2\CC[C@@H](C)[C@@H]2CC[C@H](C)[C@H]2C[C@@]3(C(=O)[O-])CC[C@H](C(C)C)[C@@H]3C[C@]12O	387.584	https://www.ebi.ac.uk/chebi/CHEBI:228367
+CHEBI:229523	silphinene	C[C@@H]1CC[C@H]2C(C)(C)C[C@]3(C)CC=C[C@]123	204.357	https://www.ebi.ac.uk/chebi/CHEBI:229523
+CHEBI:229601	ent-beyerene	CC1(C)CCC[C@]2(C)[C@@H]1CC[C@@]13C=C[C@@](C)(CC[C@H]12)C3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:229601
+CHEBI:229949	(24S)-24,25-epoxycucurbitadienol	C[C@H](CC[C@@H]1OC1(C)C)[C@H]1CC[C@@]2(C)[C@@H]3CC=C4[C@@H](CC[C@H](O)C4(C)C)[C@]3(C)CC[C@]12C	442.728	https://www.ebi.ac.uk/chebi/CHEBI:229949
+CHEBI:230481	variecoladiene	C=C(C)[C@H]1CC[C@@]2(C)CC[C@]3(C)C[C@H]4[C@@H](C)CC[C@H]4/C(C)=C\C[C@H]3[C@H]12	340.595	https://www.ebi.ac.uk/chebi/CHEBI:230481
+CHEBI:231458	motiol	CC(C)[C@H]1CC[C@@H]2[C@]1(C)CC[C@]1(C)C3=CC[C@H]4C(C)(C)[C@@H](O)CC[C@]4(C)[C@H]3CC[C@@]21C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:231458
+CHEBI:231493	palustrol	C[C@@H]1CC[C@H]2[C@@H]([C@H]3[C@@H](C)CC[C@]31O)C2(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:231493
+CHEBI:231497	selina-6-en-4-ol	CC(C)C1=C[C@@H]2[C@](C)(CCC[C@]2(C)O)CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:231497
+CHEBI:231737	2-trans,6-trans,10-trans-geranylgeranyl-triacetate lactone	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC1=C(O)C=C(C)OC1=O	398.587	https://www.ebi.ac.uk/chebi/CHEBI:231737
+CHEBI:231738	(S)-2-trans,6-trans,10-trans-epoxygeranylgeranyl-triacetate lactone	CC1=CC(O)=C(C/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC[C@@H]2OC2(C)C)C(=O)O1	414.586	https://www.ebi.ac.uk/chebi/CHEBI:231738
+CHEBI:231739	sartorypyrone F	C=C1CC[C@H]2C(C)(C)[C@@H](O)CC[C@]2(C)[C@H]1CC/C(C)=C/CC1=C(O)C=C(C)OC1=O	414.586	https://www.ebi.ac.uk/chebi/CHEBI:231739
+CHEBI:231741	sartorypyrone G	C=C1CC[C@H]2C(C)(C)[C@@H](OC(C)=O)CC[C@]2(C)[C@H]1CC/C(C)=C/CC1=C(O)C=C(C)OC1=O	456.623	https://www.ebi.ac.uk/chebi/CHEBI:231741
+CHEBI:231783	(+)-sativene	C=C1[C@H]2CC[C@@H]3[C@H]2[C@H](C(C)C)CC[C@]13C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:231783
+CHEBI:231796	(S,S)-drim-8-en-11-yl diphosphate(3-)	CC1=C(COP(=O)([O-])OP(=O)([O-])[O-])[C@@]2(C)CCCC(C)(C)[C@@H]2CC1	379.306	https://www.ebi.ac.uk/chebi/CHEBI:231796
+CHEBI:231826	ent-trachylobane	CC1(C)CCC[C@]2(C)[C@@H]1CC[C@@]13CC4[C@@H](C[C@H]12)C4(C)C3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:231826
+CHEBI:231828	ent-(12E)-labda-8(17),12,14-triene	C=C/C(C)=C/C[C@@H]1C(=C)CC[C@@H]2C(C)(C)CCC[C@@]12C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:231828
+CHEBI:231830	16alpha-hydroxy-ent-kaurene	CC1(C)CCC[C@]2(C)[C@@H]1CC[C@@]13C[C@@H](CC[C@H]12)[C@](C)(O)C3	290.491	https://www.ebi.ac.uk/chebi/CHEBI:231830
+CHEBI:232	(+)-cis-carveol	C=C(C)[C@H]1CC=C(C)[C@@H](O)C1	152.237	https://www.ebi.ac.uk/chebi/CHEBI:232
+CHEBI:232471	isomotiol	CC(C)[C@H]1CC[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)CC[C@H](O)C(C)(C)[C@@H]1CC3	426.729	https://www.ebi.ac.uk/chebi/CHEBI:232471
+CHEBI:232472	2alpha-hydroxyisomotiol	CC(C)[C@H]1CC[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)C[C@@H](O)[C@H](O)C(C)(C)[C@@H]1CC3	442.728	https://www.ebi.ac.uk/chebi/CHEBI:232472
+CHEBI:232474	3-O-(beta-D-glucopyranosyl)-isomotiol	CC(C)[C@H]1CC[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)CC[C@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)C(C)(C)[C@@H]1CC3	588.870	https://www.ebi.ac.uk/chebi/CHEBI:232474
+CHEBI:232475	3-O-(beta-D-glucopyranosyl)-2alpha-hydroxyisomotiol	CC(C)[C@H]1CC[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)C[C@@H](O)[C@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)C(C)(C)[C@@H]1CC3	604.869	https://www.ebi.ac.uk/chebi/CHEBI:232475
+CHEBI:232477	3-O-(beta-D-glucopyranosyl)-2alpha-acetoxyisomotiol	CC(=O)O[C@@H]1C[C@]2(C)C3=C(CC[C@H]2C(C)(C)[C@H]1O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)[C@@]1(C)CC[C@]2(C)[C@@H](C(C)C)CC[C@H]2[C@]1(C)CC3	646.906	https://www.ebi.ac.uk/chebi/CHEBI:232477
+CHEBI:232478	2-deacetoxyfuscoatroside	CC(C)[C@@H](C)[C@@]1(C)CC[C@]2(C)C3=C(CC[C@@]2(C)[C@@H]1C(=O)[O-])[C@@]1(C)CC[C@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)C(C)(C)[C@@H]1CC3	619.860	https://www.ebi.ac.uk/chebi/CHEBI:232478
+CHEBI:232479	2-deacetylfuscoatroside	CC(C)[C@@H](C)[C@@]1(C)CC[C@]2(C)C3=C(CC[C@@]2(C)[C@@H]1C(=O)[O-])[C@@]1(C)C[C@@H](O)[C@H](O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)C(C)(C)[C@@H]1CC3	635.859	https://www.ebi.ac.uk/chebi/CHEBI:232479
+CHEBI:232480	fuscoatroside	CC(=O)O[C@@H]1C[C@]2(C)C3=C(CC[C@H]2C(C)(C)[C@H]1O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)[C@@]1(C)CC[C@](C)([C@H](C)C(C)C)[C@@H](C(=O)[O-])[C@]1(C)CC3	677.896	https://www.ebi.ac.uk/chebi/CHEBI:232480
+CHEBI:232481	19beta-hydroxyisomotiol	CC(C)[C@H]1C[C@H](O)[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)CC[C@H](O)C(C)(C)[C@@H]1CC3	442.728	https://www.ebi.ac.uk/chebi/CHEBI:232481
+CHEBI:232482	2alpha,19beta-dihydroxyisomotiol	CC(C)[C@H]1C[C@H](O)[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)C[C@@H](O)[C@H](O)C(C)(C)[C@@H]1CC3	458.727	https://www.ebi.ac.uk/chebi/CHEBI:232482
+CHEBI:232483	2alpha-hydroxyismotiol-19-one	CC(C)[C@H]1CC(=O)[C@@H]2[C@]1(C)CC[C@]1(C)C3=C(CC[C@@]21C)[C@@]1(C)C[C@@H](O)[C@H](O)C(C)(C)[C@@H]1CC3	456.711	https://www.ebi.ac.uk/chebi/CHEBI:232483
+CHEBI:232484	2-deacetyl,3-deglucopyranosyl-fuscoatroside	CC(C)[C@@H](C)[C@@]1(C)CC[C@]2(C)C3=C(CC[C@@]2(C)[C@@H]1C(=O)[O-])[C@@]1(C)C[C@@H](O)[C@H](O)C(C)(C)[C@@H]1CC3	473.718	https://www.ebi.ac.uk/chebi/CHEBI:232484
+CHEBI:233473	(-)-longiborneol	CC1(C)CCC[C@]2(C)[C@H]3CC[C@]2(C)[C@H](O)[C@H]31	222.372	https://www.ebi.ac.uk/chebi/CHEBI:233473
+CHEBI:234437	(-)-dauca-4(11),8-diene	CC1=CC[C@@]2(C)CCC(=C(C)C)[C@@H]2CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:234437
+CHEBI:234454	(8R,9S)-8,9-epoxydauca-4(11)ene-8-oate	CC(C)=C1CC[C@]2(C)C[C@@H]3O[C@]3(C(=O)[O-])CC[C@@H]12	249.330	https://www.ebi.ac.uk/chebi/CHEBI:234454
+CHEBI:234481	sterpurene	CC1=C2CC(C)(C)C[C@H]2C[C@]2(C)CC[C@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:234481
+CHEBI:234482	(1R,2R)-menth-2-en-1-ol	CC(C)[C@@H]1C=C[C@](C)(O)CC1	154.253	https://www.ebi.ac.uk/chebi/CHEBI:234482
+CHEBI:234485	africanol	C[C@H]1CC[C@H]2[C@]3(C)C[C@@H]3CC(C)(C)C[C@@]12O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:234485
+CHEBI:234487	4-hydroxyafricanol	C[C@H]1C(O)C[C@H]2[C@]3(C)C[C@@H]3CC(C)(C)C[C@@]12O	238.371	https://www.ebi.ac.uk/chebi/CHEBI:234487
+CHEBI:234488	4-oxoafricanol	C[C@H]1C(=O)C[C@H]2[C@]3(C)C[C@@H]3CC(C)(C)C[C@@]12O	236.355	https://www.ebi.ac.uk/chebi/CHEBI:234488
+CHEBI:234489	2-dehydroxy-2-en-4-oxoafricanol	CC1=C2CC(C)(C)C[C@H]3C[C@@]3(C)[C@@H]2CC1=O	218.340	https://www.ebi.ac.uk/chebi/CHEBI:234489
+CHEBI:234490	ophiocerate	CC1=C2CC(C)(C)C[C@H]3C[C@@]3(C(=O)[O-])[C@@H]2CC1=O	247.314	https://www.ebi.ac.uk/chebi/CHEBI:234490
+CHEBI:234556	4,16-didehydroxyvinigrol	CC1=C[C@H]2[C@@H](C(C)C)CC[C@@H](C)[C@@H]3CC[C@@H](C)[C@@]2(O)[C@@H]3C1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:234556
+CHEBI:23925	(+)-5-epi-aristolochene	C=C(C)[C@@H]1CC=C2CCC[C@@H](C)[C@@]2(C)C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:23925
+CHEBI:25646	octanoate	CCCCCCCC(=O)[O-]	143.206	https://www.ebi.ac.uk/chebi/CHEBI:25646
+CHEBI:27474	pyrethrin II	C=C/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](/C=C(\C)C(=O)OC)C2(C)C)CC1=O	372.461	https://www.ebi.ac.uk/chebi/CHEBI:27474
+CHEBI:27607	thymol	CC1=CC(O)=C(C(C)C)C=C1	150.221	https://www.ebi.ac.uk/chebi/CHEBI:27607
+CHEBI:27723	beta-cadinene	CC1=CC[C@H]2C(C)=CC[C@@H](C(C)C)[C@@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:27723
+CHEBI:27741	3'-hydroxyflavonoid	*C1=C(*)C(*)=C2C(=O)C(*)=C(C3=C(*)C(O)=C(*)C(*)=C3*)OC2=C1*	229.167	https://www.ebi.ac.uk/chebi/CHEBI:27741
+CHEBI:27815	pyrethrin I	C=C/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](C=C(C)C)C2(C)C)CC1=O	328.452	https://www.ebi.ac.uk/chebi/CHEBI:27815
+CHEBI:27961	1,8-cineole	CC1(C)O[C@]2(C)CC[C@H]1CC2	154.253	https://www.ebi.ac.uk/chebi/CHEBI:27961
+CHEBI:28	(R)-linalool	C=C[C@](C)(O)CCC=C(C)C	154.253	https://www.ebi.ac.uk/chebi/CHEBI:28
+CHEBI:28261	(+)-alpha-pinene	CC1=CC[C@@H]2C[C@H]1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:28261
+CHEBI:28283	capsidiol	C=C(C)[C@@H]1CC=C2[C@H](O)C[C@@H](O)[C@@H](C)[C@@]2(C)C1	236.355	https://www.ebi.ac.uk/chebi/CHEBI:28283
+CHEBI:28359	(-)-beta-pinene	C=C1CC[C@H]2C[C@@H]1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:28359
+CHEBI:28412	eriodictyol	O=C1C[C@@H](C2=CC=C(O)C(O)=C2)OC2=CC(O)=CC(O)=C12	288.255	https://www.ebi.ac.uk/chebi/CHEBI:28412
+CHEBI:28660	(-)-alpha-pinene	CC1=CC[C@H]2C[C@@H]1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:28660
+CHEBI:28744	2-hydroxy-17beta-estradiol	C[C@]12CC[C@@H]3C4=C(C=C(O)C(O)=C4)CC[C@H]3[C@@H]1CC[C@@H]2O	288.387	https://www.ebi.ac.uk/chebi/CHEBI:28744
+CHEBI:29452	nerol	CC(C)=CCC/C(C)=C\CO	154.253	https://www.ebi.ac.uk/chebi/CHEBI:29452
+CHEBI:29519	aphidicolan-16beta-ol	CC1(C)CCC[C@@]2(C)[C@H]1CC[C@H]1C[C@@H]3C[C@@]12CC[C@@]3(C)O	290.491	https://www.ebi.ac.uk/chebi/CHEBI:29519
+CHEBI:29616	abieta-8(14),12-diene	CC(C)C1=CC[C@H]2C(=C1)CC[C@H]1C(C)(C)CCC[C@]21C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:29616
+CHEBI:29651	neoabietadiene	CC(C)=C1C=C2CC[C@H]3C(C)(C)CCC[C@]3(C)[C@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:29651
+CHEBI:300	(R)-(+)-alpha-terpineol	CC1=CC[C@H](C(C)(C)O)CC1	154.253	https://www.ebi.ac.uk/chebi/CHEBI:300
+CHEBI:30037	taxa-4,11-diene	CC1=CCC[C@@]2(C)CCC3=C(C)CC[C@@H](C[C@H]12)C3(C)C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:30037
+CHEBI:30232	abieta-7,13-diene	CC(C)C1=CC2=CC[C@H]3C(C)(C)CCC[C@]3(C)[C@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:30232
+CHEBI:30245	linoleate	CCCCC/C=C\C/C=C\CCCCCCCC(=O)[O-]	279.444	https://www.ebi.ac.uk/chebi/CHEBI:30245
+CHEBI:30879	alcohol	*O	17.007	https://www.ebi.ac.uk/chebi/CHEBI:30879
+CHEBI:31	(+)-menthone	CC(C)[C@H]1CC[C@H](C)CC1=O	154.253	https://www.ebi.ac.uk/chebi/CHEBI:31
+CHEBI:32395	arachidonate	CCCCC/C=C\C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	303.466	https://www.ebi.ac.uk/chebi/CHEBI:32395
+CHEBI:324935	fumagillol	CO[C@@H]1[C@H](O)CC[C@]2(CO2)[C@H]1[C@@]1(C)O[C@@H]1CC=C(C)C	282.380	https://www.ebi.ac.uk/chebi/CHEBI:324935
+CHEBI:32544	nicotinate	O=C([O-])C1=CC=CN=C1	122.103	https://www.ebi.ac.uk/chebi/CHEBI:32544
+CHEBI:32551	L-lysinium(1+)	[NH3+]CCCC[C@H]([NH3+])C(=O)[O-]	147.198	https://www.ebi.ac.uk/chebi/CHEBI:32551
+CHEBI:3440	carvacrol	CC1=C(O)C=C(C(C)C)C=C1	150.221	https://www.ebi.ac.uk/chebi/CHEBI:3440
+CHEBI:35194	isoprene	C=CC(=C)C	68.119	https://www.ebi.ac.uk/chebi/CHEBI:35194
+CHEBI:35596	(+)-pulegone	CC(C)=C1CC[C@@H](C)CC1=O	152.237	https://www.ebi.ac.uk/chebi/CHEBI:35596
+CHEBI:35811	2-endo-hydroxy-1,8-cineole	CC1(C)O[C@]2(C)CC[C@H]1C[C@H]2O	170.252	https://www.ebi.ac.uk/chebi/CHEBI:35811
+CHEBI:36464	(R)-mevalonate	C[C@@](O)(CCO)CC(=O)[O-]	147.150	https://www.ebi.ac.uk/chebi/CHEBI:36464
+CHEBI:36484	hopan-22-ol	CC(C)(O)[C@H]1CC[C@]2(C)[C@H]3CC[C@@H]4[C@@]5(C)CCCC(C)(C)[C@@H]5CC[C@@]4(C)[C@]3(C)CC[C@@H]12	428.745	https://www.ebi.ac.uk/chebi/CHEBI:36484
+CHEBI:36492	(+)-isomenthone	CC(C)[C@H]1CC[C@@H](C)CC1=O	154.253	https://www.ebi.ac.uk/chebi/CHEBI:36492
+CHEBI:36517	germacrene A	C=C(C)C1C/C=C(\C)CC/C=C(\C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:36517
+CHEBI:36658	6-methylsalicylate	CC1=CC=CC(O)=C1C(=O)[O-]	151.141	https://www.ebi.ac.uk/chebi/CHEBI:36658
+CHEBI:36740	alpha-pinene	CC1=CCC2CC1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:36740
+CHEBI:37047	(+)-cis-isopulegone	C=C(C)[C@H]1CC[C@@H](C)CC1=O	152.237	https://www.ebi.ac.uk/chebi/CHEBI:37047
+CHEBI:3706	cinerin I	C/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](C=C(C)C)C2(C)C)CC1=O	316.441	https://www.ebi.ac.uk/chebi/CHEBI:3706
+CHEBI:3707	cinerin II	C/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](/C=C(\C)C(=O)OC)C2(C)C)CC1=O	360.450	https://www.ebi.ac.uk/chebi/CHEBI:3707
+CHEBI:38249	(1S,4R)-1-hydroxylimonen-2-one	C=C(C)[C@@H]1CC[C@](C)(O)C(=O)C1	168.236	https://www.ebi.ac.uk/chebi/CHEBI:38249
+CHEBI:3830	camphene	C=C1C2CCC(C2)C1(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:3830
+CHEBI:39111	(Z,S)-pyrethrolone	C=C/C=C\CC1=C(C)[C@@H](O)CC1=O	178.231	https://www.ebi.ac.uk/chebi/CHEBI:39111
+CHEBI:39113	jasmolin I	CC/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](C=C(C)C)C2(C)C)CC1=O	330.468	https://www.ebi.ac.uk/chebi/CHEBI:39113
+CHEBI:39114	jasmolin II	CC/C=C\CC1=C(C)[C@@H](OC(=O)[C@@H]2[C@@H](/C=C(\C)C(=O)OC)C2(C)C)CC1=O	374.477	https://www.ebi.ac.uk/chebi/CHEBI:39114
+CHEBI:39242	cis-beta-farnesene	C=CC(=C)CC/C=C(/C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:39242
+CHEBI:41595	(+)-germacrene A	C=C(C)[C@H]1C/C=C(\C)CC/C=C(\C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:41595
+CHEBI:42977	25-hydroxycholesterol	C[C@H](CCCC(C)(C)O)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O)CC[C@]4(C)[C@H]3CC[C@]12C	402.663	https://www.ebi.ac.uk/chebi/CHEBI:42977
+CHEBI:43074	(3S)-3-hydroxy-3-methylglutaryl-CoA(5-)	CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)C[C@@](C)(O)CC(=O)[O-]	906.627	https://www.ebi.ac.uk/chebi/CHEBI:43074
+CHEBI:43445	(+)-aristolochene	C=C(C)[C@H]1CC=C2CCC[C@H](C)[C@@]2(C)C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:43445
+CHEBI:4648	hop-22(29)-ene	C=C(C)[C@H]1CC[C@]2(C)[C@H]3CC[C@@H]4[C@@]5(C)CCCC(C)(C)[C@@H]5CC[C@@]4(C)[C@]3(C)CC[C@@H]12	410.730	https://www.ebi.ac.uk/chebi/CHEBI:4648
+CHEBI:46702	(-)-geosmin	C[C@H]1CCC[C@@]2(C)CCCC[C@]12O	182.307	https://www.ebi.ac.uk/chebi/CHEBI:46702
+CHEBI:46734	(1E,4S,5E,7R)-germacra-1(10),5-dien-11-ol	C/C1=C\CC[C@H](C)/C=C/[C@H](C(C)(C)O)CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:46734
+CHEBI:46971	premnaspirodiene	C=C(C)[C@@H]1CC[C@@]2(C1)C(C)=CCC[C@H]2C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:46971
+CHEBI:48741	beta-phellandrene	C=C1C=CC(C(C)C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:48741
+CHEBI:49044	(-)-germacrene D	C=C1/C=C/[C@H](C(C)C)CC/C(C)=C/CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49044
+CHEBI:49045	germacrene D	C=C1/C=C/C(C(C)C)CC/C(C)=C/CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49045
+CHEBI:49046	(+)-germacrene D	C=C1/C=C/[C@@H](C(C)C)CC/C(C)=C/CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49046
+CHEBI:49204	(+)-guaia-6,9-diene	CC1=CCC(C(C)C)=C[C@H]2[C@@H](C)CC[C@@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49204
+CHEBI:49210	beta-himachalene	CC1=CC2C(=C(C)CCCC2(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49210
+CHEBI:49214	alpha-himachalene	C=C1CCCC(C)(C)C2C=C(C)CCC12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49214
+CHEBI:49224	gamma-himachalene	CC1=CC2C(CC1)C(C)=CCCC2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49224
+CHEBI:49231	sibirene	C=C1CCCC2(C)CCC(C(C)C)=CC12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49231
+CHEBI:49238	(Z)-gamma-bisabolene	CC(C)=CCC/C(C)=C1\CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49238
+CHEBI:49239	(E)-gamma-bisabolene	CC(C)=CCC/C(C)=C1/CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49239
+CHEBI:49241	(Z)-alpha-bisabolene	CC(C)=CC/C=C(/C)C1CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49241
+CHEBI:49242	(E)-alpha-bisabolene	CC(C)=CC/C=C(\C)C1CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49242
+CHEBI:49243	(E,R)-alpha-bisabolene	CC(C)=CC/C=C(\C)[C@H]1CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49243
+CHEBI:49249	beta-bisabolene	C=C(CCC=C(C)C)C1CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49249
+CHEBI:49263	(S)-beta-bisabolene	C=C(CCC=C(C)C)[C@@H]1CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49263
+CHEBI:49278	delta-selinene	CC1=C2C=C(C(C)C)CCC2(C)CCC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49278
+CHEBI:49279	(+)-delta-selinene	CC1=C2C=C(C(C)C)CC[C@@]2(C)CCC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49279
+CHEBI:49290	gamma-humulene	C=C1C=CC(C)(C)CCCC(C)=CCC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:49290
+CHEBI:50025	beta-pinene	C=C1CCC2CC1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50025
+CHEBI:50026	(+)-beta-pinene	C=C1CC[C@@H]2C[C@H]1C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50026
+CHEBI:50027	sabinene	C=C1CCC2(C(C)C)CC12	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50027
+CHEBI:50028	(-)-sabinene	C=C1CC[C@@]2(C(C)C)C[C@@H]12	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50028
+CHEBI:50029	(+)-sabinene	C=C1CC[C@]2(C(C)C)C[C@H]12	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50029
+CHEBI:50031	alpha-thujene	CC1=CCC2(C(C)C)CC12	136.238	https://www.ebi.ac.uk/chebi/CHEBI:50031
+CHEBI:50060	ent-cassa-12,15-diene	C=CC1=CC[C@@H]2[C@H](CC[C@@H]3C(C)(C)CCC[C@@]23C)[C@@H]1C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50060
+CHEBI:50061	ent-sandaracopimara-8(14),15-diene	C=C[C@@]1(C)C=C2CC[C@@H]3C(C)(C)CCC[C@@]3(C)[C@@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50061
+CHEBI:50063	ent-pimara-8(14),15-diene	C=C[C@]1(C)C=C2CC[C@@H]3C(C)(C)CCC[C@@]3(C)[C@@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50063
+CHEBI:50064	ent-pimara-9(11),15-diene	C=C[C@@]1(C)CC=C2[C@@H](CC[C@@H]3C(C)(C)CCC[C@@]23C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50064
+CHEBI:50067	9beta-pimara-7,15-diene	C=C[C@]1(C)CC[C@@H]2C(=CC[C@H]3C(C)(C)CCC[C@]23C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50067
+CHEBI:50068	stemod-13(17)-ene	C=C1CC[C@@]23C[C@@H]1C[C@@H]2CC[C@H]1C(C)(C)CCC[C@@]13C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50068
+CHEBI:50069	stemar-13-ene	CC1=C[C@@H]2CC[C@H]3C(C)(C)CCC[C@]3(C)[C@@]23CC[C@@H]1C3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50069
+CHEBI:50245	(1R,4S)-1-hydroxylimonen-2-one	C=C(C)[C@H]1CC[C@@](C)(O)C(=O)C1	168.236	https://www.ebi.ac.uk/chebi/CHEBI:50245
+CHEBI:50246	1-hydroxylimonen-2-one	C=C(C)C1CCC(C)(O)C(=O)C1	168.236	https://www.ebi.ac.uk/chebi/CHEBI:50246
+CHEBI:50250	(4R,7S)-7-isopropyl-4-methyloxepan-2-one	CC(C)[C@@H]1CC[C@@H](C)CC(=O)O1	170.252	https://www.ebi.ac.uk/chebi/CHEBI:50250
+CHEBI:50283	(R)-lavandulol	C=C(C)[C@H](CO)CC=C(C)C	154.253	https://www.ebi.ac.uk/chebi/CHEBI:50283
+CHEBI:50302	terpentetriene	C=CC(=C)CC[C@]1(C)[C@H](C)CC[C@]2(C)C(C)=CCC[C@@H]12	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50302
+CHEBI:50783	ent-isokaurene	CC1=C[C@@]23CC[C@@H]4C(C)(C)CCC[C@@]4(C)[C@@H]2CC[C@@H]1C3	272.476	https://www.ebi.ac.uk/chebi/CHEBI:50783
+CHEBI:51458	(+)-epi-isozizaene	CC1=C2CC[C@H](C)[C@]23CC[C@@H](C3)C1(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:51458
+CHEBI:51460	albaflavenone	CC1=C2C(=O)C[C@H](C)[C@]23CC[C@@H](C3)C1(C)C	218.340	https://www.ebi.ac.uk/chebi/CHEBI:51460
+CHEBI:51479	(5R)-albaflavenol	CC1=C2[C@H](O)C[C@H](C)[C@]23CC[C@@H](C3)C1(C)C	220.356	https://www.ebi.ac.uk/chebi/CHEBI:51479
+CHEBI:51480	(5S)-albaflavenol	CC1=C2[C@@H](O)C[C@H](C)[C@]23CC[C@@H](C3)C1(C)C	220.356	https://www.ebi.ac.uk/chebi/CHEBI:51480
+CHEBI:5171	friedelin	C[C@H]1C(=O)CC[C@@H]2[C@]1(C)CC[C@H]1[C@@]2(C)CC[C@@]2(C)[C@@H]3CC(C)(C)CC[C@]3(C)CC[C@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:5171
+CHEBI:52026	amorpha-4,11-diene	C=C(C)[C@@H]1CC[C@@H](C)[C@@H]2CCC(C)=C[C@@H]21	204.357	https://www.ebi.ac.uk/chebi/CHEBI:52026
+CHEBI:52226	epi-cedrol	C[C@@H]1CC[C@H]2C(C)(C)[C@H]3C[C@@]12CC[C@]3(C)O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:52226
+CHEBI:52280	isopimara-7,15-diene	C=C[C@@]1(C)CC[C@H]2C(=CC[C@H]3C(C)(C)CCC[C@]23C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:52280
+CHEBI:52317	thalianol	CC(C)=CCC/C(C)=C/CC[C@@H](C)[C@@]1(C)CCC2=C1CC[C@H]1C(C)(C)[C@@H](O)CC[C@]21C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:52317
+CHEBI:52463	fusicocca-2,10(14)-diene	CC1=C2C[C@@]3(C)CCC(C(C)C)=C3CC[C@H](C)[C@@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:52463
+CHEBI:5337	(1E,4E)-germacrene B	CC(C)=C1C/C=C(\C)CC/C=C(\C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:5337
+CHEBI:53643	phyllocladan-16alpha-ol	CC1(C)CCC[C@@]2(C)[C@H]1CC[C@]13C[C@H](CC[C@@H]12)[C@](C)(O)C3	290.491	https://www.ebi.ac.uk/chebi/CHEBI:53643
+CHEBI:57293	(+)-bornyl diphosphate(3-)	CC1(C)C2CCC1(C)[C@@H](OP(=O)([O-])OP(=O)([O-])[O-])C2	311.187	https://www.ebi.ac.uk/chebi/CHEBI:57293
+CHEBI:57310	presqualene diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/[C@H]1[C@H](COP(=O)([O-])OP(=O)([O-])[O-])[C@@]1(C)CC/C=C(\C)CCC=C(C)C	583.663	https://www.ebi.ac.uk/chebi/CHEBI:57310
+CHEBI:57341	3-hydroxy-3-(4-methylpent-3-en-1-yl)glutaryl-CoA(5-)	CC(C)=CCCC(O)(CC(=O)[O-])CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-]	974.746	https://www.ebi.ac.uk/chebi/CHEBI:57341
+CHEBI:57384	malonyl-CoA(5-)	CC(C)(COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-])[C@@H](O)C(=O)NCCC(=O)NCCSC(=O)CC(=O)[O-]	848.547	https://www.ebi.ac.uk/chebi/CHEBI:57384
+CHEBI:57533	geranylgeranyl diphosphate(3-)	CC(C)=CCCC(C)=CCCC(C)=CCCC(C)=CCOP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:57533
+CHEBI:57618	FMNH2(2-)	CC1=C(C)C=C2C(=C1)NC1=C(NC(=O)NC1=O)N2C[C@H](O)[C@H](O)[C@H](O)COP(=O)([O-])[O-]	456.348	https://www.ebi.ac.uk/chebi/CHEBI:57618
+CHEBI:57623	prenyl diphosphate(3-)	CC(C)=CCOP(=O)([O-])OP(=O)([O-])[O-]	243.068	https://www.ebi.ac.uk/chebi/CHEBI:57623
+CHEBI:57665	neryl diphosphate(3-)	CC(C)=CCC/C(C)=C\COP(=O)([O-])OP(=O)([O-])[O-]	311.187	https://www.ebi.ac.uk/chebi/CHEBI:57665
+CHEBI:5768	(1E,4E,8E)-alpha-humulene	C/C1=C\CC/C(C)=C/CC(C)(C)/C=C/C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:5768
+CHEBI:57694	quercetin-7-olate	O=C1C(O)=C(C2=CC(O)=C(O)C=C2)OC2=C1C(O)=CC([O-])=C2	301.230	https://www.ebi.ac.uk/chebi/CHEBI:57694
+CHEBI:57716	O-acetyl-L-homoserine zwitterion	CC(=O)OCC[C@H]([NH3+])C(=O)[O-]	161.157	https://www.ebi.ac.uk/chebi/CHEBI:57716
+CHEBI:57792	1-deoxy-D-xylulose 5-phosphate(2-)	CC(=O)[C@@H](O)[C@H](O)COP(=O)([O-])[O-]	212.094	https://www.ebi.ac.uk/chebi/CHEBI:57792
+CHEBI:57907	all-trans-pentaprenyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	515.544	https://www.ebi.ac.uk/chebi/CHEBI:57907
+CHEBI:58057	geranyl diphosphate(3-)	CC(C)=CCC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	311.187	https://www.ebi.ac.uk/chebi/CHEBI:58057
+CHEBI:58121	D-ribulose 5-phosphate(2-)	O=C(CO)[C@H](O)[C@H](O)COP(=O)([O-])[O-]	228.093	https://www.ebi.ac.uk/chebi/CHEBI:58121
+CHEBI:58179	all-trans-hexaprenyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	583.663	https://www.ebi.ac.uk/chebi/CHEBI:58179
+CHEBI:58206	all-trans-heptaprenyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	651.782	https://www.ebi.ac.uk/chebi/CHEBI:58206
+CHEBI:58210	FMN(3-)	CC1=C(C)C=C2C(=C1)N=C1C(=O)[N-]C(=O)N=C1N2C[C@H](O)[C@H](O)[C@H](O)COP(=O)([O-])[O-]	453.324	https://www.ebi.ac.uk/chebi/CHEBI:58210
+CHEBI:58262	2-C-methyl-D-erythritol 4-phosphate(2-)	C[C@](O)(CO)[C@H](O)COP(=O)([O-])[O-]	214.110	https://www.ebi.ac.uk/chebi/CHEBI:58262
+CHEBI:58553	5beta,9alpha,10alpha-labda-8(20),13-dien-15-yl diphosphate(3-)	C=C1CC[C@@H]2C(C)(C)CCC[C@@]2(C)[C@@H]1CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58553
+CHEBI:58562	all-cis-5,8,11,14,17-icosapentaenoate	CC/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	301.450	https://www.ebi.ac.uk/chebi/CHEBI:58562
+CHEBI:58573	kaempferol oxoanion	O=C1C([O-])=C(C2=CC=C(O)C=C2)OC2=C1C(O)=CC(O)=C2	285.231	https://www.ebi.ac.uk/chebi/CHEBI:58573
+CHEBI:58622	5alpha,9beta,10alpha-labda-8(20),13-dien-15-yl diphosphate(3-)	C=C1CC[C@H]2C(C)(C)CCC[C@]2(C)[C@@H]1CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58622
+CHEBI:58635	5alpha,9alpha,10beta-labda-8(20),13-dien-15-yl diphosphate(3-)	C=C1CC[C@H]2C(C)(C)CCC[C@]2(C)[C@H]1CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58635
+CHEBI:58756	2-trans,6-trans,10-trans-geranylgeranyl diphosphate(3-)	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58756
+CHEBI:58819	(R,R)-chrysanthemyl diphosphate(3-)	CC(C)=C[C@@H]1[C@@H](COP(=O)([O-])OP(=O)([O-])[O-])C1(C)C	311.187	https://www.ebi.ac.uk/chebi/CHEBI:58819
+CHEBI:58821	terpentedienyl diphosphate(3-)	CC1=CCC[C@H]2[C@](C)(CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-])[C@H](C)CC[C@]12C	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58821
+CHEBI:58822	tuberculosinyl diphosphate(3-)	C/C(=C\COP(=O)([O-])OP(=O)([O-])[O-])CC[C@@]1(C)[C@@H]2CCCC(C)(C)C2=CC[C@@H]1C	447.425	https://www.ebi.ac.uk/chebi/CHEBI:58822
+CHEBI:59776	D-glyceraldehyde 3-phosphate(2-)	O=C[C@H](O)COP(=O)([O-])[O-]	168.041	https://www.ebi.ac.uk/chebi/CHEBI:59776
+CHEBI:59958	(3S,6E)-nerolidol	C=C[C@@](C)(O)CC/C=C(\C)CCC=C(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:59958
+CHEBI:59959	(3R,6E)-nerolidol	C=C[C@](C)(O)CC/C=C(\C)CCC=C(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:59959
+CHEBI:59961	alpha-selinene	C=C(C)[C@@H]1CC[C@@]2(C)CCC=C(C)[C@@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:59961
+CHEBI:60158	(E)-4,8-dimethyl-1,3,7-nonatriene	C=C/C=C(\C)CCC=C(C)C	150.265	https://www.ebi.ac.uk/chebi/CHEBI:60158
+CHEBI:60374	2-cis,6-cis-farnesyl diphosphate(3-)	CC(C)=CCC/C(C)=C\CC/C(C)=C\COP(=O)([O-])OP(=O)([O-])[O-]	379.306	https://www.ebi.ac.uk/chebi/CHEBI:60374
+CHEBI:60968	presilphiperfolan-8beta-ol	C[C@@H]1CC[C@H]2C(C)(C)C[C@]3(C)CC[C@@H]1[C@@]23O	222.372	https://www.ebi.ac.uk/chebi/CHEBI:60968
+CHEBI:61148	drimenol	CC1=CC[C@H]2C(C)(C)CCC[C@]2(C)[C@H]1CO	222.372	https://www.ebi.ac.uk/chebi/CHEBI:61148
+CHEBI:61344	(S)-beta-macrocarpene	CC1=CC[C@@H](C2=CCCC(C)(C)C2)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61344
+CHEBI:61478	germacrene C	C/C1=C\C=C(\C(C)C)CC/C(C)=C/CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61478
+CHEBI:61677	(+)-alpha-santalene	CC(C)=CCC[C@]1(C)[C@H]2C[C@@H]3[C@H](C2)[C@@]31C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61677
+CHEBI:61678	(+)-endo-beta-bergamotene	C=C1CC[C@H]2C[C@@H]1[C@@]2(C)CCC=C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61678
+CHEBI:61679	(-)-endo-alpha-bergamotene	CC(C)=CCC[C@@]1(C)[C@H]2CC=C(C)[C@@H]1C2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61679
+CHEBI:61687	cis-muurola-3,5-diene	CC1=CC[C@@H]2C(=C1)[C@@H](C(C)C)CC[C@H]2C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61687
+CHEBI:61688	cis-muurola-4(14),5-diene	C=C1C=C2[C@@H](CC1)[C@H](C)CC[C@@H]2C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61688
+CHEBI:61690	(+)-alpha-barbatene	CC1=CC[C@]2(C)C[C@H]1[C@]1(C)CCC[C@]21C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61690
+CHEBI:61699	(-)-alpha-gurjunene	CC1=C2[C@H](CC1)[C@H](C)CC[C@@H]1[C@H]2C1(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61699
+CHEBI:61700	(+)-valencene	C=C(C)[C@@H]1CCC2=CCC[C@@H](C)[C@]2(C)C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61700
+CHEBI:61737	(+)-thujopsene	CC1=CC[C@@]2(C)CCCC(C)(C)[C@]23C[C@H]13	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61737
+CHEBI:61746	(+)-beta-chamigrene	C=C1CCCC(C)(C)[C@]12CC=C(C)CC2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:61746
+CHEBI:61984	(E)-2-methylgeranyl diphosphate(3-)	CC(C)=CCC/C(C)=C(\C)COP(=O)([O-])OP(=O)([O-])[O-]	325.214	https://www.ebi.ac.uk/chebi/CHEBI:61984
+CHEBI:61987	2-methylisoborneol	CC1(C)[C@@H]2CC[C@@]1(C)[C@](C)(O)C2	168.280	https://www.ebi.ac.uk/chebi/CHEBI:61987
+CHEBI:62224	(-)-7-epi-alpha-selinene	C=C(C)[C@H]1CC[C@@]2(C)CCC=C(C)[C@@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62224
+CHEBI:62262	isomultiflorenol	CC1(C)CC[C@]2(C)CC[C@]3(C)C4=C(CC[C@@]3(C)[C@@H]2C1)[C@@]1(C)CC[C@H](O)C(C)(C)[C@@H]1CC4	426.729	https://www.ebi.ac.uk/chebi/CHEBI:62262
+CHEBI:62416	dammarenediol-II	CC(C)=CCC[C@](C)(O)[C@H]1CC[C@]2(C)[C@@H]1CC[C@@H]1[C@@]3(C)CC[C@H](O)C(C)(C)[C@@H]3CC[C@]12C	444.744	https://www.ebi.ac.uk/chebi/CHEBI:62416
+CHEBI:62417	arabidiol	CC(C)=CCC/C(C)=C/CC[C@@](C)(O)[C@@H]1CC[C@H]2[C@@]1(C)CC[C@H]1C(C)(C)[C@@H](O)CC[C@]21C	444.744	https://www.ebi.ac.uk/chebi/CHEBI:62417
+CHEBI:62432	abscisates	CC1=CC(=O)CC(C)(C)C1(O)/C=C/C(C)=CC(=O)[O-]	263.313	https://www.ebi.ac.uk/chebi/CHEBI:62432
+CHEBI:62447	dammara-20,24-diene	C=C(CCC=C(C)C)[C@H]1CC[C@]2(C)[C@@H]1CC[C@@H]1[C@@]3(C)CCCC(C)(C)[C@@H]3CC[C@]12C	410.730	https://www.ebi.ac.uk/chebi/CHEBI:62447
+CHEBI:62452	camelliol C	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C=C(\C)CC[C@@H]1C(C)=CC[C@H](O)C1(C)C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:62452
+CHEBI:62455	germanicol	CC1(C)C=C2[C@H]3CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@@]4(C)[C@]3(C)CC[C@@]2(C)CC1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:62455
+CHEBI:62456	cucurbitadienol	CC(C)=CCC[C@@H](C)[C@H]1CC[C@@]2(C)[C@@H]3CC=C4[C@@H](CC[C@H](O)C4(C)C)[C@]3(C)CC[C@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:62456
+CHEBI:62457	(17Z)-protosta-17(20),24-dien-3beta-ol	CC(C)=CCC/C(C)=C1/CC[C@@]2(C)[C@H]1CC[C@H]1[C@@]3(C)CC[C@H](O)C(C)(C)[C@@H]3CC[C@@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:62457
+CHEBI:62513	gamma-eudesmol	CC1=C2C[C@H](C(C)(C)O)CC[C@@]2(C)CCC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:62513
+CHEBI:62514	10-epi-gamma-eudesmol	CC1=C2C[C@H](C(C)(C)O)CC[C@]2(C)CCC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:62514
+CHEBI:62641	perillate	C=C(C)C1CC=C(C(=O)[O-])CC1	165.212	https://www.ebi.ac.uk/chebi/CHEBI:62641
+CHEBI:62735	lupan-3beta,20-diol	CC(C)(O)[C@@H]1CC[C@]2(C)CC[C@]3(C)[C@H](CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@]43C)[C@@H]12	444.744	https://www.ebi.ac.uk/chebi/CHEBI:62735
+CHEBI:62753	alpha-longipinene	CC1=CCC2C3C1C2(C)CCCC3(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62753
+CHEBI:62756	(-)-exo-alpha-bergamotene	CC(C)=CCC[C@]1(C)[C@H]2CC=C(C)[C@@H]1C2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62756
+CHEBI:62760	(-)-beta-curcumene	CC(C)=CCC[C@@H](C)C1=CCC(C)=CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62760
+CHEBI:62762	(+)-2-epi-prezizaene	C=C1[C@@H]2CC[C@]3(C2)[C@H](C)CC[C@@H]3C1(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62762
+CHEBI:62855	(-)-beta-elemene	C=C[C@]1(C)CC[C@@H](C(=C)C)C[C@H]1C(=C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:62855
+CHEBI:63190	(+)-beta-caryophyllene	C=C1CC/C=C(\C)CC[C@H]2[C@H]1CC2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63190
+CHEBI:63196	(+)-caryolan-1-ol	CC1(C)C[C@@H]2[C@@H]1CC[C@@]1(C)CCC[C@]2(O)C1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:63196
+CHEBI:63203	(-)-gamma-cadinene	C=C1CC[C@H](C(C)C)[C@H]2C=C(C)CC[C@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63203
+CHEBI:63205	(+)-gamma-cadinene	C=C1CC[C@@H](C(C)C)[C@@H]2C=C(C)CC[C@@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63205
+CHEBI:63244	pentalen-13-al	C[C@@H]1CC[C@H]2C(C=O)=C[C@@H]3CC(C)(C)C[C@@]132	218.340	https://www.ebi.ac.uk/chebi/CHEBI:63244
+CHEBI:63443	alpha-guaiene	C=C(C)[C@@H]1CC[C@H](C)C2=C(C1)[C@@H](C)CC2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63443
+CHEBI:63444	viridiflorene	CC1=C2CC[C@@H](C)[C@H]2[C@H]2[C@@H](CC1)C2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63444
+CHEBI:63445	5-epi-alpha-selinene	C=C(C)[C@@H]1CC[C@@]2(C)CCC=C(C)[C@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63445
+CHEBI:63446	(-)-cubebol	CC(C)[C@@H]1CC[C@@H](C)[C@@]23CC[C@](C)(O)[C@@H]2[C@@H]13	222.372	https://www.ebi.ac.uk/chebi/CHEBI:63446
+CHEBI:63447	delta-guaiene	C=C(C)[C@@H]1CCC(C)=C2CC[C@H](C)[C@@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63447
+CHEBI:63459	shionone	CC(C)=CCC[C@]1(C)CC[C@]2(C)[C@H]3CC[C@@]4(C)[C@@H](CCC(=O)[C@@H]4C)[C@]3(C)CC[C@@]2(C)C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63459
+CHEBI:63460	parkeol	CC(C)=CCC[C@@H](C)[C@H]1CC[C@@]2(C)[C@@H]3CC[C@H]4C(C)(C)[C@@H](O)CC[C@]4(C)C3=CC[C@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63460
+CHEBI:63461	achilleol B	C=C1CC[C@H](O)C(C)(C)[C@@H]1CC/C(C)=C/CCC1=C(C)CC[C@@]2(C)CCC(C)(C)C[C@@H]12	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63461
+CHEBI:63462	glutinol	CC1(C)CC[C@]2(C)CC[C@]3(C)[C@H]4CC=C5[C@@H](CC[C@H](O)C5(C)C)[C@]4(C)CC[C@@]3(C)[C@@H]2C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63462
+CHEBI:63463	baccharis oxide	CC(C)=CCC[C@]1(C)CC[C@]2(C)[C@H]3CC[C@H]4C(C)(C)[C@@H]5CC[C@]4(O5)[C@]3(C)CC[C@@]2(C)C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63463
+CHEBI:63464	alpha-seco-amyrin	CC1=CC[C@H]2C(C)(C)[C@@H](O)CC[C@]2(C)[C@H]1CCC1=C(C)CC[C@@]2(C)CC[C@@H](C)[C@H](C)[C@@H]12	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63464
+CHEBI:63465	marneral	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC[C@]1(C)[C@H](C)CCC(=C(C)C)[C@H]1CCC=O	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63465
+CHEBI:63466	beta-seco-amyrin	CC1=CC[C@H]2C(C)(C)[C@@H](O)CC[C@]2(C)[C@H]1CCC1=C(C)CC[C@@]2(C)CCC(C)(C)C[C@@H]12	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63466
+CHEBI:63467	delta-amyrin	CC1(C)CC[C@]2(C)CC[C@]3(C)C(=C2C1)CC[C@@H]1[C@@]2(C)CC[C@H](O)C(C)(C)[C@@H]2CC[C@]13C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63467
+CHEBI:63468	tirucalla-7,24-dien-3beta-ol	CC(C)=CCC[C@H](C)[C@@H]1CC[C@]2(C)C3=CC[C@H]4C(C)(C)[C@@H](O)CC[C@]4(C)[C@H]3CC[C@@]12C	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63468
+CHEBI:63682	(5S,9S,10S,13E)-labda-7,13-dien-15-yl diphosphate(3-)	CC1=CC[C@H]2C(C)(C)CCC[C@]2(C)[C@H]1CC/C(C)=C/COP(=O)([O-])OP(=O)([O-])[O-]	447.425	https://www.ebi.ac.uk/chebi/CHEBI:63682
+CHEBI:63683	(13E)-labda-7,13-dien-15-ol	CC1=CC[C@H]2C(C)(C)CCC[C@]2(C)[C@H]1CC/C(C)=C/CO	290.491	https://www.ebi.ac.uk/chebi/CHEBI:63683
+CHEBI:63696	gamma-curcumene	CC(C)=CCC[C@@H](C)C1=CC=C(C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63696
+CHEBI:63701	(-)-alpha-cuprenene	CC1=CC=C([C@@]2(C)CCCC2(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63701
+CHEBI:63702	avermitilol	C[C@@H]1CC[C@H](O)[C@@]2(C)CC[C@@H]3[C@H]([C@H]12)C3(C)C	222.372	https://www.ebi.ac.uk/chebi/CHEBI:63702
+CHEBI:63703	(-)-delta-cadinene	CC1=C[C@H]2C(=C(C)CC[C@@H]2C(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63703
+CHEBI:63704	(+)-Tau-muurolol	CC1=C[C@@H]2[C@@H](C(C)C)CC[C@@](C)(O)[C@@H]2CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:63704
+CHEBI:63707	syn-labda-8(17),12E,14-triene	C=C/C(C)=C/C[C@@H]1C(=C)CC[C@H]2C(C)(C)CCC[C@]12C	272.476	https://www.ebi.ac.uk/chebi/CHEBI:63707
+CHEBI:63708	isopimara-8(14),15-diene	C=C[C@]1(C)C=C2CC[C@H]3C(C)(C)CCC[C@]3(C)[C@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:63708
+CHEBI:63709	bicyclogermacrene	C/C1=C\[C@H]2[C@@H](CC/C(C)=C/CC1)C2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63709
+CHEBI:63710	7-epi-sesquithujene	CC(C)=CCC[C@@H](C)[C@@]12CC=C(C)[C@@H]1C2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63710
+CHEBI:63711	sesquithujene	CC(C)=CCC[C@H](C)[C@@]12CC=C(C)[C@@H]1C2	204.357	https://www.ebi.ac.uk/chebi/CHEBI:63711
+CHEBI:63712	baruol	CC(C)=CCC[C@]1(C)CC[C@]2(C)[C@H]3CC=C4[C@@H](CC[C@H](O)C4(C)C)[C@]3(C)CC[C@@]2(C)C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:63712
+CHEBI:63892	zerumbone	C/C1=C\CC(C)(C)/C=C/C(=O)/C(C)=C/CC1	218.340	https://www.ebi.ac.uk/chebi/CHEBI:63892
+CHEBI:63893	8-hydroxy-alpha-humulene	C/C1=C\CC(C)(C)/C=C/C(O)/C(C)=C/CC1	220.356	https://www.ebi.ac.uk/chebi/CHEBI:63893
+CHEBI:64232	(3S,6R)-6-isopropenyl-3-methyloxepan-2-one	C=C(C)[C@H]1CC[C@H](C)C(=O)OC1	168.236	https://www.ebi.ac.uk/chebi/CHEBI:64232
+CHEBI:64234	3-isopropenyl-6-oxoheptanoate	C=C(C)C(CCC(C)=O)CC(=O)[O-]	183.227	https://www.ebi.ac.uk/chebi/CHEBI:64234
+CHEBI:64239	(6E)-8-oxogeranial	C/C(C=O)=C\CC/C(C)=C/C=O	166.220	https://www.ebi.ac.uk/chebi/CHEBI:64239
+CHEBI:64259	(6E)-8-oxolinalool	C=CC(C)(O)CC/C=C(\C)C=O	168.236	https://www.ebi.ac.uk/chebi/CHEBI:64259
+CHEBI:64266	tricyclene	CC1(C)C2CC3C(C2)C31C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:64266
+CHEBI:64280	(E)-beta-ocimene	C=C/C(C)=C/CC=C(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:64280
+CHEBI:64283	copal-8-ol diphosphate(3-)	C/C(=C\COP(=O)([O-])OP(=O)([O-])[O-])CC[C@@H]1[C@@]2(C)CCCC(C)(C)[C@@H]2CC[C@@]1(C)O	465.440	https://www.ebi.ac.uk/chebi/CHEBI:64283
+CHEBI:64361	beta-sesquiphellandrene	C=C1C=C[C@@H]([C@@H](C)CCC=C(C)C)CC1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:64361
+CHEBI:64688	artemisinic aldehyde	C=C(C=O)[C@@H]1CC[C@@H](C)[C@@H]2CCC(C)=C[C@@H]21	218.340	https://www.ebi.ac.uk/chebi/CHEBI:64688
+CHEBI:64691	(11R)-dihydroartemisinic aldehyde	CC1=C[C@H]2[C@@H](CC1)[C@H](C)CC[C@H]2[C@@H](C)C=O	220.356	https://www.ebi.ac.uk/chebi/CHEBI:64691
+CHEBI:64782	(+)-artemisinate	C=C(C(=O)[O-])[C@@H]1CC[C@@H](C)[C@@H]2CCC(C)=C[C@@H]21	233.331	https://www.ebi.ac.uk/chebi/CHEBI:64782
+CHEBI:64784	[(1R)-2,2,3-trimethyl-5-oxocyclopent-3-enyl]acetyl-CoA(4-)	CC1=CC(=O)[C@H](CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]2O[C@@H](N3C=NC4=C3N=CN=C4N)[C@H](O)[C@@H]2OP(=O)([O-])[O-])C1(C)C	927.713	https://www.ebi.ac.uk/chebi/CHEBI:64784
+CHEBI:64785	[(2R)-3,3,4-trimethyl-6-oxo-3,6-dihydro-1H-pyran-2-yl]acetyl-CoA(4-)	CC1=CC(=O)O[C@H](CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]2O[C@@H](N3C=NC4=C3N=CN=C4N)[C@H](O)[C@@H]2OP(=O)([O-])[O-])C1(C)C	943.712	https://www.ebi.ac.uk/chebi/CHEBI:64785
+CHEBI:64797	alpha-muurolene	CC1=C[C@@H]2[C@H](CC1)C(C)=CC[C@H]2C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:64797
+CHEBI:64798	gamma-muurolene	C=C1CC[C@@H](C(C)C)[C@@H]2C=C(C)CC[C@H]12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:64798
+CHEBI:64799	beta-copaene	C=C1CC[C@H]2[C@H]3C1[C@@]2(C)CC[C@H]3C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:64799
+CHEBI:64801	(R)-tetraprenyl-beta-curcumene	CC(C)=CCC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC/C(C)=C/CC[C@@H](C)C1=CCC(C)=CC1	476.833	https://www.ebi.ac.uk/chebi/CHEBI:64801
+CHEBI:65037	miltiradiene	CC(C)C1=CCC2=C(CC[C@H]3C(C)(C)CCC[C@]23C)C1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:65037
+CHEBI:6530	longifolene	C=C1C2CCC3C2C(C)(C)CCCC13C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:6530
+CHEBI:6570	lupeol	C=C(C)[C@@H]1CC[C@]2(C)CC[C@]3(C)[C@H](CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@]43C)[C@@H]12	426.729	https://www.ebi.ac.uk/chebi/CHEBI:6570
+CHEBI:66349	variecolin	C=C(C)[C@H]1CC[C@@]2(C)CC[C@]3(C)C[C@H]4[C@@H](C)CC(=O)[C@H]4/C(C=O)=C\C[C@H]3[C@H]12	368.561	https://www.ebi.ac.uk/chebi/CHEBI:66349
+CHEBI:67182	sporulenol	CC1=CCC([C@H](C)CC[C@@H]2[C@@]3(C)CC[C@H]4[C@@](C)(CC[C@H]5C(C)(C)CCC[C@]45C)[C@@H]3CC[C@@]2(C)O)=CC1	494.848	https://www.ebi.ac.uk/chebi/CHEBI:67182
+CHEBI:67260	geranate	CC(C)=CCC/C(C)=C/C(=O)[O-]	167.228	https://www.ebi.ac.uk/chebi/CHEBI:67260
+CHEBI:67988	ginsenoside Rd	CC(C)=CCC[C@](C)(O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O)C(C)(C)[C@@H]3CC[C@]12C	947.166	https://www.ebi.ac.uk/chebi/CHEBI:67988
+CHEBI:67991	(20S)-ginsenoside Rg3	CC(C)=CCC[C@](C)(O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O)C(C)(C)[C@@H]3CC[C@]12C	785.025	https://www.ebi.ac.uk/chebi/CHEBI:67991
+CHEBI:68624	cis-abienol	C=C/C(C)=C\C[C@@H]1[C@@]2(C)CCCC(C)(C)[C@@H]2CC[C@@]1(C)O	290.491	https://www.ebi.ac.uk/chebi/CHEBI:68624
+CHEBI:68625	valerena-4,7(11)-diene	CC(C)=C[C@@H]1CC[C@@H](C)[C@H]2CCC(C)=C12	204.357	https://www.ebi.ac.uk/chebi/CHEBI:68625
+CHEBI:68655	Delta(6)-protoilludene	CC1=C2CC[C@]2(C)[C@H]2CC(C)(C)C[C@H]2C1	204.357	https://www.ebi.ac.uk/chebi/CHEBI:68655
+CHEBI:68658	(+)-epi-alpha-bisabolol	CC(C)=CCC[C@](C)(O)[C@H]1CC=C(C)CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:68658
+CHEBI:68666	(-)-alpha-isocomene	CC1=C[C@]2(C)CCC[C@@]23[C@H](C)CC[C@@]13C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:68666
+CHEBI:68667	(E)-2-epi-beta-caryophyllene	C=C1CC/C=C(\C)CC[C@@H]2[C@H]1CC2(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:68667
+CHEBI:69021	berkeleydione	C=C1[C@@]2(C)C[C@H]3C(C)=C4CC(=O)OC(C)(C)C4=CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	456.535	https://www.ebi.ac.uk/chebi/CHEBI:69021
+CHEBI:69022	berkeleytrione	C=C1[C@@]2(C)C[C@H]3[C@@]4(C)C(=CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O)C(C)(C)C(=O)C[C@H]4O	458.551	https://www.ebi.ac.uk/chebi/CHEBI:69022
+CHEBI:69023	preaustinoid A	C=C1[C@@]2(C)C[C@H]3[C@]4(C)CCC(=O)C(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	444.568	https://www.ebi.ac.uk/chebi/CHEBI:69023
+CHEBI:69024	berkeleyone A	C=C1[C@@]2(C)C[C@H]3[C@]4(C)CC[C@@H](O)C(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	446.584	https://www.ebi.ac.uk/chebi/CHEBI:69024
+CHEBI:69025	berkeleyone B	C=C1[C@@]2(C)C[C@@H]3[C@](C)(CC=C4C(C)(C)OC(=O)CC[C@]43C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	458.551	https://www.ebi.ac.uk/chebi/CHEBI:69025
+CHEBI:69026	preaustinoid A1	C=C1[C@@]2(C)C[C@H]3[C@]4(C)CCC(=O)OC(C)(C)[C@H]4CC[C@]3(C)[C@]1(C(=O)OC)C(=O)[C@@](C)(O)C2=O	460.567	https://www.ebi.ac.uk/chebi/CHEBI:69026
+CHEBI:7	(+)-car-3-ene	CC1=CC[C@@H]2[C@H](C1)C2(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:7
+CHEBI:71410	7-methyl-3-oxooct-6-enoyl-CoA(4-)	CC(C)=CCCC(=O)CC(=O)SCCNC(=O)CCNC(=O)[C@H](O)C(C)(C)COP(=O)([O-])OP(=O)([O-])OC[C@H]1O[C@@H](N2C=NC3=C2N=CN=C3N)[C@H](O)[C@@H]1OP(=O)([O-])[O-]	915.702	https://www.ebi.ac.uk/chebi/CHEBI:71410
+CHEBI:72776	kunzeaol	C/C1=C\[C@H](O)[C@@H](C(C)C)CC/C(C)=C/CC1	222.372	https://www.ebi.ac.uk/chebi/CHEBI:72776
+CHEBI:74299	geranyllinalool	C=CC(C)(O)CC/C=C(\C)CC/C=C(\C)CCC=C(C)C	290.491	https://www.ebi.ac.uk/chebi/CHEBI:74299
+CHEBI:74322	4,8,12-trimethyltrideca 1,3,7,11-tetraene	C=C/C=C(\C)CC/C=C(\C)CCC=C(C)C	218.384	https://www.ebi.ac.uk/chebi/CHEBI:74322
+CHEBI:75950	(20S)-protopanaxadiol	CC(C)=CCC[C@](C)(O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O)C(C)(C)[C@@H]3CC[C@]12C	460.743	https://www.ebi.ac.uk/chebi/CHEBI:75950
+CHEBI:76625	11,12-EET(1-)	CCCCC/C=C\CC1OC1C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:76625
+CHEBI:76627	19-HETE(1-)	CC(O)CCC/C=C\C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:76627
+CHEBI:76634	17(R),18(S)-EETeTr(1-)	CC[C@@H]1O[C@@H]1C/C=C\C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	317.449	https://www.ebi.ac.uk/chebi/CHEBI:76634
+CHEBI:76636	19-HEPE(1-)	CC(O)/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	317.449	https://www.ebi.ac.uk/chebi/CHEBI:76636
+CHEBI:76954	(13S)-vitexifolin A	C=C[C@@](C)(O)CC[C@@H]1C(=C)CC[C@H]2C(C)(C)CCC[C@]12C	290.491	https://www.ebi.ac.uk/chebi/CHEBI:76954
+CHEBI:77016	(4Z,7Z,10Z,13Z,16Z,19Z)-docosahexaenoate	CC/C=C\C/C=C\C/C=C\C/C=C\C/C=C\C/C=C\CCC(=O)[O-]	327.488	https://www.ebi.ac.uk/chebi/CHEBI:77016
+CHEBI:77092	fenbendazole	COC(=O)NC1=NC2=CC(SC3=CC=CC=C3)=CC=C2N1	299.355	https://www.ebi.ac.uk/chebi/CHEBI:77092
+CHEBI:77145	ginsenoside F2	CC(C)=CCC[C@](C)(O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O)C(C)(C)[C@@H]3CC[C@]12C	785.025	https://www.ebi.ac.uk/chebi/CHEBI:77145
+CHEBI:77146	ginsenoside C-K	CC(C)=CCC[C@](C)(O[C@@H]1O[C@H](CO)[C@@H](O)[C@H](O)[C@H]1O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O)C(C)(C)[C@@H]3CC[C@]12C	622.884	https://www.ebi.ac.uk/chebi/CHEBI:77146
+CHEBI:77147	(20S)-ginsenoside Rh2	CC(C)=CCC[C@](C)(O)[C@H]1CC[C@]2(C)[C@@H]1[C@H](O)C[C@@H]1[C@@]3(C)CC[C@H](O[C@@H]4O[C@H](CO)[C@@H](O)[C@H](O)[C@H]4O)C(C)(C)[C@@H]3CC[C@]12C	622.884	https://www.ebi.ac.uk/chebi/CHEBI:77147
+CHEBI:77895	9(R)-HODE(1-)	CCCCC/C=C\C=C\[C@H](O)CCCCCCCC(=O)[O-]	295.443	https://www.ebi.ac.uk/chebi/CHEBI:77895
+CHEBI:78043	(5Z,8Z,11Z)-icosatrienoate	CCCCCCCC/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	305.482	https://www.ebi.ac.uk/chebi/CHEBI:78043
+CHEBI:78293	ophiobolin F	CC(C)=CCC[C@H](C)[C@H]1CC[C@]2(C)C[C@H]3[C@H](CC[C@@]3(C)O)/C(C)=C\C[C@@H]12	358.610	https://www.ebi.ac.uk/chebi/CHEBI:78293
+CHEBI:78352	cyclooctat-9-en-7-ol	CC(C)[C@H]1CC[C@]2(C)C[C@@H]3[C@H](C)CC[C@H]3[C@@](C)(O)C/C=C/12	290.491	https://www.ebi.ac.uk/chebi/CHEBI:78352
+CHEBI:78370	cyclooctatin	CC(C)[C@H]1CC[C@]2(C)C[C@@H]3[C@H](CO)C[C@@H](O)[C@H]3[C@@](C)(O)C/C=C/12	322.489	https://www.ebi.ac.uk/chebi/CHEBI:78370
+CHEBI:78836	11(R)-HETE(1-)	CCCCC/C=C\C=C\[C@H](O)C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:78836
+CHEBI:78837	15(R)-HETE(1-)	CCCCC[C@@H](O)/C=C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:78837
+CHEBI:78884	4-terpineol	CC1=CCC(O)(C(C)C)CC1	154.253	https://www.ebi.ac.uk/chebi/CHEBI:78884
+CHEBI:7940	patchouli alcohol	C[C@H]1CC[C@@]2(O)C(C)(C)[C@@H]3CC[C@@]2(C)[C@H]1C3	222.372	https://www.ebi.ac.uk/chebi/CHEBI:7940
+CHEBI:80749	alpha-cadinene	CC1=C[C@@H]2[C@@H](CC1)C(C)=CC[C@H]2C(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:80749
+CHEBI:80940	beta-gurjunene	C=C1CC[C@H]2[C@@H]1[C@H]1[C@@H](CC[C@H]2C)C1(C)C	204.357	https://www.ebi.ac.uk/chebi/CHEBI:80940
+CHEBI:8210	pimara-8(14),15-diene	C=C[C@@]1(C)C=C2CC[C@H]3C(C)(C)CCC[C@]3(C)[C@H]2CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:8210
+CHEBI:82798	cembrene C	CC(C)=C1C/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:82798
+CHEBI:82799	(R)-nephthenol	C/C1=C\CC/C(C)=C/C[C@H](C(C)(C)O)CC/C(C)=C/CC1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:82799
+CHEBI:82800	(R)-cembrene A	C=C(C)[C@H]1C/C=C(\C)CC/C=C(\C)CC/C=C(\C)CC1	272.476	https://www.ebi.ac.uk/chebi/CHEBI:82800
+CHEBI:82801	(1S,4E,8E,12E)-2,2,5,9,13-pentamethylcyclopentadeca-4,8,12-trien-1-ol	C/C1=C\CC/C(C)=C/CC(C)(C)[C@@H](O)CC/C(C)=C/CC1	290.491	https://www.ebi.ac.uk/chebi/CHEBI:82801
+CHEBI:83343	12(R)-HETE(1-)	CCCCC/C=C\C[C@@H](O)/C=C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:83343
+CHEBI:84024	14,15-EET(1-)	CCCCCC1OC1C/C=C\C/C=C\C/C=C\CCCC(=O)[O-]	319.465	https://www.ebi.ac.uk/chebi/CHEBI:84024
+CHEBI:87574	(Z)-beta-ocimene	C=C/C(C)=C\CC=C(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:87574
+CHEBI:88107	geranyl phosphate(2-)	CC(C)=CCC/C(C)=C/COP(=O)([O-])[O-]	232.216	https://www.ebi.ac.uk/chebi/CHEBI:88107
+CHEBI:88840	isoterpinolene	CC(C)=C1C=CC(C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:88840
+CHEBI:89	(-)-camphene	C=C1[C@@H]2CC[C@@H](C2)C1(C)C	136.238	https://www.ebi.ac.uk/chebi/CHEBI:89
+CHEBI:9053	sclareol	C=C[C@](C)(O)CC[C@@H]1[C@@]2(C)CCCC(C)(C)[C@@H]2CC[C@@]1(C)O	308.506	https://www.ebi.ac.uk/chebi/CHEBI:9053
+CHEBI:9402	taraxerol	CC1(C)CC[C@]2(C)CC=C3[C@]4(C)CC[C@H]5C(C)(C)[C@@H](O)CC[C@]5(C)[C@H]4CC[C@@]3(C)[C@@H]2C1	426.729	https://www.ebi.ac.uk/chebi/CHEBI:9402
+CHEBI:9457	terpinolene	CC1=CCC(=C(C)C)CC1	136.238	https://www.ebi.ac.uk/chebi/CHEBI:9457
+CHEBI:9493	tetrahymanol	CC1(C)CCC[C@]2(C)[C@H]3CC[C@@H]4[C@@]5(C)CC[C@H](O)C(C)(C)[C@@H]5CC[C@@]4(C)[C@]3(C)CC[C@@H]12	428.745	https://www.ebi.ac.uk/chebi/CHEBI:9493
+CHEBI:98	(S)-linalool	C=C[C@@](C)(O)CCC=C(C)C	154.253	https://www.ebi.ac.uk/chebi/CHEBI:98

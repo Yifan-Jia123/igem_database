@@ -4,7 +4,6 @@
 !.env.example
 !.env.*.example
 /backend/.env
-/etl/.env
 
 # Python caches and virtual environments
 __pycache__/

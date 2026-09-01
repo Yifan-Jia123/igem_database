@@ -28,15 +28,16 @@ python -m venv venv
 venv\Scripts\activate       # Windows
 # source venv/bin/activate  # macOS/Linux
 
-# 4. 创建本地配置（文件已被 .gitignore 忽略）
+# 4. 创建后端本地配置（可选，文件已被 .gitignore 忽略）
 copy backend\.env.example backend\.env       # Windows
-copy etl\.env.example etl\.env               # Windows
 # cp backend/.env.example backend/.env         # macOS/Linux
-# cp etl/.env.example etl/.env                 # macOS/Linux
-# 然后编辑两个 .env，填写本机 MySQL 密码等配置
+# 然后编辑 backend/.env，填写本机 MySQL 密码等配置
+# ETL 使用下面的 IGEM_* 系统环境变量，不需要 etl/.env
 
 # 5. 安装 ETL 依赖并导入数据
 pip install -r etl/requirements.txt
+set IGEM_DB_PASSWORD=你的密码            # Windows
+# export IGEM_DB_PASSWORD=你的密码        # macOS/Linux
 python etl/etl_run.py
 
 # 6. 启动后端
@@ -62,7 +63,6 @@ igem_database/
 ├── for_*/                      # 原始 TSV 数据（UniProt、Rhea、ChEBI）
 ├── etl/                        # ETL 脚本：TSV → MySQL
 │   ├── config.py               # 数据库连接和数据目录配置
-│   ├── .env.example            # ETL 本地配置模板
 │   ├── etl_run.py              # 一键执行所有步骤
 │   └── etl_*.py                # 各表导入脚本
 ├── backend/                    # FastAPI 后端（Python）
@@ -100,10 +100,10 @@ igem_database/
 | `IGEM_BLAST_DB`     | `blast_db/igem_enzymes` | BLAST 数据库路径 |
 | `IGEM_DATA_DIR`     | 项目根目录    | ETL 原始 TSV 数据目录 |
 
-`backend/.env.example` 和 `etl/.env.example` 是提交到 Git 的配置模板。
-首次使用时复制为对应的 `.env` 文件，再填写本机配置；真实 `.env` 文件不会提交到 Git。
-ETL 的 `IGEM_DATA_DIR` 留空时默认读取项目根目录下的 `for_*` 目录。
-命令行环境变量优先于 `.env` 文件中的同名变量。
+`backend/.env.example` 是可选的后端本地配置模板；真实 `.env` 文件不会提交到 Git。
+ETL 不使用 `.env` 文件，运行前直接设置 `IGEM_*` 系统环境变量即可。
+ETL 的 `IGEM_DATA_DIR` 未设置时默认读取项目根目录下的 `for_*` 目录。
+后端的系统环境变量会覆盖 `backend/.env` 中的同名配置。
 
 ---
 

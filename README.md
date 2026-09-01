@@ -28,19 +28,23 @@ python -m venv venv
 venv\Scripts\activate       # Windows
 # source venv/bin/activate  # macOS/Linux
 
-# 4. 安装 ETL 依赖并导入数据
+# 4. 创建本地配置（文件已被 .gitignore 忽略）
+copy backend\.env.example backend\.env       # Windows
+copy etl\.env.example etl\.env               # Windows
+# cp backend/.env.example backend/.env         # macOS/Linux
+# cp etl/.env.example etl/.env                 # macOS/Linux
+# 然后编辑两个 .env，填写本机 MySQL 密码等配置
+
+# 5. 安装 ETL 依赖并导入数据
 pip install -r etl/requirements.txt
-set IGEM_DB_PASSWORD=你的密码            # Windows
-# export IGEM_DB_PASSWORD=你的密码        # macOS/Linux
 python etl/etl_run.py
 
-# 5. 启动后端
+# 6. 启动后端
 pip install -r backend/requirements.txt
-set IGEM_DB_PASSWORD=你的密码
 cd backend
 uvicorn app.main:app --reload --port 8000
 
-# 6. 启动前端（另开一个终端）
+# 7. 启动前端（另开一个终端）
 cd frontend
 npm install
 npm run dev
@@ -55,9 +59,10 @@ npm run dev
 ```
 igem_database/
 ├── sql/schema.sql              # MySQL 建表脚本（核心表 + 原始数据索引表）
-├── database 1st data/          # 原始 TSV 数据（UniProt、Rhea、ChEBI）
+├── for_*/                      # 原始 TSV 数据（UniProt、Rhea、ChEBI）
 ├── etl/                        # ETL 脚本：TSV → MySQL
-│   ├── config.py               # 数据库连接配置
+│   ├── config.py               # 数据库连接和数据目录配置
+│   ├── .env.example            # ETL 本地配置模板
 │   ├── etl_run.py              # 一键执行所有步骤
 │   └── etl_*.py                # 各表导入脚本
 ├── backend/                    # FastAPI 后端（Python）
@@ -71,7 +76,7 @@ igem_database/
 │   │   ├── services/           # 业务逻辑
 │   │   └── utils/              # 工具函数
 │   ├── requirements.txt
-│   └── .env                    # 数据库密码（不提交到 git）
+│   └── .env.example             # 后端本地配置模板
 ├── frontend/                   # React + Vite 前端
 │   ├── src/
 │   ├── package.json
@@ -92,8 +97,13 @@ igem_database/
 | `IGEM_DB_PASSWORD`  | *(必填)*      | MySQL 密码         |
 | `IGEM_DB_NAME`      | `igem_terpene`| 数据库名           |
 | `IGEM_BLAST_BIN`    | `blastp`      | BLAST 可执行文件路径 |
+| `IGEM_BLAST_DB`     | `blast_db/igem_enzymes` | BLAST 数据库路径 |
+| `IGEM_DATA_DIR`     | 项目根目录    | ETL 原始 TSV 数据目录 |
 
-运行 ETL 或后端前必须设置这些变量。后端可通过 `backend/.env` 文件配置。
+`backend/.env.example` 和 `etl/.env.example` 是提交到 Git 的配置模板。
+首次使用时复制为对应的 `.env` 文件，再填写本机配置；真实 `.env` 文件不会提交到 Git。
+ETL 的 `IGEM_DATA_DIR` 留空时默认读取项目根目录下的 `for_*` 目录。
+命令行环境变量优先于 `.env` 文件中的同名变量。
 
 ---
 

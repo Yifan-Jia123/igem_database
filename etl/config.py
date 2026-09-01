@@ -1,7 +1,15 @@
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "database 1st data")
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BASE_DIR.parent
+load_dotenv(BASE_DIR / ".env")
+
+# 仓库实际布局：原始 TSV 数据位于项目根目录下的 for_* 目录中
+_data_dir = os.getenv("IGEM_DATA_DIR", "").strip()
+DATA_DIR = Path(_data_dir).expanduser() if _data_dir else PROJECT_ROOT
 
 DB_CONFIG = {
     "host": os.getenv("IGEM_DB_HOST", "localhost"),

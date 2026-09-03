@@ -157,6 +157,7 @@ type GraphSearchMatch =
 export function CompoundGraphHome({
   onOpenSearch,
   onOpenNetwork,
+  onOpenStructure,
   onOpenDownloads,
   onOpenEnzyme,
   onToggleQueue,
@@ -165,6 +166,7 @@ export function CompoundGraphHome({
 }: {
   onOpenSearch: (query?: string) => void
   onOpenNetwork: () => void
+  onOpenStructure: () => void
   onOpenDownloads: () => void
   onOpenEnzyme: (enzymeId: string) => void
   onToggleQueue: (entry: string | Entity) => void
@@ -945,6 +947,7 @@ export function CompoundGraphHome({
           <nav className="graph-primary-nav" aria-label="Graph page navigation">
             <button type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Data Browser</button>
             <button type="button" onClick={onOpenNetwork}>Analysis</button>
+            <button type="button" onClick={onOpenStructure}>Structure search</button>
             <span>About</span>
             <span className="graph-user-chip">NJU - China 2026</span>
           </nav>

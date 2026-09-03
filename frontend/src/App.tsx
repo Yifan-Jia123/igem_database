@@ -5,6 +5,7 @@ import {
   CircleHelp,
   Database,
   Download,
+  FlaskConical,
   Menu,
   Network,
   Search,
@@ -18,6 +19,7 @@ import { EnzymeDetailView } from './graphExperience'
 import { DownloadsPage } from './pages/DownloadsPage'
 import { HomePage } from './pages/HomePage'
 import { SearchPage } from './pages/SearchPage'
+import { StructureSearchPage } from './pages/StructureSearchPage'
 import { csvCell, getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
@@ -33,6 +35,7 @@ type QueueEntry = string | Entity
 const navigation = [
   { view: 'home', label: 'Overview', icon: Sparkles },
   { view: 'search', label: 'Search library', icon: Search },
+  { view: 'structure', label: 'Structure search', icon: FlaskConical },
   { view: 'downloads', label: 'Download queue', icon: Download },
 ] as const
 
@@ -340,6 +343,7 @@ function App() {
               goTo('search')
             }}
             onOpenNetwork={() => goTo('home')}
+            onOpenStructure={() => goTo('structure')}
             onOpenDownloads={() => goTo('downloads')}
             onOpenEnzyme={(id) => goTo('enzyme', id)}
             onToggleQueue={toggleQueue}
@@ -383,6 +387,12 @@ function App() {
           />
         )}
 
+        {view === 'structure' && (
+          <StructureSearchPage
+            onOpenCompound={(id) => goTo('search', id)}
+          />
+        )}
+
         {view === 'downloads' && (
           <DownloadsPage
             downloadedItems={downloadedItems}
@@ -405,6 +415,8 @@ function viewLabel(view: View) {
 
     case 'search':
       return 'Search library'
+    case 'structure':
+      return 'Structure search'
     case 'downloads':
       return 'Download queue'
     case 'enzyme':

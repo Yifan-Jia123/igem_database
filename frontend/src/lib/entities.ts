@@ -2,7 +2,7 @@ import { Beaker, Dna, FlaskConical } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Entity, EntityKind } from '../types'
 
-export type View = 'home' | 'search' | 'downloads' | 'enzyme'
+export type View = 'home' | 'search' | 'structure' | 'downloads' | 'enzyme'
 export type SearchKind = 'all' | EntityKind
 
 export type FilterOptions = {

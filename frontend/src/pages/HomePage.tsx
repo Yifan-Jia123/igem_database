@@ -9,6 +9,7 @@ export function HomePage({
   downloadedItems: _downloadedItems,
   onOpenSearch,
   onOpenNetwork,
+  onOpenStructure,
   onOpenDownloads,
   onOpenEnzyme,
   onToggleQueue,
@@ -22,6 +23,7 @@ export function HomePage({
   downloadedItems: Entity[]
   onOpenSearch: (query?: string) => void
   onOpenNetwork: () => void
+  onOpenStructure: () => void
   onOpenDownloads: () => void
   onOpenEnzyme: (id: string) => void
   onToggleQueue: (entry: string | Entity) => void
@@ -32,6 +34,7 @@ export function HomePage({
     <CompoundGraphHome
       onOpenSearch={onOpenSearch}
       onOpenNetwork={onOpenNetwork}
+      onOpenStructure={onOpenStructure}
       onOpenDownloads={onOpenDownloads}
       onOpenEnzyme={onOpenEnzyme}
       onToggleQueue={onToggleQueue}

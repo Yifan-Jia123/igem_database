@@ -41,6 +41,5 @@ Thumbs.db
 # Local runtime/download artifacts
 /backend/downloads/
 /blast_db/
-/docs/ai-usage/
 /schema.out.txt
 /schema.err.txt

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -10,7 +10,10 @@ import {
   ExternalLink,
   Link2,
   Loader2,
+  Minus,
   Network,
+  Plus,
+  RotateCcw,
   Search,
   X,
 } from 'lucide-react'
@@ -52,6 +55,9 @@ const HOME_FORCE_COLLISION_STRENGTH = 0.5
 const HOME_FINAL_COLLISION_DISTANCE = 21.6
 const HOME_FINAL_COLLISION_ITERATIONS = 420
 const HOME_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+const HOME_ZOOM_MIN = 0.65
+const HOME_ZOOM_MAX = 3
+const HOME_ZOOM_STEP = 1.2
 const homeSearchModes = [
   { id: 'enzymeItems', label: 'Enzyme items' },
   { id: 'pathways', label: 'Pathways' },
@@ -179,6 +185,7 @@ export function CompoundGraphHome({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [positions, setPositions] = useState<Record<string, Point>>({})
   const [camera, setCamera] = useState<Point>({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null)
   const [expandedEdges, setExpandedEdges] = useState<HomeGraphEdge[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
@@ -203,6 +210,7 @@ export function CompoundGraphHome({
   const [nodeSize, setNodeSize] = useState(1.8)
   const [labelScale, setLabelScale] = useState(1.22)
   const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
+  const [isMapPanning, setIsMapPanning] = useState(false)
   const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<PanState | null>(null)
@@ -211,6 +219,9 @@ export function CompoundGraphHome({
   const graphRef = useRef<HomeGraphData | null>(null)
   const positionsRef = useRef<Record<string, Point>>({})
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
+  const zoomRef = useRef(1)
+  const cameraFrameRef = useRef<number | null>(null)
+  const pendingCameraRef = useRef<Point | null>(null)
   const expansionKeysRef = useRef<Set<string>>(new Set())
   const expandingRef = useRef(false)
 
@@ -224,7 +235,9 @@ export function CompoundGraphHome({
         setGraph(payload)
         const layout = createHomeLayout(payload)
         setPositions(layout.positions)
-        setCamera({ x: 0, y: 0 })
+        setMapCamera({ x: 0, y: 0 })
+        setZoom(1)
+        zoomRef.current = 1
         setSelectedNodeId(null)
         setSelectedPairKey(null)
         setExpandedEdges([])
@@ -252,6 +265,36 @@ export function CompoundGraphHome({
   useEffect(() => {
     cameraRef.current = camera
   }, [camera])
+
+  useEffect(() => {
+    zoomRef.current = zoom
+  }, [zoom])
+
+  useEffect(() => () => {
+    if (cameraFrameRef.current !== null) window.cancelAnimationFrame(cameraFrameRef.current)
+  }, [])
+
+  const setMapCamera = useCallback((nextCamera: Point) => {
+    if (cameraFrameRef.current !== null) {
+      window.cancelAnimationFrame(cameraFrameRef.current)
+      cameraFrameRef.current = null
+      pendingCameraRef.current = null
+    }
+    cameraRef.current = nextCamera
+    setCamera(nextCamera)
+  }, [])
+
+  const queueMapCamera = (nextCamera: Point) => {
+    cameraRef.current = nextCamera
+    pendingCameraRef.current = nextCamera
+    if (cameraFrameRef.current !== null) return
+    cameraFrameRef.current = window.requestAnimationFrame(() => {
+      cameraFrameRef.current = null
+      const pendingCamera = pendingCameraRef.current
+      pendingCameraRef.current = null
+      if (pendingCamera) setCamera(pendingCamera)
+    })
+  }
 
   useEffect(() => {
     const movePanel = (event: PointerEvent) => {
@@ -356,9 +399,8 @@ export function CompoundGraphHome({
   }, [mode, searchFilter, trimmedSearchValue])
 
   const focusCameraOnPoint = (point: Point, target: Point = { x: 58, y: 56 }) => {
-    const nextCamera = { x: target.x - point.x, y: target.y - point.y }
-    setCamera(nextCamera)
-    cameraRef.current = nextCamera
+    const zoomLevel = zoomRef.current
+    setMapCamera({ x: target.x - point.x * zoomLevel, y: target.y - point.y * zoomLevel })
   }
 
   const focusCameraOnNode = (compoundId: string, target: Point = { x: 38, y: 54 }) => {
@@ -418,6 +460,7 @@ export function CompoundGraphHome({
       originCamera: cameraRef.current,
       moved: false,
     }
+    setIsMapPanning(true)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
@@ -429,13 +472,9 @@ export function CompoundGraphHome({
     const panState = panRef.current
     const svg = svgRef.current
     if (!panState || panState.pointerId !== event.pointerId || !svg) return
-    const rect = svg.getBoundingClientRect()
-    const deltaX = ((event.clientX - panState.startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH
-    const deltaY = ((event.clientY - panState.startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT
-    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) panState.moved = true
-    const nextCamera = { x: panState.originCamera.x + deltaX, y: panState.originCamera.y + deltaY }
-    cameraRef.current = nextCamera
-    setCamera(nextCamera)
+    const delta = svgPointerDelta(svg, panState.startClientX, panState.startClientY, event.clientX, event.clientY)
+    if (Math.abs(delta.x) > 0.8 || Math.abs(delta.y) > 0.8) panState.moved = true
+    queueMapCamera({ x: panState.originCamera.x + delta.x, y: panState.originCamera.y + delta.y })
   }
 
   const finishMapPan = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -446,6 +485,8 @@ export function CompoundGraphHome({
     const panState = panRef.current
     if (!panState || panState.pointerId !== event.pointerId) return
     panRef.current = null
+    setIsMapPanning(false)
+    if (!panState.moved) clearPairSelection()
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
@@ -474,7 +515,7 @@ export function CompoundGraphHome({
     const dragState = nodeDragRef.current
     const svg = svgRef.current
     if (!dragState || dragState.pointerId !== pointerId || !svg) return false
-    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY)
+    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY, zoomRef.current)
     if (Math.abs(delta.x) > 0.35 || Math.abs(delta.y) > 0.35) dragState.moved = true
     const nextPoint = {
       x: dragState.originPoint.x + delta.x,
@@ -486,8 +527,6 @@ export function CompoundGraphHome({
     }
     positionsRef.current = nextPositions
     setPositions(nextPositions)
-    const direction = getNodeExpansionDirection(nextPoint, cameraRef.current)
-    if (dragState.moved && direction) void expandFromNodeAtEdge(dragState.nodeId, direction)
     return true
   }
 
@@ -599,7 +638,7 @@ export function CompoundGraphHome({
     await selectPair(pair)
   }
 
-  const clearPairSelection = () => {
+  const clearPairSelection = useCallback(() => {
     setSelectedPairKey(null)
     setExpandedEdges([])
     setSelectedEdgeId(null)
@@ -610,7 +649,54 @@ export function CompoundGraphHome({
     setActivePathway(null)
     setSelectedLibraryItem(null)
     setSearchFeedback(null)
+  }, [])
+
+  const setZoomAtPoint = useCallback((nextZoom: number, anchor: Point) => {
+    const currentZoom = zoomRef.current
+    const zoomLevel = clamp(nextZoom, HOME_ZOOM_MIN, HOME_ZOOM_MAX)
+    if (Math.abs(zoomLevel - currentZoom) < 0.001) return
+    const worldPoint = {
+      x: (anchor.x - cameraRef.current.x) / currentZoom,
+      y: (anchor.y - cameraRef.current.y) / currentZoom,
+    }
+    const nextCamera = {
+      x: anchor.x - worldPoint.x * zoomLevel,
+      y: anchor.y - worldPoint.y * zoomLevel,
+    }
+    zoomRef.current = zoomLevel
+    setZoom(zoomLevel)
+    setMapCamera(nextCamera)
+  }, [setMapCamera])
+
+  const handleMapWheel = useCallback((event: WheelEvent) => {
+    const svg = svgRef.current
+    if (!svg) return
+    event.preventDefault()
+    const anchor = svgClientPoint(svg, event.clientX, event.clientY)
+    const wheelScale = Math.exp(-event.deltaY * 0.0015)
+    setZoomAtPoint(zoomRef.current * wheelScale, anchor)
+  }, [setZoomAtPoint])
+
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    svg.addEventListener('wheel', handleMapWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', handleMapWheel)
+  }, [graph, handleMapWheel])
+
+  const resetMapView = () => {
+    zoomRef.current = 1
+    setZoom(1)
+    setMapCamera({ x: 0, y: 0 })
   }
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) clearPairSelection()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [clearPairSelection])
 
   const handleNodeSelect = (compoundId: string) => {
     setSelectedNodeId(compoundId)
@@ -630,7 +716,7 @@ export function CompoundGraphHome({
     if (!graph) return
     const layout = createHomeLayout(graph)
     setPositions(layout.positions)
-    setCamera({ x: 0, y: 0 })
+    resetMapView()
     setSelectedNodeId(null)
     setSelectedPairKey(null)
     setExpandedEdges([])
@@ -691,8 +777,8 @@ export function CompoundGraphHome({
       const payload = await loadHomeGraph({ centerCompoundId: sourceId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
       const merged = mergeHomeGraph(graphRef.current, payload)
       const seedPoint = positionsRef.current[sourceId] || {
-        x: 42 - cameraRef.current.x,
-        y: 54 - cameraRef.current.y,
+        x: (42 - cameraRef.current.x) / zoomRef.current,
+        y: (54 - cameraRef.current.y) / zoomRef.current,
       }
       const seededPositions = {
         ...positionsRef.current,
@@ -995,8 +1081,6 @@ export function CompoundGraphHome({
           <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('compound')}>Compounds</button>
           <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('enzyme')}>Enzymes</button>
           <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('reaction')}>Reactions</button>
-          <button className="graph-filter-link" type="button" onClick={clearPairSelection}>Clear highlights</button>
-
           <div className={`floating-pill mapping-pill ${controlsOpen ? 'is-open' : ''}`}>
             <button type="button" onClick={() => setControlsOpen((open) => !open)}>
               <span>Graph controls</span>
@@ -1020,12 +1104,13 @@ export function CompoundGraphHome({
                 </div>
                 <div className="control-menu-actions">
                   <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
-                  <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
-                  <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
                 </div>
               </div>
             )}
           </div>
+
+          <button className="graph-filter-link graph-filter-action" type="button" onClick={clearPairSelection}>Clear selection</button>
+          <button className="graph-filter-link graph-filter-action" type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Open search library</button>
 
           <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
             Downloading table
@@ -1063,7 +1148,7 @@ export function CompoundGraphHome({
             </defs>
             <rect className="home-map-pan-layer" x="0" y="0" width={HOME_VIEWBOX_WIDTH} height={HOME_VIEWBOX_HEIGHT} />
 
-            <g className="home-map-camera" transform={`translate(${camera.x} ${camera.y})`}>
+            <g className={`home-map-camera ${isMapPanning ? 'is-panning' : ''}`} transform={`translate(${camera.x} ${camera.y}) scale(${zoom})`}>
               <g className="home-map-edges live-map-edges">
                 {viewModel.pairs.map((pair) => {
                   const source = positions[pair.sourceId]
@@ -1162,6 +1247,21 @@ export function CompoundGraphHome({
               </g>
             </g>
           </svg>
+        )}
+
+        {!loading && !error && graph && (
+          <div className="home-map-zoom-controls" role="group" aria-label="Map zoom controls">
+            <button type="button" onClick={() => setZoomAtPoint(zoom / HOME_ZOOM_STEP, { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 })} disabled={zoom <= HOME_ZOOM_MIN} title="Zoom out" aria-label="Zoom out">
+              <Minus size={15} />
+            </button>
+            <output aria-live="polite">{Math.round(zoom * 100)}%</output>
+            <button type="button" onClick={() => setZoomAtPoint(zoom * HOME_ZOOM_STEP, { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 })} disabled={zoom >= HOME_ZOOM_MAX} title="Zoom in" aria-label="Zoom in">
+              <Plus size={15} />
+            </button>
+            <button type="button" onClick={resetMapView} title="Reset view" aria-label="Reset view">
+              <RotateCcw size={15} />
+            </button>
+          </div>
         )}
 
         {!selectedPair && selectedNode && (
@@ -2192,11 +2292,25 @@ function edgePath(source: Point, target: Point, offset = 0) {
   const ny = dx / length
   return `M ${source.x} ${source.y} Q ${midX + nx * offset} ${midY + ny * offset} ${target.x} ${target.y}`
 }
-function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number) {
+function svgClientPoint(svg: SVGSVGElement, clientX: number, clientY: number): Point {
+  const matrix = svg.getScreenCTM()
+  if (matrix) {
+    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+    return { x: point.x, y: point.y }
+  }
   const rect = svg.getBoundingClientRect()
   return {
-    x: ((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
-    y: ((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
+    x: ((clientX - rect.left) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
+    y: ((clientY - rect.top) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
+  }
+}
+
+function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number, scale = 1) {
+  const start = svgClientPoint(svg, startClientX, startClientY)
+  const end = svgClientPoint(svg, clientX, clientY)
+  return {
+    x: (end.x - start.x) / scale,
+    y: (end.y - start.y) / scale,
   }
 }
 function getNodeExpansionDirection(point: Point, camera: Point): ExpansionDirection | null {

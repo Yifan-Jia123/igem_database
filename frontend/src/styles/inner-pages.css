@@ -10,7 +10,7 @@
   --celestial-paper: rgba(255, 255, 255, 0.86);
   position: relative;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   color: var(--celestial-ink);
   background:
     linear-gradient(180deg, rgba(250, 253, 255, 0.94), rgba(238, 246, 250, 0.92)),
@@ -268,6 +268,19 @@
   grid-template-columns: 260px minmax(0, 1fr) 330px;
 }
 
+.app-shell:not(.home-shell) .search-shell > .search-sidebar,
+.app-shell:not(.home-shell) .search-shell > .detail-panel {
+  min-height: 0;
+  max-height: calc(100vh - 98px);
+  overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  position: sticky;
+  top: 80px;
+  align-self: start;
+}
+
 .app-shell:not(.home-shell) .search-sidebar,
 .app-shell:not(.home-shell) .downloads-sidebar {
   background: linear-gradient(180deg, rgba(62, 92, 116, 0.96), rgba(82, 119, 148, 0.94));
@@ -347,12 +360,70 @@
   background: rgba(249, 252, 254, 0.92);
 }
 
+.app-shell:not(.home-shell) .search-summary {
+  color: var(--celestial-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.app-shell:not(.home-shell) .search-summary strong {
+  color: #756a36;
+  font-weight: 800;
+}
+
 .app-shell:not(.home-shell) .search-result:hover,
 .app-shell:not(.home-shell) .search-result.selected,
 .app-shell:not(.home-shell) .download-row:hover {
   border-color: rgba(211, 190, 99, 0.54);
   box-shadow: 0 12px 22px rgba(8, 26, 58, 0.13);
   transform: translateY(-1px);
+}
+
+.app-shell:not(.home-shell) .search-result {
+  position: relative;
+}
+
+.app-shell:not(.home-shell) .search-result.selected {
+  border-color: rgba(211, 190, 99, 0.86);
+  background: rgba(237, 227, 175, 0.16);
+  box-shadow: inset 4px 0 0 var(--celestial-gold), 0 18px 32px rgba(8, 26, 58, 0.2);
+}
+
+.app-shell:not(.home-shell) .search-result.selected .result-name {
+  color: var(--celestial-ink);
+}
+
+.app-shell:not(.home-shell) .search-result.selected .result-subtitle,
+.app-shell:not(.home-shell) .search-result.selected .result-description {
+  color: var(--celestial-muted);
+}
+
+.app-shell:not(.home-shell) .search-result.selected.queued {
+  border-color: rgba(211, 190, 99, 0.86);
+}
+
+.app-shell:not(.home-shell) .search-result.queued {
+  border-color: rgba(237, 227, 175, 0.38);
+}
+
+.app-shell:not(.home-shell) .search-result .queue-action.is-queued {
+  border-color: rgba(237, 227, 175, 0.78);
+  background: rgba(237, 227, 175, 0.24);
+  color: var(--celestial-gold);
+}
+
+.app-shell:not(.home-shell) .queue-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(237, 227, 175, 0.42);
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.12);
+  color: var(--celestial-ink);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .app-shell:not(.home-shell) .queue-icon.compound,
@@ -658,6 +729,37 @@
   color: var(--celestial-ink);
 }
 
+.app-shell:not(.home-shell) .detail-panel .detail-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.app-shell:not(.home-shell) .detail-panel .field-list {
+  min-width: 0;
+}
+
+.app-shell:not(.home-shell) .detail-panel .field-row {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.app-shell:not(.home-shell) .detail-panel .field-row span {
+  min-width: 72px;
+  flex: 0 1 36%;
+  color: var(--celestial-muted);
+}
+
+.app-shell:not(.home-shell) .detail-panel .field-row strong {
+  min-width: 0;
+  flex: 1 1 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .app-shell:not(.home-shell) .field-list,
 .app-shell:not(.home-shell) .field-row,
 .app-shell:not(.home-shell) .detail-facts div,
@@ -883,6 +985,18 @@
   .app-shell:not(.home-shell) .search-sidebar {
     position: static;
   }
+
+  .app-shell:not(.home-shell) .search-shell > .search-sidebar,
+  .app-shell:not(.home-shell) .search-shell > .detail-panel {
+    max-height: none;
+    overflow: visible;
+    overflow-y: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+    position: static;
+    top: auto;
+    align-self: stretch;
+  }
 }
 
 @media (max-width: 1500px) {
@@ -920,6 +1034,7 @@
   }
 
   .app-shell:not(.home-shell) .sidebar {
+    position: fixed;
     left: -270px;
     margin: 0;
     top: 0;

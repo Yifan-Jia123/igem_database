@@ -30,6 +30,7 @@ type EnzymeCard = {
   uniprotId?: string | null
   databaseCode: string
   organismName?: string | null
+  geneName?: string | null
   ecNumber?: string | null
   reactionId: string
   reactionEquation: string
@@ -85,6 +86,37 @@ type HomologyPayload = {
   status: string
   progress?: number | null
   results: HomologyResultItem[]
+}
+
+export type StructureSearchCompoundHit = {
+  compoundId: string
+  name: string
+  chebiId?: string | null
+  smiles?: string | null
+  inchiKey?: string | null
+  structureImageUrl?: string | null
+  chebiUrl?: string | null
+  description?: string | null
+}
+
+export type StructureSearchReactionHit = {
+  reactionId: string
+  rheaId?: string | null
+  rheaUrl?: string | null
+  equation: string
+  direction: string
+  role: string
+  compoundId: string
+  compoundName: string
+  chebiId?: string | null
+  sourceType: string
+  reviewStatus: string
+}
+
+export type StructureSearchResult = {
+  inchikey: string
+  compounds: StructureSearchCompoundHit[]
+  reactions: StructureSearchReactionHit[]
 }
 
 export type ApiDataset = {
@@ -291,6 +323,7 @@ function enzymeEntity(enzyme: EnzymeCard, source?: CompoundCard, target?: Compou
       field('UniProt', enzyme.uniprotId),
       field('EC number', enzyme.ecNumber),
       field('Organism', enzyme.organismName),
+      field('Gene name', enzyme.geneName),
       field('Reaction', enzyme.reactionId),
       field('Direction', enzyme.reactionDirection),
     ].filter(Boolean) as Array<{ label: string; value: string }>,
@@ -444,6 +477,7 @@ export type HomeGraphEnzymeCard = {
   uniprotId?: string | null
   databaseCode: string
   organismName?: string | null
+  geneName?: string | null
   ecNumber?: string | null
   reactionId: string
   reactionEquation: string
@@ -650,4 +684,8 @@ export async function createEnzymeDownload(enzymeId: string, label: string): Pro
   })
 
   return payload
+}
+
+export async function searchStructureByInchikey(inchikey: string): Promise<StructureSearchResult> {
+  return request<StructureSearchResult>(`/ketcher/search?${new URLSearchParams({ inchikey }).toString()}`)
 }

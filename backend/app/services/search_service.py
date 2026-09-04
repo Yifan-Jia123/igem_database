@@ -9,7 +9,7 @@ from sqlalchemy import text, select
 from sqlalchemy.sql import text as sa_text
 from sqlalchemy.exc import ProgrammingError, OperationalError
 
-from app.models import Enzyme, Reaction, EnzymeReactionEdge
+from app.models import Enzyme, Gene, Reaction, EnzymeReactionEdge
 from app.schemas.enzyme import EnzymeCard
 from app.schemas.common import Pagination
 from app.utils.query_parser import parse_query, SearchClause, SearchCondition, detect_input_type
@@ -397,6 +397,7 @@ async def _fetch_cards(
         select(Enzyme).where(Enzyme.enzyme_id.in_(enzyme_ids))
     )
     enzymes = {e.enzyme_id: e for e in result.scalars().all()}
+    gene_names = await _load_gene_names(db, enzyme_ids)
 
     cards = []
     for eid in enzyme_ids:
@@ -429,6 +430,7 @@ async def _fetch_cards(
             uniprot_id=enz.uniprot_id,
             database_code=enz.enzyme_id,
             organism_name=enz.organism_name,
+            gene_name=gene_names.get(eid),
             ec_number=react.ec_number if react else None,
             reaction_id=edge.reaction_id if edge else "",
             reaction_equation=react.equation if react else "",
@@ -438,3 +440,18 @@ async def _fetch_cards(
         ))
 
     return cards
+
+
+async def _load_gene_names(db: AsyncSession, enzyme_ids: List[str]) -> Dict[str, Optional[str]]:
+    if not enzyme_ids:
+        return {}
+
+    result = await db.execute(
+        select(Gene)
+        .where(Gene.enzyme_id.in_(enzyme_ids))
+        .order_by(Gene.enzyme_id, Gene.gene_id)
+    )
+    gene_names: Dict[str, Optional[str]] = {}
+    for gene in result.scalars().all():
+        gene_names.setdefault(gene.enzyme_id, gene.gene_name)
+    return gene_names

@@ -4,7 +4,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
 
-# 仓库实际布局：原始 TSV 数据位于项目根目录下的 for_* 目录中
+# The TSV inputs live at the repository root unless an explicit data directory is supplied.
 _data_dir = os.getenv("IGEM_DATA_DIR", "").strip()
 DATA_DIR = Path(_data_dir).expanduser() if _data_dir else PROJECT_ROOT
 

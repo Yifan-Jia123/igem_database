@@ -33,17 +33,24 @@ import type { Entity, EntityKind } from './types'
 const HOME_EXPANSION_LIMIT = 36
 const HOME_VIEWBOX_WIDTH = 100
 const HOME_VIEWBOX_HEIGHT = 118
+const HOME_LAYOUT_WIDTH = HOME_VIEWBOX_WIDTH * 2.8
+const HOME_LAYOUT_HEIGHT = HOME_VIEWBOX_HEIGHT * 2.8
+const HOME_LAYOUT_MIN_X = (HOME_VIEWBOX_WIDTH - HOME_LAYOUT_WIDTH) / 2
+const HOME_LAYOUT_MIN_Y = (HOME_VIEWBOX_HEIGHT - HOME_LAYOUT_HEIGHT) / 2
+const HOME_LAYOUT_MAX_X = HOME_LAYOUT_MIN_X + HOME_LAYOUT_WIDTH
+const HOME_LAYOUT_MAX_Y = HOME_LAYOUT_MIN_Y + HOME_LAYOUT_HEIGHT
+const HOME_LAYOUT_MARGIN = 12
 const HOME_IMPORTANT_LABEL_COUNT = 10
-const HOME_FORCE_ITERATIONS = 340
-const HOME_FORCE_REPULSION = 82
-const HOME_FORCE_LINK_DISTANCE = 32
-const HOME_FORCE_LINK_STRENGTH = 0.0048
-const HOME_FORCE_CENTERING = 0.00055
-const HOME_FORCE_DAMPING = 0.66
-const HOME_FORCE_COLLISION_DISTANCE = 7.2
-const HOME_FORCE_COLLISION_STRENGTH = 0.34
-const HOME_FINAL_COLLISION_DISTANCE = 7.2
-const HOME_FINAL_COLLISION_ITERATIONS = 260
+const HOME_FORCE_ITERATIONS = 520
+const HOME_FORCE_REPULSION = 246
+const HOME_FORCE_LINK_DISTANCE = 72
+const HOME_FORCE_LINK_STRENGTH = 0.0034
+const HOME_FORCE_CENTERING = 0.00028
+const HOME_FORCE_DAMPING = 0.68
+const HOME_FORCE_COLLISION_DISTANCE = 21.6
+const HOME_FORCE_COLLISION_STRENGTH = 0.5
+const HOME_FINAL_COLLISION_DISTANCE = 21.6
+const HOME_FINAL_COLLISION_ITERATIONS = 420
 const HOME_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const homeSearchModes = [
   { id: 'enzymeItems', label: 'Enzyme items' },
@@ -150,6 +157,7 @@ type GraphSearchMatch =
 export function CompoundGraphHome({
   onOpenSearch,
   onOpenNetwork,
+  onOpenStructure,
   onOpenDownloads,
   onOpenEnzyme,
   onToggleQueue,
@@ -158,9 +166,10 @@ export function CompoundGraphHome({
 }: {
   onOpenSearch: (query?: string) => void
   onOpenNetwork: () => void
+  onOpenStructure: () => void
   onOpenDownloads: () => void
   onOpenEnzyme: (enzymeId: string) => void
-  onToggleQueue: (id: string) => void
+  onToggleQueue: (entry: string | Entity) => void
   isQueued: (id: string) => boolean
   queueCount: number
 }) {
@@ -275,6 +284,10 @@ export function CompoundGraphHome({
   const pairEdges = selectedPairKey ? (expandedEdges.length > 0 ? expandedEdges : selectedPair?.edges ?? []) : []
   const expandedEdgeGroups = useMemo(
     () => groupExpandedEdgesByEnzyme(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
+    [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
+  )
+  const expandedReactionGroups = useMemo(
+    () => groupExpandedEdgesByReaction(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
     [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
   )
   const selectedExpandedGroup = expandedEdgeGroups.find((group) => group.edgeIds.includes(selectedEdgeId || '')) || expandedEdgeGroups[0] || null
@@ -827,6 +840,7 @@ export function CompoundGraphHome({
     if (chebiId?.startsWith('CHEBI:')) return `/api/v1/assets/compounds/${encodeURIComponent(chebiId)}/structure.svg?v=4`
     return compound.structureImageUrl || null
   }
+  const selectedNodeQueueEntity = selectedNode ? homeCompoundToEntity(selectedNode, compoundImageUrl(selectedNode)) : null
 
   const searchPlaceholder =
     mode === 'blast'
@@ -851,148 +865,173 @@ export function CompoundGraphHome({
   return (
     <div className="home-map-page">
       <section className="atlas-map-stage atlas-live-stage" aria-label="Interactive compound graph homepage">
-        <div className="atlas-brand">
-          <span className="atlas-logo">
-            <Network size={18} />
-          </span>
-          <span>Starase Atlas</span>
-        </div>
+        <header className="graph-top-nav">
+          <div className="atlas-brand">
+            <span className="atlas-logo">
+              <Network size={18} />
+            </span>
+            <span>Starase Atlas</span>
+          </div>
 
-        <div className="atlas-year">NJU - China 2026</div>
-
-        <div className={`floating-pill dataset-pill dataset-pill-static ${datasetOpen ? 'is-open' : ''}`}>
-          <button className="dataset-pill-button" type="button" onClick={() => setDatasetOpen((open) => !open)}>
-            <span>Dataset</span>
-            <strong>{selectedDataset.label}</strong>
-            <ChevronDown size={18} />
-          </button>
-          {datasetOpen && (
-            <div className="floating-menu dataset-menu dataset-select-menu">
-              {homeDatasetOptions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={item.disabled}
-                  className={item.id === selectedDatasetId ? 'is-active' : ''}
-                  onClick={() => {
-                    if (item.disabled) return
-                    setSelectedDatasetId(item.id)
-                    setDatasetOpen(false)
-                  }}
-                >
-                  <span>{item.label}</span>
-                  <small>{item.detail}</small>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="home-search-bar">
-          <button className="home-search-mode" type="button" onClick={() => setModeOpen((open) => !open)}>
-            <ChevronDown size={22} />
-            <span>{homeSearchModes.find((item) => item.id === mode)?.label}</span>
-          </button>
-          {modeOpen && (
-            <div className="floating-menu search-mode-menu">
-              {homeSearchModes.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    setMode(item.id)
-                    setModeOpen(false)
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <input
-            value={searchValue}
-            onFocus={() => setSearchFocused(true)}
-            onChange={(event) => {
-              setSearchValue(event.target.value)
-              setSearchFocused(true)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void handleSearchSubmit()
-              if (event.key === 'Escape') setSearchFocused(false)
-            }}
-            placeholder={searchPlaceholder}
-          />
-          <button className="home-search-submit" type="button" onClick={() => void handleSearchSubmit()} title="Search">
-            <Search size={34} />
-          </button>
-          {showSearchSuggestions && (
-            <div className="home-search-suggestions" onPointerDown={(event) => event.preventDefault()}>
-              <div className="home-search-filter-row">
-                {homeSearchFilters.map((filter) => (
+          <div className="home-search-bar">
+            <button className="home-search-mode" type="button" onClick={() => setModeOpen((open) => !open)}>
+              <ChevronDown size={18} />
+              <span>{homeSearchModes.find((item) => item.id === mode)?.label}</span>
+            </button>
+            {modeOpen && (
+              <div className="floating-menu search-mode-menu">
+                {homeSearchModes.map((item) => (
                   <button
-                    key={filter.id}
+                    key={item.id}
                     type="button"
-                    className={searchFilter === filter.id ? 'is-active' : ''}
-                    onClick={() => setSearchFilter(filter.id)}
+                    onClick={() => {
+                      setMode(item.id)
+                      setModeOpen(false)
+                    }}
                   >
-                    {filter.label}
+                    {item.label}
                   </button>
                 ))}
               </div>
-              <div className="home-search-result-list">
-                {visibleSearchSuggestions.map((suggestion) => (
-                  <button key={suggestion.id} type="button" onClick={() => void handleSearchSuggestionSelect(suggestion)}>
-                    <span className={`home-result-kind ${suggestion.kind}`}>{suggestion.kind}</span>
-                    <span>
-                      <strong>{suggestion.title}</strong>
-                      <small>{suggestion.subtitle}</small>
-                    </span>
+            )}
+            <input
+              value={searchValue}
+              onFocus={() => setSearchFocused(true)}
+              onChange={(event) => {
+                setSearchValue(event.target.value)
+                setSearchFocused(true)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleSearchSubmit()
+                if (event.key === 'Escape') setSearchFocused(false)
+              }}
+              placeholder={searchPlaceholder}
+            />
+            <button className="home-search-submit" type="button" onClick={() => void handleSearchSubmit()} title="Search">
+              <Search size={20} />
+            </button>
+            {showSearchSuggestions && (
+              <div className="home-search-suggestions" onPointerDown={(event) => event.preventDefault()}>
+                <div className="home-search-filter-row">
+                  {homeSearchFilters.map((filter) => (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      className={searchFilter === filter.id ? 'is-active' : ''}
+                      onClick={() => setSearchFilter(filter.id)}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="home-search-result-list">
+                  {visibleSearchSuggestions.map((suggestion) => (
+                    <button key={suggestion.id} type="button" onClick={() => void handleSearchSuggestionSelect(suggestion)}>
+                      <span className={`home-result-kind ${suggestion.kind}`}>{suggestion.kind}</span>
+                      <span>
+                        <strong>{suggestion.title}</strong>
+                        <small>{suggestion.subtitle}</small>
+                      </span>
+                    </button>
+                  ))}
+                  {visibleSearchSuggestions.length === 0 && (
+                    <div className="home-search-empty">
+                      {librarySearchLoading ? 'Searching...' : 'No matching entries in the current map.'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <nav className="graph-primary-nav" aria-label="Graph page navigation">
+            <button type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Data Browser</button>
+            <button type="button" onClick={onOpenNetwork}>Analysis</button>
+            <button type="button" onClick={onOpenStructure}>Structure search</button>
+            <span>About</span>
+            <span className="graph-user-chip">NJU - China 2026</span>
+          </nav>
+        </header>
+
+        <div className="graph-title-band">
+          <div className="graph-crumbs">
+            <span>Home</span>
+            <ChevronRight size={14} />
+            <strong>Graph Atlas</strong>
+          </div>
+          <h1>Compound Relationship Graph: Enzymes & Pathways</h1>
+        </div>
+
+        <aside className="graph-filter-sidebar" aria-label="Graph filters and controls">
+          <p className="graph-filter-title">Data Filters</p>
+          <div className={`floating-pill dataset-pill dataset-pill-static ${datasetOpen ? 'is-open' : ''}`}>
+            <button className="dataset-pill-button" type="button" onClick={() => setDatasetOpen((open) => !open)}>
+              <span>Dataset</span>
+              <strong>{selectedDataset.label}</strong>
+              <ChevronDown size={16} />
+            </button>
+            {datasetOpen && (
+              <div className="floating-menu dataset-menu dataset-select-menu">
+                {homeDatasetOptions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={item.disabled}
+                    className={item.id === selectedDatasetId ? 'is-active' : ''}
+                    onClick={() => {
+                      if (item.disabled) return
+                      setSelectedDatasetId(item.id)
+                      setDatasetOpen(false)
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <small>{item.detail}</small>
                   </button>
                 ))}
-                {visibleSearchSuggestions.length === 0 && (
-                  <div className="home-search-empty">
-                    {librarySearchLoading ? 'Searching...' : 'No matching entries in the current map.'}
+              </div>
+            )}
+          </div>
+
+          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('compound')}>Compounds</button>
+          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('enzyme')}>Enzymes</button>
+          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('reaction')}>Reactions</button>
+          <button className="graph-filter-link" type="button" onClick={clearPairSelection}>Clear highlights</button>
+
+          <div className={`floating-pill mapping-pill ${controlsOpen ? 'is-open' : ''}`}>
+            <button type="button" onClick={() => setControlsOpen((open) => !open)}>
+              <span>Graph controls</span>
+              <ChevronDown size={16} />
+            </button>
+            {controlsOpen && (
+              <div className="floating-menu source-menu compact-home-menu control-home-menu">
+                <div className="control-group">
+                  <label htmlFor="home-node-size">Node size</label>
+                  <div className="control-slider-row">
+                    <input id="home-node-size" className="control-slider" type="range" min="0.7" max="2.8" step="0.05" value={nodeSize} onChange={(event) => setNodeSize(Number(event.target.value))} />
+                    <span className="control-value">{nodeSize.toFixed(1)}</span>
                   </div>
-                )}
+                </div>
+                <div className="control-group">
+                  <label htmlFor="home-label-size">Label size</label>
+                  <div className="control-slider-row">
+                    <input id="home-label-size" className="control-slider" type="range" min="0.85" max="2.1" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
+                    <span className="control-value">{labelScale.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="control-menu-actions">
+                  <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
+                  <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
+                  <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
-          Downloading table
-          {queueCount > 0 && <span>{queueCount}</span>}
-        </button>
-
-        <div className={`floating-pill mapping-pill ${controlsOpen ? 'is-open' : ''}`}>
-          <button type="button" onClick={() => setControlsOpen((open) => !open)}>
-            <span>Graph controls</span>
-            <ChevronDown size={18} />
+          <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
+            Downloading table
+            {queueCount > 0 && <span>{queueCount}</span>}
           </button>
-          {controlsOpen && (
-            <div className="floating-menu source-menu compact-home-menu control-home-menu">
-              <div className="control-group">
-                <label htmlFor="home-node-size">Node size</label>
-                <div className="control-slider-row">
-                  <input id="home-node-size" className="control-slider" type="range" min="0.7" max="2.8" step="0.05" value={nodeSize} onChange={(event) => setNodeSize(Number(event.target.value))} />
-                  <span className="control-value">{nodeSize.toFixed(1)}</span>
-                </div>
-              </div>
-              <div className="control-group">
-                <label htmlFor="home-label-size">Label size</label>
-                <div className="control-slider-row">
-                  <input id="home-label-size" className="control-slider" type="range" min="0.85" max="2.1" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
-                  <span className="control-value">{labelScale.toFixed(2)}</span>
-                </div>
-              </div>
-              <div className="control-menu-actions">
-                <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
-                <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
-                <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
-              </div>
-            </div>
-          )}
-        </div>
+        </aside>
 
         {loading && <div className="home-map-feedback"><Loader2 size={18} className="spin" /> Loading backend graph...</div>}
         {error && !loading && <div className="home-map-feedback error-state"><X size={18} /> {error}</div>}
@@ -1032,8 +1071,8 @@ export function CompoundGraphHome({
                   if (!source || !target) return null
                   const pairGroupId = pair.edgeGroupId || pair.key
                   const isExpanded = selectedPairKey === pair.key && pairEdges.length > 0
-                  const expandedItems = expandedEdgeGroups
-                  const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 3.2) : [0]
+                  const expandedItems = expandedReactionGroups
+                  const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 5.2) : [0]
                   const pairLineLabel = pair.count > 1 ? `enzyme*${pair.count}` : pair.edges[0]?.card?.primaryName || 'enzyme'
                   const highlightedPair = highlightedEdgeGroupIds.has(pairGroupId) || pair.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
                   const pathwayPair = Boolean(activePathway && (activePathway.edgeGroupIds.includes(pairGroupId) || pair.edgeIds.some((edgeId) => activePathway.edgeIds.includes(edgeId))))
@@ -1058,11 +1097,12 @@ export function CompoundGraphHome({
                         const highlightedEdge = highlightedPair || edge.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
                         const pathwayEdge = Boolean(activePathway?.edgeIds.some((edgeId) => edge.edgeIds.includes(edgeId)))
                         const selectedEdgeGroup = edge.edgeIds.includes(selectedEdgeId || '')
+                        const reactionColorClass = expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`
                         return (
                           <g key={edge.key}>
                             <path
                               d={edgePath(source, target, offset)}
-                              className={`expanded-edge live-expanded-edge ${selectedEdgeGroup ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
+                              className={`expanded-edge live-expanded-edge ${reactionColorClass} ${selectedEdgeGroup ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
                               markerStart={edge.directionMode === 'reverse' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               markerEnd={edge.directionMode === 'forward' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               onPointerDown={(event) => event.stopPropagation()}
@@ -1149,7 +1189,7 @@ export function CompoundGraphHome({
               {selectedNode.formula && <p><span>Formula :</span><strong>{selectedNode.formula}</strong></p>}
               {selectedNode.smiles && <p className="popover-smiles-row"><span>Smiles :</span><strong>{selectedNode.smiles}</strong></p>}
             </div>
-            <button className="popover-cart" type="button" onClick={() => onToggleQueue(selectedNode.compoundId)}>
+            <button className="popover-cart" type="button" onClick={() => onToggleQueue(selectedNodeQueueEntity || selectedNode.compoundId)}>
               <span className={`check-box ${isQueued(selectedNode.compoundId) ? 'checked' : ''}`}>{isQueued(selectedNode.compoundId) && <Check size={17} />}</span>
               {isQueued(selectedNode.compoundId) ? 'In downloading table' : 'Add to downloading table'}
             </button>
@@ -1171,9 +1211,10 @@ export function CompoundGraphHome({
               const edge = group.representative
               const enzymeId = edge.card?.enzymeId || edge.enzymeId
               const queued = isQueued(enzymeId)
+              const queueEntity = homeEnzymeToEntity(edge, enzymeId, compoundName(edge.sourceCompoundId), compoundName(edge.targetCompoundId))
               return (
                 <article key={group.key} className={`enzyme-card ${group.edgeIds.includes(selectedEdgeId || '') ? 'selected' : ''}`}>
-                  <button className="card-check" type="button" onClick={() => onToggleQueue(enzymeId)}>
+                  <button className="card-check" type="button" onClick={() => onToggleQueue(queueEntity)}>
                     {queued ? <Check size={18} /> : <Download size={18} />}
                   </button>
                   <button className="enzyme-card-copy" type="button" onClick={() => setSelectedEdgeId(group.representative.edgeId)}>
@@ -1403,6 +1444,58 @@ type SequenceRow = {
   chunks: string[]
 }
 
+function homeCompoundToEntity(compound: HomeGraphCompound, imageUrl?: string | null): Entity {
+  return {
+    id: compound.compoundId,
+    kind: 'compound',
+    name: compound.name,
+    subtitle: compound.chebiId || compound.compoundId,
+    description: compound.description || compound.smiles || 'Compound record from the terpene pathway graph.',
+    tags: ['Compound'],
+    imageLabel: imageUrl || compound.chebiId ? '2D structure' : undefined,
+    imageUrl: imageUrl || undefined,
+    fields: [
+      entityField('Formula', compound.formula),
+      entityField('Average mass', compound.averageMass),
+      entityField('Charge', compound.charge),
+      entityField('ChEBI', compound.chebiId),
+      entityField('SMILES', compound.smiles),
+    ].filter(Boolean) as Array<{ label: string; value: string }>,
+    related: [],
+  }
+}
+
+function homeEnzymeToEntity(edge: HomeGraphEdge, enzymeId: string, sourceName: string, targetName: string): Entity {
+  const card = edge.card
+
+  return {
+    id: enzymeId,
+    kind: 'enzyme',
+    name: card?.primaryName || edge.label || enzymeId,
+    subtitle: [card?.uniprotId || card?.databaseCode || enzymeId, card?.ecNumber].filter(Boolean).join(' · '),
+    description: card?.reactionEquation || `${sourceName} -> ${targetName}`,
+    tags: [card?.sourceType || edge.sourceType, card?.reviewStatus || edge.reviewStatus].filter(Boolean) as string[],
+    species: card?.organismName || undefined,
+    fields: [
+      entityField('UniProt', card?.uniprotId),
+      entityField('EC number', card?.ecNumber),
+      entityField('Organism', card?.organismName),
+      entityField('Gene name', card?.geneName),
+      entityField('Reaction', card?.reactionId || edge.reactionId),
+      entityField('Direction', card?.reactionDirection || edge.direction),
+    ].filter(Boolean) as Array<{ label: string; value: string }>,
+    related: [
+      { id: edge.sourceCompoundId, name: sourceName, kind: 'compound' },
+      { id: edge.targetCompoundId, name: targetName, kind: 'compound' },
+    ],
+  }
+}
+
+function entityField(label: string, rawValue: string | number | null | undefined) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return null
+  return { label, value: String(rawValue) }
+}
+
 function formatSequenceRows(sequence: string): SequenceRow[] {
   const clean = sequence.replace(/\s+/g, '').toUpperCase()
   const rows: SequenceRow[] = []
@@ -1600,15 +1693,15 @@ function normalizeHomePositions(positions: Record<string, Point>) {
   const maxY = Math.max(...points.map((point) => point.y))
   const width = Math.max(maxX - minX, 1)
   const height = Math.max(maxY - minY, 1)
-  const scaleX = ((HOME_VIEWBOX_WIDTH - 13) / width) * 0.96
-  const scaleY = ((HOME_VIEWBOX_HEIGHT - 18) / height) * 0.96
+  const scaleX = ((HOME_LAYOUT_WIDTH - HOME_LAYOUT_MARGIN * 2) / width) * 0.96
+  const scaleY = ((HOME_LAYOUT_HEIGHT - HOME_LAYOUT_MARGIN * 2) / height) * 0.96
   const sourceCenter = { x: minX + width / 2, y: minY + height / 2 }
   const targetCenter = { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 }
   const normalized: Record<string, Point> = {}
   Object.entries(positions).forEach(([compoundId, point]) => {
     normalized[compoundId] = {
-      x: clamp(targetCenter.x + (point.x - sourceCenter.x) * scaleX, 5.5, HOME_VIEWBOX_WIDTH - 5.5),
-      y: clamp(targetCenter.y + (point.y - sourceCenter.y) * scaleY, 7, HOME_VIEWBOX_HEIGHT - 7),
+      x: clamp(targetCenter.x + (point.x - sourceCenter.x) * scaleX, HOME_LAYOUT_MIN_X + HOME_LAYOUT_MARGIN, HOME_LAYOUT_MAX_X - HOME_LAYOUT_MARGIN),
+      y: clamp(targetCenter.y + (point.y - sourceCenter.y) * scaleY, HOME_LAYOUT_MIN_Y + HOME_LAYOUT_MARGIN, HOME_LAYOUT_MAX_Y - HOME_LAYOUT_MARGIN),
     }
   })
   return normalized
@@ -1646,8 +1739,8 @@ function relaxHomePositionCollisions(positions: Record<string, Point>) {
       }
     }
     entries.forEach(([, point]) => {
-      point.x = clamp(point.x, 5.5, HOME_VIEWBOX_WIDTH - 5.5)
-      point.y = clamp(point.y, 7, HOME_VIEWBOX_HEIGHT - 7)
+      point.x = clamp(point.x, HOME_LAYOUT_MIN_X + HOME_LAYOUT_MARGIN, HOME_LAYOUT_MAX_X - HOME_LAYOUT_MARGIN)
+      point.y = clamp(point.y, HOME_LAYOUT_MIN_Y + HOME_LAYOUT_MARGIN, HOME_LAYOUT_MAX_Y - HOME_LAYOUT_MARGIN)
     })
     if (!moved) break
   }
@@ -1697,6 +1790,38 @@ function groupExpandedEdgesByEnzyme(edges: HomeGraphEdge[], referenceSourceId = 
     current.reactionIds = Array.from(new Set([...current.reactionIds, edge.reactionId]))
     current.directionMode = directionModeForEdges(nextEdges, current.sourceId, current.targetId)
     if (!current.label && (edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId)) current.label = edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId
+  })
+
+  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
+}
+
+function groupExpandedEdgesByReaction(edges: HomeGraphEdge[], referenceSourceId = edges[0]?.sourceCompoundId, referenceTargetId = edges[0]?.targetCompoundId): ExpandedEdgeGroup[] {
+  const groups = new Map<string, ExpandedEdgeGroup>()
+  edges.forEach((edge) => {
+    const reactionId = edge.reactionId || edge.edgeId
+    const key = `${canonicalCompoundPairKey(edge.sourceCompoundId, edge.targetCompoundId)}::${reactionId}`
+    const current = groups.get(key)
+    if (!current) {
+      groups.set(key, {
+        key,
+        sourceId: referenceSourceId || edge.sourceCompoundId,
+        targetId: referenceTargetId || edge.targetCompoundId,
+        enzymeId: edge.card?.enzymeId || edge.enzymeId,
+        label: reactionId,
+        directionMode: directionModeForEdges([edge], referenceSourceId, referenceTargetId),
+        edges: [edge],
+        edgeIds: [edge.edgeId],
+        reactionIds: [reactionId],
+        representative: edge,
+      })
+      return
+    }
+    const nextEdges = [...current.edges, edge]
+    current.edges = nextEdges
+    current.edgeIds = Array.from(new Set([...current.edgeIds, edge.edgeId]))
+    current.reactionIds = Array.from(new Set([...current.reactionIds, reactionId]))
+    current.directionMode = directionModeForEdges(nextEdges, current.sourceId, current.targetId)
+    if (!current.label && reactionId) current.label = reactionId
   })
 
   return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
@@ -1896,8 +2021,8 @@ function addExpansionPositions(current: Record<string, Point>, payload: HomeGrap
     const rowStart = row * laneCount
     const rowItems = Math.min(laneCount, incomingNodes.length - rowStart)
     const slot = index - rowStart
-    const lateral = (slot - (rowItems - 1) / 2) * 9.5
-    const depth = 19 + row * 16 + Math.abs(slot - (rowItems - 1) / 2) * 0.8
+    const lateral = (slot - (rowItems - 1) / 2) * 25
+    const depth = 48 + row * 42 + Math.abs(slot - (rowItems - 1) / 2) * 2.2
     const jitter = stableJitter(node.compoundId)
     next[node.compoundId] = {
       x: seed.x + normal.x * depth + tangent.x * lateral + jitter.x,

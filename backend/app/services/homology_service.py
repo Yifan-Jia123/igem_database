@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Enzyme, EnzymeReactionEdge, Reaction
+from app.models import Enzyme, Gene, EnzymeReactionEdge, Reaction
 from app.schemas.enzyme import EnzymeCard
 from app.schemas.homology import HomologyJobStatus, HomologyResultItem, HomologySearchRequest
 
@@ -35,6 +35,7 @@ async def run_homology_search(db: AsyncSession, request: HomologySearchRequest) 
     source_types = {_normalize_source_type(item) for item in request.source_types or []}
 
     rows = await _load_candidates(db)
+    gene_names = await _load_gene_names(db, {enzyme.enzyme_id for enzyme, _, _ in rows})
     results: List[HomologyResultItem] = []
     seen = set()
 
@@ -60,7 +61,7 @@ async def run_homology_search(db: AsyncSession, request: HomologySearchRequest) 
             enzyme_id=enzyme.enzyme_id,
             e_value=e_value,
             identity=round(identity, 2),
-            card=_enzyme_card(enzyme, edge, reaction),
+            card=_enzyme_card(enzyme, edge, reaction, gene_names.get(enzyme.enzyme_id)),
         ))
 
     results.sort(key=lambda item: (item.e_value, -(item.identity or 0), item.enzyme_id))
@@ -139,7 +140,12 @@ def _estimate_e_value(identity: float, aligned_length: int) -> float:
     return math.pow(10.0, -exponent)
 
 
-def _enzyme_card(enzyme: Enzyme, edge: Optional[EnzymeReactionEdge], reaction: Optional[Reaction]) -> EnzymeCard:
+def _enzyme_card(
+    enzyme: Enzyme,
+    edge: Optional[EnzymeReactionEdge],
+    reaction: Optional[Reaction],
+    gene_name: Optional[str] = None,
+) -> EnzymeCard:
     return EnzymeCard(
         edge_id=edge.edge_id if edge else "",
         enzyme_id=enzyme.enzyme_id,
@@ -147,6 +153,7 @@ def _enzyme_card(enzyme: Enzyme, edge: Optional[EnzymeReactionEdge], reaction: O
         uniprot_id=enzyme.uniprot_id,
         database_code=enzyme.enzyme_id,
         organism_name=enzyme.organism_name,
+        gene_name=gene_name,
         ec_number=reaction.ec_number if reaction else None,
         reaction_id=edge.reaction_id if edge else "",
         reaction_equation=reaction.equation if reaction else "",
@@ -154,6 +161,21 @@ def _enzyme_card(enzyme: Enzyme, edge: Optional[EnzymeReactionEdge], reaction: O
         source_type=_enum_value(edge.source_type) if edge and edge.source_type else _enum_value(enzyme.source_type),
         review_status=_enum_value(edge.review_status) if edge and edge.review_status else _enum_value(enzyme.review_status),
     )
+
+
+async def _load_gene_names(db: AsyncSession, enzyme_ids: set[str]) -> Dict[str, Optional[str]]:
+    if not enzyme_ids:
+        return {}
+
+    result = await db.execute(
+        select(Gene)
+        .where(Gene.enzyme_id.in_(list(enzyme_ids)))
+        .order_by(Gene.enzyme_id, Gene.gene_id)
+    )
+    gene_names: Dict[str, Optional[str]] = {}
+    for gene in result.scalars().all():
+        gene_names.setdefault(gene.enzyme_id, gene.gene_name)
+    return gene_names
 
 
 def _job_id(request: HomologySearchRequest, sequence: str) -> str:

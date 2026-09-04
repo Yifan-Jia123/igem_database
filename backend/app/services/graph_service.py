@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.models import (
-    Compound, Enzyme, Reaction,
+    Compound, Enzyme, Gene, Reaction,
     ReactionCompound, EnzymeReactionEdge,
 )
 from app.schemas.graph import GraphPayload, ReactionEdge, EdgeGroup, FocusPoint
@@ -56,9 +56,10 @@ async def build_graph_payload(
     compounds = await _fetch_compounds(db, compound_ids)
     cards = [_compound_to_card(c) for c in compounds]
     card_map = {c.compound_id: c for c in cards}
+    gene_names = await _load_gene_names(db, {record["enzyme_id"] for record in edge_records})
 
     # 4. Build edges and edge groups
-    edges, edge_groups = _build_edges_and_groups(edge_records, card_map)
+    edges, edge_groups = _build_edges_and_groups(edge_records, card_map, gene_names)
 
     # 5. Limit nodes without dropping every drawable edge endpoint
     if limit_nodes and len(cards) > limit_nodes:
@@ -259,6 +260,7 @@ async def _build_global_graph_payload(
 
     edge_result = await db.execute(edge_query)
     edge_rows = edge_result.all()
+    gene_names = await _load_gene_names(db, {ere.enzyme_id for ere, _ in edge_rows})
 
     edge_records: List[dict] = []
     for ere, enz in edge_rows:
@@ -289,7 +291,7 @@ async def _build_global_graph_payload(
 
     cards = [_compound_to_card(compound) for compound in compounds]
     card_map = {card.compound_id: card for card in cards}
-    edges, edge_groups = _build_edges_and_groups(edge_records, card_map)
+    edges, edge_groups = _build_edges_and_groups(edge_records, card_map, gene_names)
 
     if limit_nodes and len(cards) > limit_nodes:
         cards, edges, edge_groups = _limit_graph_payload(
@@ -456,6 +458,21 @@ async def _fetch_displayable_compound_ids(db: AsyncSession, compound_ids: Set[st
     return {row[0] for row in result.all()}
 
 
+async def _load_gene_names(db: AsyncSession, enzyme_ids: Set[str]) -> Dict[str, Optional[str]]:
+    if not enzyme_ids:
+        return {}
+
+    result = await db.execute(
+        select(Gene)
+        .where(Gene.enzyme_id.in_(list(enzyme_ids)))
+        .order_by(Gene.enzyme_id, Gene.gene_id)
+    )
+    gene_names: Dict[str, Optional[str]] = {}
+    for gene in result.scalars().all():
+        gene_names.setdefault(gene.enzyme_id, gene.gene_name)
+    return gene_names
+
+
 def _compound_to_card(c: Compound) -> CompoundCard:
     return CompoundCard(
         compound_id=c.compound_id,
@@ -476,6 +493,7 @@ def _compound_to_card(c: Compound) -> CompoundCard:
 def _build_edges_and_groups(
     edge_records: List[dict],
     card_map: Dict[str, CompoundCard],
+    gene_names: Dict[str, Optional[str]],
 ) -> Tuple[List[ReactionEdge], List[EdgeGroup]]:
     """Group edges by (source, target) to detect overlaps."""
 
@@ -522,6 +540,7 @@ def _build_edges_and_groups(
                 card=_make_enzyme_card(
                     rec, from_cpd, to_cpd, rec["direction"],
                     recs[0]["reaction"],
+                    gene_names.get(rec["enzyme_id"]),
                 ),
             ))
         else:
@@ -548,6 +567,7 @@ def _make_enzyme_card(
     target_compound_id: str,
     direction: str,
     reaction,
+    gene_name: Optional[str] = None,
 ) -> EnzymeCard:
     enz = rec["enzyme"]
     return EnzymeCard(
@@ -557,6 +577,7 @@ def _make_enzyme_card(
         uniprot_id=enz.uniprot_id,
         database_code=enz.enzyme_id,
         organism_name=enz.organism_name,
+        gene_name=gene_name,
         ec_number=reaction.ec_number,
         reaction_id=rec["reaction_id"],
         reaction_equation=reaction.equation,
@@ -611,6 +632,7 @@ async def expand_edge_group(
 
     edge_result = await db.execute(edge_query)
     edge_rows = edge_result.all()
+    gene_names = await _load_gene_names(db, {ere.enzyme_id for ere, _ in edge_rows})
 
     # Get reaction_compound data to determine direction
     rc_query = select(ReactionCompound).where(
@@ -658,6 +680,7 @@ async def expand_edge_group(
                     "review_status": ere.review_status.value if ere.review_status else "official",
                 },
                 from_cpd, to_cpd, direction, reaction,
+                gene_names.get(ere.enzyme_id),
             ),
         ))
 

@@ -99,7 +99,7 @@ export const entities: Entity[] = [
     tags: ['TPS-b', 'Monoterpene synthase'],
     species: 'Arabidopsis thaliana',
     enzymeFamily: 'TPS-b',
-    fields: [{ label: 'UniProt', value: 'Q9ZSY2' }, { label: 'EC number', value: '4.2.3.26' }, { label: 'Organism', value: 'Arabidopsis thaliana' }, { label: 'Sequence length', value: '585 aa' }],
+    fields: [{ label: 'UniProt', value: 'Q9ZSY2' }, { label: 'EC number', value: '4.2.3.26' }, { label: 'Organism', value: 'Arabidopsis thaliana' }, { label: 'Gene name', value: 'AtTPS4' }, { label: 'Sequence length', value: '585 aa' }],
     related: [{ id: 'CHEBI:17115', name: 'Geranyl diphosphate', kind: 'compound' }, { id: 'CHEBI:16486', name: 'Linalool', kind: 'compound' }],
   },
   {
@@ -111,7 +111,7 @@ export const entities: Entity[] = [
     tags: ['TPS-a', 'Sesquiterpene synthase'],
     species: 'Cichorium intybus',
     enzymeFamily: 'TPS-a',
-    fields: [{ label: 'UniProt', value: 'Q5T7B8' }, { label: 'EC number', value: '4.2.3.23' }, { label: 'Organism', value: 'Cichorium intybus' }, { label: 'Sequence length', value: '579 aa' }],
+    fields: [{ label: 'UniProt', value: 'Q5T7B8' }, { label: 'EC number', value: '4.2.3.23' }, { label: 'Organism', value: 'Cichorium intybus' }, { label: 'Gene name', value: 'CdTPS1' }, { label: 'Sequence length', value: '579 aa' }],
     related: [{ id: 'CHEBI:17292', name: 'Farnesyl diphosphate', kind: 'compound' }, { id: 'CHEBI:17579', name: 'Germacrene A', kind: 'compound' }, { id: 'CHEBI:17347', name: 'Alpha-pinene', kind: 'compound' }],
   },
   {
@@ -123,7 +123,7 @@ export const entities: Entity[] = [
     tags: ['TPS-d', 'Diterpene synthase'],
     species: 'Taxus baccata',
     enzymeFamily: 'TPS-d',
-    fields: [{ label: 'UniProt', value: 'Q9FJA2' }, { label: 'EC number', value: '4.2.3.18' }, { label: 'Organism', value: 'Taxus baccata' }, { label: 'Sequence length', value: '862 aa' }],
+    fields: [{ label: 'UniProt', value: 'Q9FJA2' }, { label: 'EC number', value: '4.2.3.18' }, { label: 'Organism', value: 'Taxus baccata' }, { label: 'Gene name', value: 'TXS' }, { label: 'Sequence length', value: '862 aa' }],
     related: [{ id: 'CHEBI:15377', name: 'Geranylgeranyl diphosphate', kind: 'compound' }, { id: 'CHEBI:33998', name: 'Taxa-4,11-diene', kind: 'compound' }],
   },
   {

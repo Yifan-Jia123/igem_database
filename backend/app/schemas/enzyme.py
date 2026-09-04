@@ -13,6 +13,7 @@ class EnzymeCard(CamelModel):
     uniprot_id: Optional[str] = None
     database_code: str
     organism_name: Optional[str] = None
+    gene_name: Optional[str] = None
     ec_number: Optional[str] = None
     reaction_id: str
     reaction_equation: str

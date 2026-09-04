@@ -5,6 +5,7 @@ from app.routers import (
     metadata,
     graph,
     search,
+    structure_search,
     enzymes,
     compounds,
     reactions,
@@ -32,6 +33,7 @@ API_PREFIX = "/api/v1"
 app.include_router(metadata.router, prefix=API_PREFIX, tags=["Metadata"])
 app.include_router(graph.router, prefix=API_PREFIX, tags=["Graph"])
 app.include_router(search.router, prefix=API_PREFIX, tags=["Search"])
+app.include_router(structure_search.router, prefix=API_PREFIX, tags=["Structure Search"])
 app.include_router(enzymes.router, prefix=API_PREFIX, tags=["Enzymes"])
 app.include_router(compounds.router, prefix=API_PREFIX, tags=["Compounds"])
 app.include_router(reactions.router, prefix=API_PREFIX, tags=["Reactions"])

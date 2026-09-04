@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownToLine,
   ChevronRight,
   CircleHelp,
   Database,
@@ -20,7 +19,7 @@ import { DownloadsPage } from './pages/DownloadsPage'
 import { HomePage } from './pages/HomePage'
 import { SearchPage } from './pages/SearchPage'
 import { StructureSearchPage } from './pages/StructureSearchPage'
-import { csvCell, getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
+import { getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
 
@@ -203,34 +202,6 @@ function App() {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const exportQueue = () => {
-    if (downloadedItems.length === 0) return
-
-    const rows = [
-      ['id', 'kind', 'name', 'subtitle', 'species', 'compoundClass', 'enzymeFamily', 'tags', 'description'],
-      ...downloadedItems.map((entity) => [
-        entity.id,
-        entity.kind,
-        entity.name,
-        entity.subtitle,
-        entity.species ?? '',
-        entity.compoundClass ?? '',
-        entity.enzymeFamily ?? '',
-        entity.tags.join(' | '),
-        entity.description,
-      ]),
-    ]
-
-    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'terpene-atlas-download-queue.csv'
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
-
   const goTo = (nextView: View, id?: string) => {
     setView(nextView)
     if (id) setSelectedId(id)
@@ -313,20 +284,6 @@ function App() {
             <ChevronRight size={14} />
             <strong>{viewLabel(view)}</strong>
           </div>
-          <div className="topbar-actions">
-            <div className="sync-state">
-              <span className="status-dot" />
-              Live dataset
-            </div>
-            <button className="topbar-download" onClick={() => goTo('downloads')}>
-              <Download size={16} />
-              {queueCount > 0 ? `${queueCount} queued` : 'Queue empty'}
-            </button>
-            <button className="topbar-secondary" onClick={exportQueue} disabled={queueCount === 0}>
-              <ArrowDownToLine size={16} />
-              Export CSV
-            </button>
-          </div>
         </header>}
 
         {view === 'home' && (
@@ -398,7 +355,6 @@ function App() {
             downloadedItems={downloadedItems}
             removeFromQueue={removeFromQueue}
             clearQueue={clearQueue}
-            exportQueue={exportQueue}
             onOpenEntity={(id) => { const entity = getEntity(id); if (entity?.kind === 'enzyme') goTo('enzyme', id); else goTo('search', id) }}
             openRecord={openRecord}
           />

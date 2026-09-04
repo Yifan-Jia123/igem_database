@@ -136,6 +136,29 @@ export type EntrySearchParams = {
   pageSize?: number
 }
 
+export type DownloadFormat = 'csv' | 'fasta' | 'tsv' | 'txt' | 'xlsx'
+
+export type DownloadQueueItem = {
+  entityType: string
+  entityId: string
+  displayLabel: string
+}
+
+export type DownloadPreviewData = {
+  columns: string[]
+  rowCount: number
+  estimatedFileName: string
+}
+
+type DownloadRequest = {
+  downloadType: string
+  items: DownloadQueueItem[]
+  fields: string[]
+  format: DownloadFormat
+  includeExternalLinks?: boolean
+  includeGraphImage?: boolean
+}
+
 export async function loadApiDataset(): Promise<ApiDataset> {
   const [metadata, graph] = await Promise.all([
     request<FilterOptionsPayload>('/metadata/filter-options'),
@@ -651,39 +674,49 @@ export async function loadExpandedEdgeGroup(edgeGroupId: string): Promise<HomeGr
 }
 
 export async function createEnzymeDownload(enzymeId: string, label: string): Promise<{ fileUrl?: string | null; status: string }> {
-  const payload = await request<{ fileUrl?: string | null; status: string }>('/download/files', {
+  return createDownloadFile({
+    downloadType: 'enzyme',
+    items: [
+      {
+        entityType: 'enzyme',
+        entityId: enzymeId,
+        displayLabel: label,
+      },
+    ],
+    fields: [
+      'primaryName',
+      'databaseCode',
+      'uniprotId',
+      'organismName',
+      'ecNumber',
+      'reactionEquation',
+      'direction',
+      'smiles',
+      'geneName',
+      'genbankId',
+      'doi',
+      'pubmedId',
+    ],
+    format: 'csv',
+    includeExternalLinks: true,
+    includeGraphImage: false,
+  })
+}
+
+export async function previewDownloadFile(requestBody: DownloadRequest): Promise<DownloadPreviewData> {
+  return request<DownloadPreviewData>('/download/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      downloadType: 'enzyme',
-      items: [
-        {
-          entityType: 'enzyme',
-          entityId: enzymeId,
-          displayLabel: label,
-        },
-      ],
-      fields: [
-        'primaryName',
-        'databaseCode',
-        'uniprotId',
-        'organismName',
-        'ecNumber',
-        'reactionEquation',
-        'direction',
-        'smiles',
-        'geneName',
-        'genbankId',
-        'doi',
-        'pubmedId',
-      ],
-      format: 'csv',
-      includeExternalLinks: true,
-      includeGraphImage: false,
-    }),
+    body: JSON.stringify(requestBody),
   })
+}
 
-  return payload
+export async function createDownloadFile(requestBody: DownloadRequest): Promise<{ fileUrl?: string | null; status: string }> {
+  return request<{ fileUrl?: string | null; status: string }>('/download/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  })
 }
 
 export async function searchStructureByInchikey(inchikey: string): Promise<StructureSearchResult> {

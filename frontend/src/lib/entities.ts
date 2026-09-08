@@ -1,4 +1,4 @@
-import { Beaker, Dna, FlaskConical } from 'lucide-react'
+import { Beaker, Dna, FlaskConical, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Entity, EntityKind } from '../types'
 
@@ -23,12 +23,14 @@ export const kindLabels: Record<EntityKind, string> = {
   compound: 'Compound',
   enzyme: 'Enzyme',
   reaction: 'Reaction',
+  pathway: 'Pathway',
 }
 
 export const kindIcons: Record<EntityKind, LucideIcon> = {
   compound: Beaker,
   enzyme: Dna,
   reaction: FlaskConical,
+  pathway: Route,
 }
 
 export function looksLikeProteinSequence(value: string) {
@@ -60,6 +62,7 @@ export function matchesFilters(entity: Entity | undefined, filters: FilterState,
 export function getExternalRecordUrl(entity: Entity) {
   if (entity.kind === 'enzyme') return `https://www.uniprot.org/uniprotkb/${entity.id.replace('ENZ:', '')}`
   if (entity.kind === 'compound') return `https://www.ebi.ac.uk/chebi/searchId.do?chebiId=${entity.id}`
+  if (entity.kind === 'pathway') return ''
   return `https://www.rhea-db.org/reaction?id=${entity.id.replace('RHEA:', '')}`
 }
 

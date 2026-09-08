@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   ArrowLeft,
   ArrowUpRight,
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronsUp,
   Dna,
   Download,
   ExternalLink,
   Link2,
   Loader2,
-  Minus,
   Network,
   Plus,
-  RotateCcw,
+  Route,
   Search,
   X,
 } from 'lucide-react'
@@ -21,17 +21,27 @@ import {
   createEnzymeDownload,
   loadExpandedEdgeGroup,
   loadEnzymeDetail,
+  loadGraphForEnzymes,
   loadHomeGraph,
+  loadMetadataFilters,
+  mapScopeSearch,
+  runPathwaySearch as runPathwaySearchApi,
   searchApiEntries,
-  searchHomePathways,
+  suggestCompounds,
+  type BlastHit,
+  type BlastSession,
+  type CompoundSuggestion,
   type EnzymeDetailData,
   type EnzymeSequenceLink,
   type HomeGraphCompound,
   type HomeGraphData,
   type HomeGraphEdge,
+  type HomeGraphEdgeGroup,
+  type HomeGraphEdgeGroupItem,
   type HomePathwayCard,
 } from './api'
-import type { Entity, EntityKind } from './types'
+import { StructureSearchDrawer } from './components/StructureSearchDrawer'
+import type { Entity, EntityKind, PathwayEnzymeChoice, PathwayQueueStep } from './types'
 
 const HOME_EXPANSION_LIMIT = 36
 const HOME_VIEWBOX_WIDTH = 100
@@ -55,28 +65,31 @@ const HOME_FORCE_COLLISION_STRENGTH = 0.5
 const HOME_FINAL_COLLISION_DISTANCE = 21.6
 const HOME_FINAL_COLLISION_ITERATIONS = 420
 const HOME_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-const HOME_ZOOM_MIN = 0.65
-const HOME_ZOOM_MAX = 3
-const HOME_ZOOM_STEP = 1.2
-const homeSearchModes = [
-  { id: 'enzymeItems', label: 'Enzyme items' },
-  { id: 'pathways', label: 'Pathways' },
-  { id: 'blast', label: 'Blast / homology' },
-  { id: 'mapsearch', label: 'Map search' },
-] as const
-const homeDatasetOptions = [
-  { id: 'terpene_synthase', label: 'Terpene synthase', detail: 'Live backend', disabled: false },
-  { id: 'comparative_sets', label: 'Comparative sets', detail: 'Coming soon', disabled: true },
-  { id: 'literature_merge', label: 'Literature merge', detail: 'Coming soon', disabled: true },
-] as const
 const homeSearchFilters = [
   { id: 'all', label: 'All' },
   { id: 'compound', label: 'Compounds' },
   { id: 'enzyme', label: 'Enzymes' },
   { id: 'reaction', label: 'Reactions' },
 ] as const
-type HomeSearchMode = (typeof homeSearchModes)[number]['id']
 type HomeSearchFilter = (typeof homeSearchFilters)[number]['id']
+
+type HomeActiveFilters = {
+  species: string[]
+  sourceTypes: string[]
+}
+
+const HOME_SOURCE_LABELS: Record<string, string> = {
+  swiss_prot: 'Swiss-Prot',
+  trembl: 'TrEMBL',
+  ai_literature: 'AI (literature)',
+  manual_literature: 'Manual (literature)',
+}
+
+const HOME_SOURCE_ORDER = ['swiss_prot', 'trembl', 'ai_literature', 'manual_literature']
+
+function formatScopeEValue(value: number): string {
+  return value === 0 ? '0' : value.toExponential(2)
+}
 
 type Point = { x: number; y: number }
 
@@ -160,24 +173,108 @@ type GraphSearchMatch =
   | { kind: 'pair'; pair: PairEntry; edges: HomeGraphEdge[] }
   | { kind: 'none' }
 
+/* ---------- Active-filter engine (organism + data source) ---------- */
+
+function homeFiltersActive(filters: HomeActiveFilters) {
+  return filters.species.length > 0 || filters.sourceTypes.length > 0
+}
+
+/** A single sub-edge (composite item or loaded edge) must pass every active dimension. */
+function homeUnitPasses(unit: { organismName?: string | null; sourceType?: string | null }, filters: HomeActiveFilters) {
+  if (filters.species.length > 0 && (!unit.organismName || !filters.species.includes(unit.organismName))) return false
+  if (filters.sourceTypes.length > 0 && (!unit.sourceType || !filters.sourceTypes.includes(unit.sourceType))) return false
+  return true
+}
+
+function homeEdgePasses(edge: HomeGraphEdge, filters: HomeActiveFilters) {
+  return homeUnitPasses({ organismName: edge.card?.organismName ?? null, sourceType: edge.sourceType ?? null }, filters)
+}
+
+/** Sub-edges that survive the active filters for a collapsed composite pair (group items first, loaded edges fallback). */
+function homePairPassingUnits(pair: PairEntry, groupItemMap: Map<string, HomeGraphEdgeGroupItem[]>, filters: HomeActiveFilters): (HomeGraphEdgeGroupItem | HomeGraphEdge)[] {
+  const items = pair.edgeGroupId ? groupItemMap.get(pair.edgeGroupId) : undefined
+  if (items && items.length > 0) return items.filter((item) => homeUnitPasses(item, filters))
+  return pair.edges.filter((edge) => homeEdgePasses(edge, filters))
+}
+
+function homeSourceLabel(sourceType: string) {
+  return HOME_SOURCE_LABELS[sourceType] || sourceType
+}
+
+function homeUnitLabel(unit: HomeGraphEdgeGroupItem | HomeGraphEdge) {
+  if ('card' in unit && unit.card?.primaryName) return unit.card.primaryName
+  return unit.label || null
+}
+
+/** Stable, compact on-edge annotation for a single sub-edge: UniProt accession when known. */
+function homeUnitAccession(unit: HomeGraphEdgeGroupItem | HomeGraphEdge) {
+  if ('card' in unit && unit.card) return unit.card.uniprotId || unit.label || null
+  return unit.label || null
+}
+
+/** One active pathway-mode session: the returned union graph + its cards. */
+type PathwaySessionData = {
+  graph: HomeGraphData
+  cards: HomePathwayCard[]
+  total: number
+  query: string
+}
+
+/** The composer payload a pathway run is launched with (tokens are resolved
+ *  server-side, so they may be ids, bare ChEBI numbers or names). */
+type PathwayComposerPayload = {
+  startCompoundId: string
+  endCompoundId: string
+  viaCompoundIds: string[]
+}
+
+/** One oriented step (source→target compound pair) of the single route shown in
+ *  the in-map detail sub-view. Composite steps carry ``groupId`` (their per-enzyme
+ *  edges live behind loadExpandedEdgeGroup, not in the union graph's edges);
+ *  single-edge steps carry ``edges`` (the backing edges). */
+type PathwayDetailStep = {
+  step: number
+  sourceId: string
+  targetId: string
+  sourceName: string
+  targetName: string
+  groupId: string | null
+  edges: HomeGraphEdge[]
+}
+
 export function CompoundGraphHome({
   onOpenSearch,
-  onOpenNetwork,
-  onOpenStructure,
   onOpenDownloads,
   onOpenEnzyme,
+  onOpenBlast,
+  onOpenBlastTable,
   onToggleQueue,
   isQueued,
   queueCount,
+  autoMapSearch,
+  onAutoMapSearchConsumed,
+  blastSession,
+  autoBlastScope,
+  onAutoBlastScopeConsumed,
+  onResetHome,
 }: {
   onOpenSearch: (query?: string) => void
-  onOpenNetwork: () => void
-  onOpenStructure: () => void
   onOpenDownloads: () => void
   onOpenEnzyme: (enzymeId: string) => void
+  onOpenBlast: () => void
+  onOpenBlastTable: () => void
   onToggleQueue: (entry: string | Entity) => void
   isQueued: (id: string) => boolean
   queueCount: number
+  /** When the table-results page hands back to the map, run this query's scope search on mount. */
+  autoMapSearch?: { query: string; nonce: number } | null
+  onAutoMapSearchConsumed?: () => void
+  /** Last completed BLAST run (for scoping the map to its hit enzymes). */
+  blastSession?: BlastSession | null
+  autoBlastScope?: { sessionId: number; nonce: number } | null
+  onAutoBlastScopeConsumed?: () => void
+  /** Starase Atlas brand → drop every active scope/search and head home. */
+  onResetHome?: () => void
 }) {
   const [graph, setGraph] = useState<HomeGraphData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -185,7 +282,6 @@ export function CompoundGraphHome({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [positions, setPositions] = useState<Record<string, Point>>({})
   const [camera, setCamera] = useState<Point>({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null)
   const [expandedEdges, setExpandedEdges] = useState<HomeGraphEdge[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
@@ -195,10 +291,70 @@ export function CompoundGraphHome({
   const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<Set<string>>(new Set())
   const [highlightedEdgeGroupIds, setHighlightedEdgeGroupIds] = useState<Set<string>>(new Set())
   const [activePathway, setActivePathway] = useState<HomePathwayCard | null>(null)
+  /** Two search systems share the map surface. Enzyme mode is the original
+   *  keyword/compound/BLAST search; pathway mode composes start → (via…) → end. */
+  const [searchMode, setSearchMode] = useState<'enzyme' | 'pathway'>('enzyme')
+  const [pathwaySession, setPathwaySession] = useState<PathwaySessionData | null>(null)
+  const [selectedPathwayId, setSelectedPathwayId] = useState<string | null>(null)
+  const [pathwaySearchLoading, setPathwaySearchLoading] = useState(false)
+  /** Soft business errors surfaced into the composer (SAME_COMPOUND & friends). */
+  const [pathwayError, setPathwayError] = useState<string | null>(null)
+  /** The composer pill can be collapsed so the union-graph result is not blocked;
+   *  a successful run hides it and shows a compact launcher instead. */
+  const [composerOpen, setComposerOpen] = useState(true)
+  /** In-map single-route detail sub-view. While non-null the map graph/positions/
+   *  camera are swapped to exactly one returned route's chain; ``restore`` is the
+   *  union-results view snapshot given back on "返回结果". Never Date.now()-keyed. */
+  const [pathwayDetail, setPathwayDetail] = useState<{
+    card: HomePathwayCard
+    graph: HomeGraphData
+    chain: string[]
+    restore: { graph: HomeGraphData; positions: Record<string, Point>; camera: Point }
+  } | null>(null)
+  /** Right slide-in enzyme picker (per-step multi-select) opened by the detail
+   *  bar's 下载 button. While open the map stays fully usable (no modal backdrop):
+   *  this 0-based index into the route's step list (buildPathwayDetailSteps) is
+   *  the picker's *current step*, shared with the map so that a step chip in the
+   *  popup and a chain-edge click on the map both switch it (bidirectional).
+   *  ``pickerGroupEdges`` caches each composite step's per-enzyme fan-out as it is
+   *  opened (lazily, one network round-trip per group) and feeds both the popup's
+   *  candidate list and the map's expanded-edge fan-out. */
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerStepIndex, setPickerStepIndex] = useState(0)
+  const [pickerGroupEdges, setPickerGroupEdges] = useState<Record<string, HomeGraphEdge[]>>({})
+  const [pickerGroupLoading, setPickerGroupLoading] = useState<string[]>([])
+  const pickerGroupRequestedRef = useRef<Set<string>>(new Set())
+  /** 连星 trace state. While ``traceChain`` is non-null the user is building a
+   *  pathway by clicking map compounds one hop at a time. The chain always starts
+   *  at the session's start compound; each next pick must be a compound the
+   *  current last node feeds a directed (source → target) map pair into, and may
+   *  not already be on the chain (no loops). Reaching the session end compound
+   *  finishes the trace and returns a pathway card for the traced chain. */
+  const [traceChain, setTraceChain] = useState<string[] | null>(null)
+  /** One-line guidance shown in the trace bar (illegal pick, current hint...). */
+  const [traceHint, setTraceHint] = useState<string | null>(null)
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null)
-  const [mode, setMode] = useState<HomeSearchMode>('enzymeItems')
-  const [modeOpen, setModeOpen] = useState(false)
-  const [datasetOpen, setDatasetOpen] = useState(false)
+  const [resultMode, setResultMode] = useState<'map' | 'table'>('map')
+  const [scopeSearch, setScopeSearch] = useState<{
+    query: string
+    total: number
+    shown: number
+    kind: 'compound' | 'enzyme'
+    anchorLabel?: string
+    reactionCount?: number
+  } | null>(null)
+  const [noResult, setNoResult] = useState(false)
+  const [noResultMessage, setNoResultMessage] = useState<string | null>(null)
+  const [enzymeSearchLoading, setEnzymeSearchLoading] = useState(false)
+  /** Active BLAST scope: the map shows the hit enzymes' neighbourhood subgraph. */
+  const [blastScope, setBlastScope] = useState<{ sessionId: number; queryLength: number; searchedSubjects: number; threshold: number; hits: number } | null>(null)
+  const [blastHitMap, setBlastHitMap] = useState<Map<string, BlastHit>>(new Map())
+  /** Matched enzyme ids of the current keyword *enzyme* scope. Used to tell
+   *  retrieved single edges (the searched enzymes) apart from background
+   *  isoenzymes that surface when a composite edge is expanded. Null whenever no
+   *  enzyme scope is active (browse / compound scope / BLAST uses blastHitMap). */
+  const [enzymeScopeHitIds, setEnzymeScopeHitIds] = useState<Set<string> | null>(null)
+  const [blastLoading, setBlastLoading] = useState(false)
   const [controlsOpen, setControlsOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
@@ -206,11 +362,15 @@ export function CompoundGraphHome({
   const [librarySuggestions, setLibrarySuggestions] = useState<HomeSearchSuggestion[]>([])
   const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<Entity | null>(null)
-  const [selectedDatasetId, setSelectedDatasetId] = useState<(typeof homeDatasetOptions)[number]['id']>(homeDatasetOptions[0].id)
   const [nodeSize, setNodeSize] = useState(1.8)
-  const [labelScale, setLabelScale] = useState(1.22)
+  const [edgeThickness, setEdgeThickness] = useState(1)
+  const [labelFontScale, setLabelFontScale] = useState(1)
+  const [structureOpen, setStructureOpen] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<HomeActiveFilters>({ species: [], sourceTypes: [] })
+  const [speciesOptions, setSpeciesOptions] = useState<string[]>([])
+  const [speciesMenuOpen, setSpeciesMenuOpen] = useState(false)
+  const [speciesQuery, setSpeciesQuery] = useState('')
   const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
-  const [isMapPanning, setIsMapPanning] = useState(false)
   const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<PanState | null>(null)
@@ -219,11 +379,16 @@ export function CompoundGraphHome({
   const graphRef = useRef<HomeGraphData | null>(null)
   const positionsRef = useRef<Record<string, Point>>({})
   const cameraRef = useRef<Point>({ x: 0, y: 0 })
-  const zoomRef = useRef(1)
-  const cameraFrameRef = useRef<number | null>(null)
-  const pendingCameraRef = useRef<Point | null>(null)
   const expansionKeysRef = useRef<Set<string>>(new Set())
   const expandingRef = useRef(false)
+  const prevFiltersActiveRef = useRef(false)
+  const browseSnapshotRef = useRef<{ graph: HomeGraphData; positions: Record<string, Point>; camera: Point } | null>(null)
+  /** The pathway card that was selected when 连星 began, so Cancel can restore it. */
+  const preTraceRef = useRef<{ card: HomePathwayCard | null; id: string | null }>({ card: null, id: null })
+  /** Handle for the auto-dismissing 连星 hint message timer. */
+  const traceHintTimerRef = useRef<number | null>(null)
+  const autoSearchHandledRef = useRef<number | null>(null)
+  const autoBlastHandledRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -235,9 +400,7 @@ export function CompoundGraphHome({
         setGraph(payload)
         const layout = createHomeLayout(payload)
         setPositions(layout.positions)
-        setMapCamera({ x: 0, y: 0 })
-        setZoom(1)
-        zoomRef.current = 1
+        setCamera({ x: 0, y: 0 })
         setSelectedNodeId(null)
         setSelectedPairKey(null)
         setExpandedEdges([])
@@ -248,6 +411,21 @@ export function CompoundGraphHome({
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    loadMetadataFilters()
+      .then((payload) => {
+        if (cancelled) return
+        setSpeciesOptions((payload.organisms || []).slice())
+      })
+      .catch(() => {
+        if (!cancelled) setSpeciesOptions([])
       })
     return () => {
       cancelled = true
@@ -267,34 +445,12 @@ export function CompoundGraphHome({
   }, [camera])
 
   useEffect(() => {
-    zoomRef.current = zoom
-  }, [zoom])
-
-  useEffect(() => () => {
-    if (cameraFrameRef.current !== null) window.cancelAnimationFrame(cameraFrameRef.current)
-  }, [])
-
-  const setMapCamera = useCallback((nextCamera: Point) => {
-    if (cameraFrameRef.current !== null) {
-      window.cancelAnimationFrame(cameraFrameRef.current)
-      cameraFrameRef.current = null
-      pendingCameraRef.current = null
+    // The trace-hint message auto-dismisses on a timer; clear it on unmount so
+    // it never touches unmounted state (React warns otherwise).
+    return () => {
+      if (traceHintTimerRef.current !== null) window.clearTimeout(traceHintTimerRef.current)
     }
-    cameraRef.current = nextCamera
-    setCamera(nextCamera)
   }, [])
-
-  const queueMapCamera = (nextCamera: Point) => {
-    cameraRef.current = nextCamera
-    pendingCameraRef.current = nextCamera
-    if (cameraFrameRef.current !== null) return
-    cameraFrameRef.current = window.requestAnimationFrame(() => {
-      cameraFrameRef.current = null
-      const pendingCamera = pendingCameraRef.current
-      pendingCameraRef.current = null
-      if (pendingCamera) setCamera(pendingCamera)
-    })
-  }
 
   useEffect(() => {
     const movePanel = (event: PointerEvent) => {
@@ -324,20 +480,147 @@ export function CompoundGraphHome({
   const viewModel = useMemo(() => createHomeViewModel(graph, positions, selectedPairKey, expandedEdges), [graph, positions, selectedPairKey, expandedEdges])
   const selectedPair = viewModel.pairs.find((pair) => pair.key === selectedPairKey) ?? null
   const selectedNode = viewModel.nodes.find((node) => node.compoundId === selectedNodeId) ?? null
-  const pairEdges = selectedPairKey ? (expandedEdges.length > 0 ? expandedEdges : selectedPair?.edges ?? []) : []
+  const groupItemMap = useMemo(() => {
+    const map = new Map<string, HomeGraphEdgeGroupItem[]>()
+    graph?.edgeGroups.forEach((group) => {
+      if (group.items && group.items.length > 0) map.set(group.edgeGroupId, group.items)
+    })
+    return map
+  }, [graph])
+  // A pathway is a chain of directed compound pairs and every map curve is one
+  // (source → target) pair, so pathway emphasis is matched on the pair key —
+  // never on raw enzyme-edge ids: one enzyme row can back several pairs (bi-bi
+  // reactions, reversible rows), and per-id matching would bleed the highlight
+  // onto sibling pairs of the same enzyme (the "wrong edges lighting up" bug).
+  const activePathwayStepKeys = useMemo(() => {
+    if (!activePathway) return null
+    const chain = activePathway.compoundIds
+    if (!chain || chain.length < 2) return null
+    const keys = new Set<string>()
+    for (let index = 0; index < chain.length - 1; index += 1) {
+      keys.add(pairKey(chain[index], chain[index + 1]))
+    }
+    return keys
+  }, [activePathway])
+  const anyFilterActive = homeFiltersActive(activeFilters)
+  // A pathway session pins the map to its union graph: browsing must not expand
+  // neighbourhoods into it (drag-to-edge is gated on scopeActive at :522).
+  const scopeActive = Boolean(scopeSearch || blastScope || pathwaySession)
+  /** True while the in-map single-route detail sub-view is open. Gates every
+   *  pathway-mode floating panel (composer/launcher/连星/results list) off. */
+  const detailOpen = pathwayDetail !== null
+  /** 1..stepCount step list of the open detail route. Memoised once per detail so
+   *  the picker's step bar, the picker step-state effects and the map→step edge
+   *  click mapping all share one stable array (buildPathwayDetailSteps is pure). */
+  const detailSteps = useMemo(
+    () => (pathwayDetail ? buildPathwayDetailSteps(pathwayDetail.card, pathwayDetail.graph) : []),
+    [pathwayDetail],
+  )
+  const speciesSelectOptions = useMemo(() => {
+    const present = new Set<string>()
+    speciesOptions.forEach((species) => present.add(species))
+    groupItemMap.forEach((items) => items.forEach((item) => { if (item.organismName) present.add(item.organismName) }))
+    return [...present].sort((a, b) => a.localeCompare(b))
+  }, [speciesOptions, groupItemMap])
+  const pairFilterMeta = useMemo(() => {
+    const meta = new Map<string, { visible: boolean; passing: number; singleLabel: string | null }>()
+    if (anyFilterActive) {
+      viewModel.pairs.forEach((pair) => {
+        const passing = homePairPassingUnits(pair, groupItemMap, activeFilters)
+        const first = passing[0]
+        meta.set(pair.key, {
+          visible: passing.length > 0,
+          passing: passing.length,
+          singleLabel: passing.length === 1 && first ? homeUnitLabel(first) : null,
+        })
+      })
+    }
+    return meta
+  }, [anyFilterActive, viewModel.pairs, groupItemMap, activeFilters])
+  const pairEdges = selectedPairKey ? (expandedEdges.length > 0 ? expandedEdges : selectedPair?.edges ?? []).filter((edge) => (anyFilterActive ? homeEdgePasses(edge, activeFilters) : true)) : []
   const expandedEdgeGroups = useMemo(
     () => groupExpandedEdgesByEnzyme(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
     [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
   )
-  const expandedReactionGroups = useMemo(
-    () => groupExpandedEdgesByReaction(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
-    [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
-  )
+  // Enzyme ids that count as "retrieved by the active search". BLAST scopes use
+  // the hit map; keyword enzyme scopes use the ids that matched. Compound scopes
+  // and the plain browse map have no retrieved set — expanded single edges keep
+  // their ordinary look there.
+  const scopeHitSet = useMemo(() => {
+    if (blastScope && blastHitMap.size > 0) return new Set(blastHitMap.keys())
+    if (scopeSearch?.kind === 'enzyme') return enzymeScopeHitIds
+    return null
+  }, [blastScope, blastHitMap, enzymeScopeHitIds, scopeSearch])
   const selectedExpandedGroup = expandedEdgeGroups.find((group) => group.edgeIds.includes(selectedEdgeId || '')) || expandedEdgeGroups[0] || null
   const selectedPairTotal = selectedPair ? Math.max(selectedPair.count, selectedPair.edges.length) : 0
   const visibleEdgeCount = viewModel.pairs.reduce((sum, pair) => sum + Math.max(pair.count, pair.edges.length || 0), 0)
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
-  const selectedDataset = homeDatasetOptions.find((item) => item.id === selectedDatasetId) ?? homeDatasetOptions[0]
+  // ---- 连星 support data -------------------------------------------------
+  // Every server-returned card begins at the session start compound and ends at
+  // the session end compound, so those anchor the trace. Legal hops come from the
+  // directed (source → target) pair graph actually drawn, which is exactly the
+  // graph a traced chain has to light up; organism/source filters hide edges
+  // only at render time, so a filtered-out pair is also not a legal hop.
+  const traceStartId = pathwaySession?.cards[0]?.compoundIds[0] ?? null
+  const traceEndId = (() => {
+    const ids = pathwaySession?.cards[0]?.compoundIds
+    return ids && ids.length > 0 ? ids[ids.length - 1] : null
+  })()
+  const traceAdjacency = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    viewModel.pairs.forEach((pair) => {
+      if (anyFilterActive) {
+        const meta = pairFilterMeta.get(pair.key)
+        if (!meta || !meta.visible) return
+      }
+      const targets = map.get(pair.sourceId)
+      if (targets) targets.add(pair.targetId)
+      else map.set(pair.sourceId, new Set([pair.targetId]))
+    })
+    return map
+  }, [viewModel.pairs, anyFilterActive, pairFilterMeta])
+  const traceCurrentId = traceChain ? traceChain[traceChain.length - 1] : null
+  /** Compounds the current last node may legally step into next: its visible
+   *  out-neighbours minus anything already on the trace (the no-loop rule). */
+  const traceNextIds = useMemo(() => {
+    if (!traceChain || traceChain.length === 0) return null
+    const onChain = new Set(traceChain)
+    const next = new Set<string>()
+    const outgoing = traceAdjacency.get(traceChain[traceChain.length - 1])
+    if (outgoing) outgoing.forEach((id) => { if (!onChain.has(id)) next.add(id) })
+    return next
+  }, [traceChain, traceAdjacency])
+  /** Build a synthetic pathway card for a chain the user traced by clicking, so
+   *  the traced route can be highlighted and returned exactly like a server card.
+   *  Steps resolve against the session union graph's real pair/edge ids. */
+  const makeTracedCard = (chain: string[]): HomePathwayCard => {
+    const steps = Math.max(chain.length - 1, 0)
+    const edgeIds: string[] = []
+    const edgeGroupIds: string[] = []
+    const segments: { sourceCompoundId: string; targetCompoundId: string; edgeId: string | null; edgeGroupId: string | null }[] = []
+    for (let index = 0; index < steps; index += 1) {
+      const from = chain[index]
+      const to = chain[index + 1]
+      const pair = viewModel.pairs.find((p) => p.sourceId === from && p.targetId === to)
+      const singleId = pair && !pair.edgeGroupId ? pair.edges[0]?.edgeId ?? pair.edgeIds[0] ?? null : null
+      const groupId = pair?.edgeGroupId ?? null
+      if (singleId) edgeIds.push(singleId)
+      if (groupId) edgeGroupIds.push(groupId)
+      segments.push({ sourceCompoundId: from, targetCompoundId: to, edgeId: singleId, edgeGroupId: groupId })
+    }
+    return {
+      pathwayId: `TRACE_${chain.join('_')}`,
+      summary: chain.map((id) => compoundName(id)).join(' → '),
+      compoundIds: chain.slice(),
+      edgeIds,
+      edgeGroupIds,
+      segments,
+      stepCount: steps,
+      score: null,
+      graph: null,
+    }
+  }
+  const sameCompoundChain = (a: string[], b: string[]) => a.length === b.length && a.every((id, index) => id === b[index])
   const importantLabelIds = useMemo(() => pickImportantHomeLabelIds(viewModel.nodes), [viewModel.nodes])
   const selectedEdge = selectedExpandedGroup?.representative || pairEdges.find((edge) => edge.edgeId === selectedEdgeId) || pairEdges[0] || null
   const trimmedSearchValue = searchValue.trim()
@@ -353,13 +636,13 @@ export function CompoundGraphHome({
     })
     return [...localSearchSuggestions, ...remoteItems].slice(0, 10)
   }, [localSearchSuggestions, librarySuggestions, searchFilter])
-  const showSearchSuggestions = mode !== 'blast' && searchFocused && trimmedSearchValue.length > 0
+  const showSearchSuggestions = searchFocused && trimmedSearchValue.length > 0
   const panelStyle: CSSProperties | undefined = panelPosition
     ? { left: panelPosition.x, top: panelPosition.y, right: 'auto', bottom: 'auto' }
     : undefined
 
   useEffect(() => {
-    if (mode === 'blast' || (searchFilter !== 'all' && searchFilter !== 'enzyme') || trimmedSearchValue.length < 2) {
+    if ((searchFilter !== 'all' && searchFilter !== 'enzyme') || trimmedSearchValue.length < 2) {
       setLibrarySuggestions([])
       setLibrarySearchLoading(false)
       return
@@ -396,11 +679,12 @@ export function CompoundGraphHome({
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [mode, searchFilter, trimmedSearchValue])
+  }, [searchFilter, trimmedSearchValue])
 
   const focusCameraOnPoint = (point: Point, target: Point = { x: 58, y: 56 }) => {
-    const zoomLevel = zoomRef.current
-    setMapCamera({ x: target.x - point.x * zoomLevel, y: target.y - point.y * zoomLevel })
+    const nextCamera = { x: target.x - point.x, y: target.y - point.y }
+    setCamera(nextCamera)
+    cameraRef.current = nextCamera
   }
 
   const focusCameraOnNode = (compoundId: string, target: Point = { x: 38, y: 54 }) => {
@@ -417,6 +701,7 @@ export function CompoundGraphHome({
 
   const expandFromNodeAtEdge = async (nodeId: string, direction: ExpansionDirection) => {
     if (expandingRef.current) return
+    if (scopeActive) return
     const currentGraph = graphRef.current
     if (!currentGraph) return
     const expansionKey = `${nodeId}:${direction}`
@@ -460,7 +745,6 @@ export function CompoundGraphHome({
       originCamera: cameraRef.current,
       moved: false,
     }
-    setIsMapPanning(true)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
@@ -472,9 +756,13 @@ export function CompoundGraphHome({
     const panState = panRef.current
     const svg = svgRef.current
     if (!panState || panState.pointerId !== event.pointerId || !svg) return
-    const delta = svgPointerDelta(svg, panState.startClientX, panState.startClientY, event.clientX, event.clientY)
-    if (Math.abs(delta.x) > 0.8 || Math.abs(delta.y) > 0.8) panState.moved = true
-    queueMapCamera({ x: panState.originCamera.x + delta.x, y: panState.originCamera.y + delta.y })
+    const rect = svg.getBoundingClientRect()
+    const deltaX = ((event.clientX - panState.startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH
+    const deltaY = ((event.clientY - panState.startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT
+    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) panState.moved = true
+    const nextCamera = { x: panState.originCamera.x + deltaX, y: panState.originCamera.y + deltaY }
+    cameraRef.current = nextCamera
+    setCamera(nextCamera)
   }
 
   const finishMapPan = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -485,20 +773,22 @@ export function CompoundGraphHome({
     const panState = panRef.current
     if (!panState || panState.pointerId !== event.pointerId) return
     panRef.current = null
-    setIsMapPanning(false)
-    if (!panState.moved) clearPairSelection()
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGCircleElement>, node: NodeCard, point: Point) => {
     if (event.button !== 0) return
     event.stopPropagation()
-    setSelectedNodeId(null)
-    setSelectedPairKey(null)
-    setExpandedEdges([])
-    setSelectedEdgeId(null)
-    setActivePathway(null)
-    setSelectedLibraryItem(null)
+    // While tracing, taps route through handleTraceTap which owns what stays
+    // selected; do not drop the live partial-chain highlight on pointer-down.
+    if (!traceChain) {
+      setSelectedNodeId(null)
+      setSelectedPairKey(null)
+      setExpandedEdges([])
+      setSelectedEdgeId(null)
+      setActivePathway(null)
+      setSelectedLibraryItem(null)
+    }
     nodeDragRef.current = {
       pointerId: event.pointerId,
       nodeId: node.compoundId,
@@ -515,7 +805,7 @@ export function CompoundGraphHome({
     const dragState = nodeDragRef.current
     const svg = svgRef.current
     if (!dragState || dragState.pointerId !== pointerId || !svg) return false
-    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY, zoomRef.current)
+    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY)
     if (Math.abs(delta.x) > 0.35 || Math.abs(delta.y) > 0.35) dragState.moved = true
     const nextPoint = {
       x: dragState.originPoint.x + delta.x,
@@ -527,6 +817,8 @@ export function CompoundGraphHome({
     }
     positionsRef.current = nextPositions
     setPositions(nextPositions)
+    const direction = getNodeExpansionDirection(nextPoint, cameraRef.current)
+    if (dragState.moved && direction) void expandFromNodeAtEdge(dragState.nodeId, direction)
     return true
   }
 
@@ -605,40 +897,58 @@ export function CompoundGraphHome({
     setHighlightedEdgeGroupIds(new Set([pair.edgeGroupId || pair.key]))
     setSearchFeedback(null)
     focusCameraOnPair(pair)
+    let nextEdges: HomeGraphEdge[]
     if (pair.edges.length > 0 && pair.edges.length === pair.count) {
-      const nextEdges = pair.edges
-      const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
-      setExpandedEdges(nextEdges)
-      setSelectedEdgeId(selected?.edgeId ?? null)
-      setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
-      return
-    }
-    if (pair.edgeGroupId) {
+      nextEdges = pair.edges
+    } else if (pair.edgeGroupId) {
       setExpandedLoading(true)
       try {
         const edges = await loadExpandedEdgeGroup(pair.edgeGroupId)
-        const nextEdges = edges.length > 0 ? edges : pair.edges
-        const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
-        setExpandedEdges(nextEdges)
-        setSelectedEdgeId(selected?.edgeId ?? null)
-        setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
+        nextEdges = edges.length > 0 ? edges : pair.edges
       } finally {
         setExpandedLoading(false)
       }
+    } else {
+      nextEdges = pair.edges
+    }
+    commitPairEdges(nextEdges, targetEdge)
+  }
+
+  const commitPairEdges = (nextEdges: HomeGraphEdge[], targetEdge?: { edgeId?: string; enzymeId?: string; reactionId?: string }) => {
+    const filteredEdges = anyFilterActive ? nextEdges.filter((edge) => homeEdgePasses(edge, activeFilters)) : nextEdges
+    if (filteredEdges.length === 0) {
+      clearPairSelection()
       return
     }
-    const nextEdges = pair.edges
-    const selected = pickTargetEdge(nextEdges, targetEdge) || nextEdges[0] || null
-    setExpandedEdges(nextEdges)
+    const selected = pickTargetEdge(filteredEdges, targetEdge) || filteredEdges[0] || null
+    setExpandedEdges(filteredEdges)
     setSelectedEdgeId(selected?.edgeId ?? null)
-    setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : nextEdges.map((edge) => edge.edgeId)))
+    setHighlightedEdgeIds(new Set(selected ? [selected.edgeId] : filteredEdges.map((edge) => edge.edgeId)))
   }
 
   const handlePairClick = async (pair: PairEntry) => {
+    // Opening the enzyme stack would displace the results list the trace feeds;
+    // leave the trace alone when an edge is clicked mid-trace.
+    if (traceChain) {
+      showTraceHint('Finish or cancel the trace before inspecting an edge.')
+      return
+    }
+    // While the picker is open the map stays fully operable and NEVER closes it.
+    // Clicking a chain edge instead retargets the popup to that step and fans its
+    // composite edge out — the "点边" half of the bidirectional linkage.
+    if (pickerOpen && pathwayDetail) {
+      const index = detailSteps.findIndex(
+        (step) => step.sourceId === pair.sourceId && step.targetId === pair.targetId,
+      )
+      if (index >= 0) {
+        setPickerActiveStep(index)
+        return
+      }
+    }
     await selectPair(pair)
   }
 
-  const clearPairSelection = useCallback(() => {
+  const clearPairSelection = () => {
     setSelectedPairKey(null)
     setExpandedEdges([])
     setSelectedEdgeId(null)
@@ -649,56 +959,152 @@ export function CompoundGraphHome({
     setActivePathway(null)
     setSelectedLibraryItem(null)
     setSearchFeedback(null)
-  }, [])
-
-  const setZoomAtPoint = useCallback((nextZoom: number, anchor: Point) => {
-    const currentZoom = zoomRef.current
-    const zoomLevel = clamp(nextZoom, HOME_ZOOM_MIN, HOME_ZOOM_MAX)
-    if (Math.abs(zoomLevel - currentZoom) < 0.001) return
-    const worldPoint = {
-      x: (anchor.x - cameraRef.current.x) / currentZoom,
-      y: (anchor.y - cameraRef.current.y) / currentZoom,
-    }
-    const nextCamera = {
-      x: anchor.x - worldPoint.x * zoomLevel,
-      y: anchor.y - worldPoint.y * zoomLevel,
-    }
-    zoomRef.current = zoomLevel
-    setZoom(zoomLevel)
-    setMapCamera(nextCamera)
-  }, [setMapCamera])
-
-  const handleMapWheel = useCallback((event: WheelEvent) => {
-    const svg = svgRef.current
-    if (!svg) return
-    event.preventDefault()
-    const anchor = svgClientPoint(svg, event.clientX, event.clientY)
-    const wheelScale = Math.exp(-event.deltaY * 0.0015)
-    setZoomAtPoint(zoomRef.current * wheelScale, anchor)
-  }, [setZoomAtPoint])
-
-  useEffect(() => {
-    const svg = svgRef.current
-    if (!svg) return
-    svg.addEventListener('wheel', handleMapWheel, { passive: false })
-    return () => svg.removeEventListener('wheel', handleMapWheel)
-  }, [graph, handleMapWheel])
-
-  const resetMapView = () => {
-    zoomRef.current = 1
-    setZoom(1)
-    setMapCamera({ x: 0, y: 0 })
   }
 
+  const toggleSpeciesFilter = (species: string) => {
+    setActiveFilters((prev) => ({
+      ...prev,
+      species: prev.species.includes(species) ? prev.species.filter((item) => item !== species) : [...prev.species, species],
+    }))
+  }
+
+  const toggleSourceFilter = (sourceType: string) => {
+    setActiveFilters((prev) => ({
+      ...prev,
+      sourceTypes: prev.sourceTypes.includes(sourceType) ? prev.sourceTypes.filter((item) => item !== sourceType) : [...prev.sourceTypes, sourceType],
+    }))
+  }
+
+  const resetActiveFilters = () => {
+    setActiveFilters({ species: [], sourceTypes: [] })
+    setSpeciesQuery('')
+    setSpeciesMenuOpen(false)
+  }
+
+  // If the current filters hide every expanded sub-edge of the open selection, drop back to browse state.
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) clearPairSelection()
+    if (!selectedPairKey || !anyFilterActive || expandedEdges.length === 0) return
+    const passing = expandedEdges.filter((edge) => homeEdgePasses(edge, activeFilters))
+    if (passing.length === 0) {
+      clearPairSelection()
+    } else if (passing.length !== expandedEdges.length) {
+      setExpandedEdges(passing)
+      setSelectedEdgeId((current) => (current && passing.some((edge) => edge.edgeId === current) ? current : (passing[0]?.edgeId ?? null)))
     }
-    window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
-  }, [clearPairSelection])
+  }, [selectedPairKey, anyFilterActive, expandedEdges, activeFilters])
+
+  // Clearing the filters while a pair is expanded would keep a stale filtered subset;
+  // collapse so the next click reloads the full edge set.
+  useEffect(() => {
+    const wasActive = prevFiltersActiveRef.current
+    prevFiltersActiveRef.current = anyFilterActive
+    if (wasActive && !anyFilterActive && selectedPairKey && expandedEdges.length > 0) {
+      clearPairSelection()
+    }
+  }, [anyFilterActive, selectedPairKey, expandedEdges])
+
+  // ---- 连星 trace interactions ------------------------------------------
+  const clearTraceHintTimer = () => {
+    if (traceHintTimerRef.current !== null) {
+      window.clearTimeout(traceHintTimerRef.current)
+      traceHintTimerRef.current = null
+    }
+  }
+  const showTraceHint = (message: string) => {
+    setTraceHint(message)
+    clearTraceHintTimer()
+    traceHintTimerRef.current = window.setTimeout(() => setTraceHint(null), 3600)
+  }
+  const stopTrace = () => {
+    setTraceChain(null)
+    setTraceHint(null)
+    clearTraceHintTimer()
+  }
+  /** Enter 连星: anchor on the session start compound and let the user click its
+   *  way through direct neighbours. The previous selection is remembered so the
+   *  Cancel button can hand the map back to it. */
+  const beginTrace = () => {
+    if (!pathwaySession || traceChain || !traceStartId) return
+    preTraceRef.current = { card: activePathway, id: selectedPathwayId }
+    setComposerOpen(false)
+    setSelectedPairKey(null)
+    setSelectedNodeId(null)
+    setExpandedEdges([])
+    setSelectedEdgeId(null)
+    setSelectedLibraryItem(null)
+    setHighlightedNodeIds(new Set())
+    setHighlightedEdgeIds(new Set())
+    setHighlightedEdgeGroupIds(new Set())
+    setTraceHint(null)
+    setTraceChain([traceStartId])
+    // Single-node chain: the start ring anchors where the trace begins.
+    setActivePathway(makeTracedCard([traceStartId]))
+  }
+  const undoTrace = () => {
+    if (!traceChain || traceChain.length <= 1) return
+    const next = traceChain.slice(0, -1)
+    setTraceChain(next)
+    setActivePathway(makeTracedCard(next))
+    setTraceHint(null)
+  }
+  /** Leave the trace and restore whatever pathway card was selected when it began. */
+  const cancelTrace = () => {
+    const prior = preTraceRef.current
+    stopTrace()
+    preTraceRef.current = { card: null, id: null }
+    if (prior.card) {
+      selectPathwayCard(prior.card)
+    } else {
+      setActivePathway(null)
+      setSelectedPathwayId(null)
+      setHighlightedNodeIds(new Set())
+      setHighlightedEdgeIds(new Set())
+      setHighlightedEdgeGroupIds(new Set())
+    }
+  }
+  /** The trace reached its endpoint: surface the traced chain as a result card.
+   *  If it coincides with a server-returned card, that row is selected instead
+   *  of inserting a duplicate. */
+  const finishTrace = (chain: string[]) => {
+    const card = makeTracedCard(chain)
+    const duplicate = pathwaySession?.cards.find((existing) => sameCompoundChain(existing.compoundIds, chain))
+    stopTrace()
+    if (duplicate) {
+      selectPathwayCard(duplicate)
+      return
+    }
+    setPathwaySession((prev) => (prev ? { ...prev, cards: [card, ...prev.cards] } : prev))
+    selectPathwayCard(card)
+  }
+  /** One node click while tracing. Rules: the pick must be a direct visible
+   *  out-neighbour of the current last node, and must not already be on the
+   *  chain (no loops). Landing on the session end compound finishes the trace. */
+  const handleTraceTap = (compoundId: string) => {
+    const chain = traceChain
+    if (!chain || chain.length === 0) return
+    if (chain.includes(compoundId)) {
+      showTraceHint('This compound is already on the trace — you cannot loop back to it.')
+      return
+    }
+    if (!traceNextIds?.has(compoundId)) {
+      showTraceHint('Pick one of the ringed compounds directly connected to the current one.')
+      return
+    }
+    const next = [...chain, compoundId]
+    if (compoundId === traceEndId) {
+      finishTrace(next)
+      return
+    }
+    setTraceChain(next)
+    setActivePathway(makeTracedCard(next))
+    setTraceHint(null)
+  }
 
   const handleNodeSelect = (compoundId: string) => {
+    if (traceChain) {
+      handleTraceTap(compoundId)
+      return
+    }
     setSelectedNodeId(compoundId)
     setSelectedPairKey(null)
     setExpandedEdges([])
@@ -716,7 +1122,7 @@ export function CompoundGraphHome({
     if (!graph) return
     const layout = createHomeLayout(graph)
     setPositions(layout.positions)
-    resetMapView()
+    setCamera({ x: 0, y: 0 })
     setSelectedNodeId(null)
     setSelectedPairKey(null)
     setExpandedEdges([])
@@ -777,8 +1183,8 @@ export function CompoundGraphHome({
       const payload = await loadHomeGraph({ centerCompoundId: sourceId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
       const merged = mergeHomeGraph(graphRef.current, payload)
       const seedPoint = positionsRef.current[sourceId] || {
-        x: (42 - cameraRef.current.x) / zoomRef.current,
-        y: (54 - cameraRef.current.y) / zoomRef.current,
+        x: 42 - cameraRef.current.x,
+        y: 54 - cameraRef.current.y,
       }
       const seededPositions = {
         ...positionsRef.current,
@@ -812,102 +1218,486 @@ export function CompoundGraphHome({
     }
   }
 
+  /** Drop the pathway session and, when it was showing its union graph on the
+   *  map, hand the browse graph back. Keeps ``searchMode`` untouched so the
+   *  caller decides which system owns the surface next. */
+  const clearPathwayResults = () => {
+    if (pathwaySession) {
+      restoreBrowseGraph()
+      browseSnapshotRef.current = null
+    }
+    // A brand click / mode switch / fresh run exits the in-map detail sub-view too,
+    // so a stale single-chain graph can never linger after the session is dropped.
+    setPathwayDetail(null)
+    setPickerOpen(false)
+    stopTrace()
+    preTraceRef.current = { card: null, id: null }
+    setPathwaySession(null)
+    setSelectedPathwayId(null)
+    setActivePathway(null)
+    setPathwayError(null)
+    setNoResult(false)
+    setNoResultMessage(null)
+    setPathwaySearchLoading(false)
+    setHighlightedNodeIds(new Set())
+    setHighlightedEdgeIds(new Set())
+    setHighlightedEdgeGroupIds(new Set())
+    setComposerOpen(true)
+  }
+
+  /** Flip the map's top search bar between the enzyme and the pathway system. */
+  const switchSearchMode = (mode: 'enzyme' | 'pathway') => {
+    if (mode === searchMode) return
+    setSearchMode(mode)
+    setSearchFocused(false)
+    if (mode === 'enzyme') clearPathwayResults()
+  }
+
+  const restoreBrowseGraph = () => {
+    const snapshot = browseSnapshotRef.current
+    if (snapshot) {
+      graphRef.current = snapshot.graph
+      positionsRef.current = snapshot.positions
+      setGraph(snapshot.graph)
+      setPositions(snapshot.positions)
+      setCamera(snapshot.camera)
+      cameraRef.current = snapshot.camera
+    }
+  }
+
+  const clearSearchScope = () => {
+    clearPathwayResults()
+    restoreBrowseGraph()
+    browseSnapshotRef.current = null
+    setScopeSearch(null)
+    setBlastScope(null)
+    setBlastHitMap(new Map())
+    setEnzymeScopeHitIds(null)
+    setNoResult(false)
+    setNoResultMessage(null)
+    setEnzymeSearchLoading(false)
+    setSearchValue('')
+    setSearchFocused(false)
+    clearPairSelection()
+  }
+
+  /** Brand click: drop any scope/search running on this map, then hand the
+   *  parent a chance to reset the app-wide search state and land on home. */
+  const handleBrandHome = () => {
+    switchSearchMode('enzyme')
+    clearSearchScope()
+    onResetHome?.()
+  }
+
+  const runMapEnzymeSearch = async (query: string) => {
+    // An enzyme keyword run owns the surface: leave pathway mode, drop any
+    // pathway session, then fall back to the browse graph before showing the new result.
+    setSearchMode('enzyme')
+    clearPathwayResults()
+    restoreBrowseGraph()
+    const currentGraph = graphRef.current
+    if (!currentGraph) return
+    // A keyword scope supersedes any BLAST scope currently on the map.
+    setBlastScope(null)
+    setBlastHitMap(new Map())
+    setEnzymeScopeHitIds(null)
+    setEnzymeSearchLoading(true)
+    setSearchFocused(false)
+    setNoResult(false)
+    setNoResultMessage(null)
+    try {
+      const scope = await mapScopeSearch({ q: query, limitNodes: 90 })
+      const kind = scope.kind
+      const emptyGraph = scope.graph.nodes.length === 0 && scope.graph.edgeGroups.length === 0
+      if (kind === 'none' || emptyGraph) {
+        setScopeSearch(null)
+        setNoResult(true)
+        setNoResultMessage(
+          kind === 'compound'
+            ? `Compound "${query}" is in the library, but none of its reactions currently have a usable enzyme edge to draw on the map.`
+            : kind === 'enzyme'
+              ? `${scope.total} enzyme hit(s), but none currently have a usable reaction edge to draw on the map.`
+              : `Nothing in the database matches "${query}". Try a compound name, enzyme name, or EC number.`,
+        )
+        return
+      }
+      if (!browseSnapshotRef.current) {
+        browseSnapshotRef.current = { graph: currentGraph, positions: positionsRef.current, camera: cameraRef.current }
+      }
+      clearPairSelection()
+      // Keep the returned neighbourhood compact: the layout above is sized for
+      // the pan-around browse canvas, so re-fit it to sit inside the viewport.
+      // For a compound search the searched compound is pinned to the visual
+      // centre (ring + glow + always-on label) — no card over the centre.
+      const anchorId = kind === 'compound' ? scope.anchorIds.find((id) => scope.graph.nodes.some((node) => node.compoundId === id)) : null
+      const focusId = anchorId || (kind === 'compound' ? scope.graph.nodes[0]?.compoundId : null) || null
+      const layout = createHomeLayout(scope.graph)
+      const layoutPositions = fitScopeHomePositions(layout.positions, focusId)
+      graphRef.current = scope.graph
+      positionsRef.current = layoutPositions
+      setGraph(scope.graph)
+      setPositions(layoutPositions)
+      setCamera({ x: 0, y: 0 })
+      cameraRef.current = { x: 0, y: 0 }
+      setScopeSearch({
+        query,
+        total: scope.total,
+        shown: scope.shown,
+        kind,
+        anchorLabel: scope.anchorLabel || undefined,
+        reactionCount: scope.reactionCount,
+      })
+      // An enzyme keyword scope knows exactly which enzymes were searched: those
+      // ids are the "retrieved" set used to emphasise hit edges over background
+      // isoenzymes when a composite edge is expanded. Compound scopes have none.
+      setEnzymeScopeHitIds(kind === 'enzyme' ? new Set((scope.enzymeIds || []).filter(Boolean)) : null)
+      if (kind === 'compound' && focusId) {
+        setHighlightedNodeIds(new Set([focusId]))
+        setHighlightedEdgeIds(new Set())
+        setHighlightedEdgeGroupIds(new Set())
+      }
+    } catch (err) {
+      setSearchFeedback(err instanceof Error ? err.message : 'Map search failed')
+    } finally {
+      setEnzymeSearchLoading(false)
+    }
+  }
+
+  // Scoped subgraph for a completed BLAST run: draw the hit enzymes' reaction
+  // neighbourhood through /graph/by-enzymes, exactly like an enzyme keyword
+  // scope but driven by the hit id list (kept in E-value order).
+  const runBlastScopeSearch = async (session: BlastSession) => {
+    setSearchMode('enzyme')
+    clearPathwayResults()
+    restoreBrowseGraph()
+    const currentGraph = graphRef.current
+    if (!currentGraph) return
+    setBlastLoading(true)
+    setBlastScope(null)
+    setNoResult(false)
+    setNoResultMessage(null)
+    try {
+      const payload = session.payload
+      const enzymeIds = payload.hits.map((hit) => hit.enzymeId)
+      const scopeGraph = await loadGraphForEnzymes(enzymeIds, { limitNodes: 90 })
+      const emptyGraph = scopeGraph.nodes.length === 0 && scopeGraph.edgeGroups.length === 0
+      if (emptyGraph) {
+        setBlastHitMap(new Map())
+        setNoResult(true)
+        setNoResultMessage('The BLAST hits do not currently have a usable reaction edge to draw on the map.')
+        return
+      }
+      if (!browseSnapshotRef.current) {
+        browseSnapshotRef.current = { graph: currentGraph, positions: positionsRef.current, camera: cameraRef.current }
+      }
+      clearPairSelection()
+      const layout = createHomeLayout(scopeGraph)
+      const layoutPositions = fitScopeHomePositions(layout.positions, null)
+      graphRef.current = scopeGraph
+      positionsRef.current = layoutPositions
+      setGraph(scopeGraph)
+      setPositions(layoutPositions)
+      setCamera({ x: 0, y: 0 })
+      cameraRef.current = { x: 0, y: 0 }
+      setScopeSearch(null)
+      setEnzymeScopeHitIds(null)
+      // Best E-value per hit enzyme (hits arrive E-value-sorted, so first wins).
+      const hitMap = new Map<string, BlastHit>()
+      payload.hits.forEach((hit) => {
+        if (!hitMap.has(hit.enzymeId)) hitMap.set(hit.enzymeId, hit)
+      })
+      setBlastHitMap(hitMap)
+      setBlastScope({
+        sessionId: session.id,
+        queryLength: payload.queryLength,
+        searchedSubjects: payload.searchedSubjects,
+        threshold: payload.threshold,
+        hits: payload.hits.length,
+      })
+    } catch (err) {
+      setBlastScope(null)
+      setBlastHitMap(new Map())
+      setEnzymeScopeHitIds(null)
+      setSearchFeedback(err instanceof Error ? err.message : 'Unable to draw the BLAST hits on the map.')
+    } finally {
+      setBlastLoading(false)
+    }
+  }
+
   const handleSearchSubmit = async () => {
     const trimmed = searchValue.trim()
-    setModeOpen(false)
     if (!trimmed) {
-      clearPairSelection()
+      if (scopeActive) clearSearchScope()
       return
     }
-    if (mode === 'blast') {
+    if (resultMode === 'table') {
+      clearSearchScope()
       onOpenSearch(trimmed)
       return
     }
-    if (mode === 'pathways') {
-      await handlePathwaySearch(trimmed)
-      return
-    }
-    if (visibleSearchSuggestions.length > 0) {
-      await handleSearchSuggestionSelect(visibleSearchSuggestions[0])
-      return
-    }
-    setSearchFeedback('No matching result in the loaded map yet.')
+    await runMapEnzymeSearch(trimmed)
   }
 
-  const handleGraphSearch = (query: string) => {
-    if (!graph) return
-    const match = findGraphSearchMatch(query, graph, viewModel.pairs)
-    if (match.kind === 'node') {
-      setSelectedNodeId(match.nodeId)
-      setSelectedPairKey(null)
+  // Re-entering from the table results page with a query (Map toggle): scope the
+  // map to that query as soon as the browse graph has finished loading.
+  useEffect(() => {
+    if (!autoMapSearch) return
+    if (autoSearchHandledRef.current === autoMapSearch.nonce) return
+    if (loading || mapExpanding || !graph || graph.nodes.length === 0) return
+    autoSearchHandledRef.current = autoMapSearch.nonce
+    setResultMode('map')
+    setSearchMode('enzyme')
+    void runMapEnzymeSearch(autoMapSearch.query)
+    onAutoMapSearchConsumed?.()
+  }, [autoMapSearch, loading, mapExpanding, graph])
+
+  // Same hand-off for a completed BLAST run: scope the map to the hit enzymes.
+  useEffect(() => {
+    if (!autoBlastScope || !blastSession) return
+    if (blastSession.id !== autoBlastScope.sessionId) return
+    if (autoBlastHandledRef.current === autoBlastScope.nonce) return
+    if (loading || mapExpanding || !graph || graph.nodes.length === 0) return
+    autoBlastHandledRef.current = autoBlastScope.nonce
+    setResultMode('map')
+    setSearchMode('enzyme')
+    void runBlastScopeSearch(blastSession)
+    onAutoBlastScopeConsumed?.()
+  }, [autoBlastScope, blastSession, loading, mapExpanding, graph])
+
+  /** Single-select one returned pathway card: clear any node/pair popover so the
+   *  results list is the only floating panel, then highlight its chain on the map. */
+  const selectPathwayCard = (card: HomePathwayCard) => {
+    // Choosing a returned row is an explicit exit from 连星: stop tracing and
+    // highlight the picked card instead of the in-progress chain.
+    if (traceChain) stopTrace()
+    setSelectedPairKey(null)
+    setSelectedNodeId(null)
+    setExpandedEdges([])
+    setSelectedEdgeId(null)
+    setSelectedLibraryItem(null)
+    setActivePathway(card)
+    setSelectedPathwayId(card.pathwayId)
+    // Pathway emphasis is driven solely by activePathway (chain nodes via
+    // compoundIds + edges via the pair-step keys). Do NOT fill the generic
+    // .highlighted scope sets here: they match per-enzyme-edge ids, which one
+    // enzyme row can share across several compound pairs, so filling them would
+    // re-introduce the sibling-edge bleed this fix removes.
+    setHighlightedNodeIds(new Set())
+    setHighlightedEdgeIds(new Set())
+    setHighlightedEdgeGroupIds(new Set())
+    setSearchFeedback(null)
+    focusCameraOnPath(card.compoundIds)
+  }
+
+  /** Open the in-map single-route detail sub-view for one returned card. Swaps
+   *  the map to the card's own chain graph (double-writing ref/state), keeping a
+   *  snapshot of the union-results view so "返回结果" restores it exactly. */
+  const openPathwayDetail = (card: HomePathwayCard) => {
+    if (!pathwaySession) return
+    // Opening a route detail is an explicit exit from 连星.
+    if (traceChain) stopTrace()
+    const chainGraph = buildPathwayChainGraph(card, pathwaySession.graph)
+    if (chainGraph.nodes.length === 0) return
+    const layout = createHomeLayout(chainGraph)
+    const chainPositions = fitScopeHomePositions(layout.positions, null)
+    // Snapshot the union view before swapping. Points are never mutated after a
+    // set, so a shallow copy of the positions map is a safe restore point.
+    const restore = {
+      graph: graphRef.current ?? pathwaySession.graph,
+      positions: { ...positionsRef.current },
+      camera: { ...cameraRef.current },
+    }
+    clearPairSelection()
+    setSelectedPathwayId(null)
+    graphRef.current = chainGraph
+    positionsRef.current = chainPositions
+    setGraph(chainGraph)
+    setPositions(chainPositions)
+    setCamera({ x: 0, y: 0 })
+    cameraRef.current = { x: 0, y: 0 }
+    setPathwayDetail({ card, graph: chainGraph, chain: card.compoundIds, restore })
+    setPickerOpen(false)
+    // Highlight the chain via the existing activePathway emphasis (pair-step keys
+    // are computed purely from compoundIds, so they work on the swapped graph).
+    setActivePathway(card)
+    setSearchFeedback(null)
+  }
+
+  /** Leave the detail sub-view: hand the union-results view back exactly as the
+   *  user left it and re-highlight the card that was being viewed. */
+  const closePathwayDetail = () => {
+    const detail = pathwayDetail
+    if (!detail) return
+    graphRef.current = detail.restore.graph
+    positionsRef.current = detail.restore.positions
+    cameraRef.current = detail.restore.camera
+    setGraph(detail.restore.graph)
+    setPositions(detail.restore.positions)
+    setCamera(detail.restore.camera)
+    setPathwayDetail(null)
+    setPickerOpen(false)
+    clearPairSelection()
+    // Re-highlight the card we were viewing if it still belongs to the session.
+    if (pathwaySession && pathwaySession.cards.some((item) => item.pathwayId === detail.card.pathwayId)) {
+      selectPathwayCard(detail.card)
+    }
+  }
+
+  /* ---- per-step enzyme picker: single current step, bidirectional with the map ----
+   * The picker is NOT a modal: the map stays fully operable and never closes it.
+   * ``pickerStepIndex`` (owned here, not in the drawer) is the single source of
+   * truth for "which step is active", so both the popup's step-bar chips and a
+   * direct chain-edge click on the map switch it. ``pickerGroupEdges`` lazily
+   * caches each composite step's per-enzyme fan-out (one round-trip per group) and
+   * feeds both the popup candidate list and the map's expanded-edge fan-out. */
+
+  /** Open the picker on step 1 (index 0). Group caches survive across opens. */
+  const openPicker = () => {
+    if (!pathwayDetail) return
+    setPickerStepIndex(0)
+    setPickerGroupLoading([])
+    setPickerOpen(true)
+  }
+
+  /** Close the picker and leave the detail map as a clean gold chain (collapse
+   *  whichever step the picker had fanned out). Never called by map interaction. */
+  const closePicker = () => {
+    setPickerOpen(false)
+    setPickerGroupLoading([])
+    setSelectedPairKey(null)
+    setExpandedEdges([])
+    setSelectedEdgeId(null)
+    setSelectedNodeId(null)
+    setHighlightedNodeIds(new Set())
+    setHighlightedEdgeIds(new Set())
+    setHighlightedEdgeGroupIds(new Set())
+  }
+
+  /** Fan one route step's edge out on the map (reusing the same selectedPairKey +
+   *  expandedEdges mechanics as a normal edge click) without touching the drawer.
+   *  Composite steps show their per-enzyme edges once ``pickerGroupEdges`` has them;
+   *  single-edge steps expand from their own step.edges immediately. */
+  const expandPickerStepOnMap = (step: PathwayDetailStep) => {
+    const edges = step.groupId ? pickerGroupEdges[step.groupId] : step.edges
+    const key = pairKey(step.sourceId, step.targetId)
+    setSelectedPairKey(key)
+    setSelectedNodeId(null)
+    setHighlightedNodeIds(new Set([step.sourceId, step.targetId]))
+    setHighlightedEdgeGroupIds(new Set([step.groupId || key]))
+    if (!edges || edges.length === 0) {
       setExpandedEdges([])
       setSelectedEdgeId(null)
-      setActivePathway(null)
-      setHighlightedNodeIds(new Set([match.nodeId]))
-      setHighlightedEdgeIds(new Set())
-      setHighlightedEdgeGroupIds(new Set())
-      setSearchFeedback(`Focused compound: ${compoundName(match.nodeId)}`)
-      focusCameraOnNode(match.nodeId)
-      return
+    } else {
+      setExpandedEdges(edges)
+      setSelectedEdgeId((cur) => (cur && edges.some((edge) => edge.edgeId === cur) ? cur : (edges[0]?.edgeId ?? null)))
     }
-    if (match.kind === 'pair') {
-      const pair = match.pair
-      setSelectedPairKey(pair.key)
-      setSelectedNodeId(null)
-      setActivePathway(null)
-      const nextEdges = match.edges.length > 0 ? match.edges : pair.edges
-      setExpandedEdges(nextEdges)
-      setSelectedEdgeId(nextEdges[0]?.edgeId ?? null)
-      setHighlightedNodeIds(new Set([pair.sourceId, pair.targetId]))
-      setHighlightedEdgeIds(new Set(nextEdges.map((edge) => edge.edgeId)))
-      setHighlightedEdgeGroupIds(new Set([pair.edgeGroupId || pair.key]))
-      setSearchFeedback(`Focused edge: ${compoundName(pair.sourceId)} -> ${compoundName(pair.targetId)}`)
-      focusCameraOnPair(pair)
-      return
-    }
-    setSearchFeedback('No match in the loaded map. Drag the map edge to expand, or open the search library.')
   }
 
-  const handlePathwaySearch = async (query: string) => {
-    if (!graph) return
-    const endpoints = resolvePathwayEndpoints(query, graph.nodes)
-    if (!endpoints) {
-      setSearchFeedback('Pathway mode expects two compounds, for example CHEBI:15422 -> CHEBI:10280.')
-      return
-    }
-    setLoading(true)
+  /** Switch the active step from either the popup's step bar or a map edge click. */
+  const setPickerActiveStep = (index: number) => {
+    const step = detailSteps[index]
+    if (!step) return
+    if (index !== pickerStepIndex) setPickerStepIndex(index)
+    if (pickerOpen && pathwayDetail) expandPickerStepOnMap(step)
+  }
+
+  // Lazy-load the active composite step's per-enzyme edges when the picker first
+  // reaches it. Guarded by the requested ref so re-runs / StrictMode don't refetch.
+  useEffect(() => {
+    if (!pickerOpen || !pathwayDetail) return
+    const step = detailSteps[pickerStepIndex]
+    if (!step || !step.groupId) return
+    const groupId = step.groupId
+    if (pickerGroupRequestedRef.current.has(groupId)) return
+    pickerGroupRequestedRef.current.add(groupId)
+    setPickerGroupLoading((prev) => (prev.includes(groupId) ? prev : [...prev, groupId]))
+    loadExpandedEdgeGroup(groupId)
+      .then((edges) => {
+        setPickerGroupEdges((prev) => (prev[groupId] ? prev : { ...prev, [groupId]: edges }))
+      })
+      .catch(() => {
+        // A failed load must not poison the cache forever — allow a retry the next
+        // time this step becomes active.
+        pickerGroupRequestedRef.current.delete(groupId)
+      })
+      .finally(() => {
+        setPickerGroupLoading((prev) => prev.filter((id) => id !== groupId))
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerOpen, pathwayDetail, detailSteps, pickerStepIndex])
+
+  // Keep the map's selection locked onto the active step while the picker is open:
+  // any step change (chip or edge) — or a group fan-out finishing its load — marks
+  // that step's source/target and expands its composite edge.
+  useEffect(() => {
+    if (!pickerOpen || !pathwayDetail) return
+    const step = detailSteps[pickerStepIndex]
+    if (!step) return
+    expandPickerStepOnMap(step)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerOpen, pathwayDetail, detailSteps, pickerStepIndex, pickerGroupEdges])
+
+  /** Run a pathway-mode search. Mirrors runMapEnzymeSearch's ref/state discipline:
+   *  restore the browse graph first, swap in the union payload (double-writing
+   *  graph/positions/camera), then keep the returned cards + auto-select the first.
+   *  Soft business errors (unknown compound / same endpoints / bad range) surface
+   *  under the composer rather than replacing the map. */
+  const runPathwaySearch = async (payload: PathwayComposerPayload) => {
+    setSearchMode('pathway')
+    clearPathwayResults()
+    restoreBrowseGraph()
+    const currentGraph = graphRef.current
+    if (!currentGraph) return
+    setPathwayError(null)
+    setNoResult(false)
+    setNoResultMessage(null)
+    setPathwaySearchLoading(true)
+    setBlastScope(null)
+    setBlastHitMap(new Map())
+    setEnzymeScopeHitIds(null)
+    setScopeSearch(null)
     try {
-      const cards = await searchHomePathways(endpoints.startId, endpoints.endId)
-      const pathway = cards[0]
-      if (!pathway) {
-        setSearchFeedback('No pathway found for those compounds.')
+      const res = await runPathwaySearchApi({
+        startCompoundId: payload.startCompoundId,
+        endCompoundId: payload.endCompoundId,
+        viaCompoundIds: payload.viaCompoundIds,
+        maxSteps: 6,
+        // Backend caps results at 40; ask for the full window so long routes
+        // are not silently dropped from the returned card list.
+        limit: 40,
+      })
+      if (res.items.length === 0) {
+        setNoResult(true)
+        setNoResultMessage(
+          `No pathway connects "${payload.startCompoundId}" to "${payload.endCompoundId}" within 6 enzyme steps. Try fewer or different intermediate compounds, or a looser endpoint pairing.`,
+        )
         return
       }
-      const expansions = await Promise.all([
-        loadHomeGraph({ centerCompoundId: endpoints.startId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT }),
-        loadHomeGraph({ centerCompoundId: endpoints.endId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT }),
-      ])
-      const merged = expansions.reduce((current, payload) => mergeHomeGraph(current, payload), graphRef.current || graph)
-      const withStart = addExpansionPositions(positionsRef.current, expansions[0], endpoints.startId, 'right')
-      const nextPositions = addExpansionPositions(withStart, expansions[1], endpoints.endId, 'left')
-      graphRef.current = merged
-      positionsRef.current = nextPositions
-      setGraph(merged)
-      setPositions(nextPositions)
-      setActivePathway(pathway)
-      setSelectedNodeId(null)
-      setSelectedPairKey(null)
-      setExpandedEdges([])
-      setSelectedEdgeId(null)
-      setHighlightedNodeIds(new Set(pathway.compoundIds))
-      setHighlightedEdgeIds(new Set(pathway.edgeIds))
-      setHighlightedEdgeGroupIds(new Set(pathway.edgeGroupIds))
-      setSearchFeedback(`Highlighted pathway: ${pathway.stepCount} steps`)
-      focusCameraOnPath(pathway.compoundIds)
+      if (!browseSnapshotRef.current) {
+        browseSnapshotRef.current = { graph: currentGraph, positions: positionsRef.current, camera: cameraRef.current }
+      }
+      clearPairSelection()
+      const layout = createHomeLayout(res.graph)
+      const layoutPositions = fitScopeHomePositions(layout.positions, null)
+      graphRef.current = res.graph
+      positionsRef.current = layoutPositions
+      setGraph(res.graph)
+      setPositions(layoutPositions)
+      setCamera({ x: 0, y: 0 })
+      cameraRef.current = { x: 0, y: 0 }
+      const queryLabel = [payload.startCompoundId, ...payload.viaCompoundIds, payload.endCompoundId].join(' → ')
+      setPathwaySession({ graph: res.graph, cards: res.items, total: res.total, query: queryLabel })
+      // Collapse the composer so the union graph + result cards read cleanly;
+      // a compact launcher pill (or clicking the toggle) brings it back.
+      setComposerOpen(false)
+      // Auto-select the shortest chain so the union graph starts with one
+      // highlighted pathway; clicking any row switches the highlight.
+      const first = res.items[0]
+      if (first) selectPathwayCard(first)
     } catch (err) {
-      setSearchFeedback(err instanceof Error ? err.message : 'Unable to search pathway.')
+      setPathwayError(err instanceof Error ? err.message : 'Unable to search pathway.')
     } finally {
-      setLoading(false)
+      setPathwaySearchLoading(false)
     }
   }
 
@@ -928,12 +1718,7 @@ export function CompoundGraphHome({
   }
   const selectedNodeQueueEntity = selectedNode ? homeCompoundToEntity(selectedNode, compoundImageUrl(selectedNode)) : null
 
-  const searchPlaceholder =
-    mode === 'blast'
-      ? 'Paste a protein sequence or accession'
-      : mode === 'pathways'
-        ? 'Search pathways, compound pairs, or reactions'
-        : 'Search enzymes, substrates, or products'
+  const searchPlaceholder = 'Search compounds or enzymes (e.g. limonene, germacrene D synthase)'
 
   const selectedNeighborIds = new Set<string>()
   if (selectedNodeId) {
@@ -948,94 +1733,91 @@ export function CompoundGraphHome({
     selectedNeighborIds.add(selectedPair.targetId)
   }
 
+  const homeMapStyle = { ['--home-label-scale' as string]: String(labelFontScale) } as CSSProperties
+
   return (
-    <div className="home-map-page">
+    <div className="home-map-page" style={homeMapStyle}>
       <section className="atlas-map-stage atlas-live-stage" aria-label="Interactive compound graph homepage">
         <header className="graph-top-nav">
-          <div className="atlas-brand">
+          <button type="button" className="atlas-brand" onClick={handleBrandHome} title="Back to the Atlas home map" aria-label="Starase Atlas home">
             <span className="atlas-logo">
-              <img src="/starase-atlas-logo.png" alt="Starase atlas logo" />
+              <Network size={18} />
             </span>
-            <span>Starase atlas</span>
-          </div>
+            <span>Starase Atlas</span>
+          </button>
 
-          <div className="home-search-bar">
-            <button className="home-search-mode" type="button" onClick={() => setModeOpen((open) => !open)}>
-              <ChevronDown size={18} />
-              <span>{homeSearchModes.find((item) => item.id === mode)?.label}</span>
-            </button>
-            {modeOpen && (
-              <div className="floating-menu search-mode-menu">
-                {homeSearchModes.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setMode(item.id)
-                      setModeOpen(false)
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <input
-              value={searchValue}
-              onFocus={() => setSearchFocused(true)}
-              onChange={(event) => {
-                setSearchValue(event.target.value)
-                setSearchFocused(true)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void handleSearchSubmit()
-                if (event.key === 'Escape') setSearchFocused(false)
-              }}
-              placeholder={searchPlaceholder}
-            />
-            <button className="home-search-submit" type="button" onClick={() => void handleSearchSubmit()} title="Search">
-              <Search size={20} />
-            </button>
-            {showSearchSuggestions && (
-              <div className="home-search-suggestions" onPointerDown={(event) => event.preventDefault()}>
-                <div className="home-search-filter-row">
-                  {homeSearchFilters.map((filter) => (
-                    <button
-                      key={filter.id}
-                      type="button"
-                      className={searchFilter === filter.id ? 'is-active' : ''}
-                      onClick={() => setSearchFilter(filter.id)}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
+          <div className={`home-search-bar ${searchMode === 'pathway' ? 'pathway-mode' : ''}`}>
+            <div className="home-mode-toggle" role="group" aria-label="Map search mode">
+              <button type="button" className={searchMode === 'enzyme' ? 'is-active' : ''} onClick={() => switchSearchMode('enzyme')} title="Search compounds and enzymes by keyword / BLAST">
+                Enzyme
+              </button>
+              <button type="button" className={searchMode === 'pathway' ? 'is-active' : ''} onClick={() => switchSearchMode('pathway')} title="Find compound chains from a start through optional waypoints to an end">
+                Pathway
+              </button>
+            </div>
+            {searchMode === 'enzyme' && (
+              <>
+                <input
+                  value={searchValue}
+                  onFocus={() => setSearchFocused(true)}
+                  onChange={(event) => {
+                    setSearchValue(event.target.value)
+                    setSearchFocused(true)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void handleSearchSubmit()
+                    if (event.key === 'Escape') setSearchFocused(false)
+                  }}
+                  placeholder={searchPlaceholder}
+                />
+                <div className="home-result-toggle" role="group" aria-label="Search result view">
+                  <button type="button" className={resultMode === 'map' ? 'is-active' : ''} onClick={() => setResultMode('map')}>Map</button>
+                  <button type="button" className={resultMode === 'table' ? 'is-active' : ''} onClick={() => setResultMode('table')}>Table</button>
                 </div>
-                <div className="home-search-result-list">
-                  {visibleSearchSuggestions.map((suggestion) => (
-                    <button key={suggestion.id} type="button" onClick={() => void handleSearchSuggestionSelect(suggestion)}>
-                      <span className={`home-result-kind ${suggestion.kind}`}>{suggestion.kind}</span>
-                      <span>
-                        <strong>{suggestion.title}</strong>
-                        <small>{suggestion.subtitle}</small>
-                      </span>
-                    </button>
-                  ))}
-                  {visibleSearchSuggestions.length === 0 && (
-                    <div className="home-search-empty">
-                      {librarySearchLoading ? 'Searching...' : 'No matching entries in the current map.'}
+                <button className="home-search-submit" type="button" onClick={() => void handleSearchSubmit()} title="Search">
+                  <Search size={20} />
+                </button>
+                {showSearchSuggestions && (
+                  <div className="home-search-suggestions" onPointerDown={(event) => event.preventDefault()}>
+                    <div className="home-search-filter-row">
+                      {homeSearchFilters.map((filter) => (
+                        <button
+                          key={filter.id}
+                          type="button"
+                          className={searchFilter === filter.id ? 'is-active' : ''}
+                          onClick={() => setSearchFilter(filter.id)}
+                        >
+                          {filter.label}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="home-search-result-list">
+                      {visibleSearchSuggestions.map((suggestion) => (
+                        <button key={suggestion.id} type="button" onClick={() => void handleSearchSuggestionSelect(suggestion)}>
+                          <span className={`home-result-kind ${suggestion.kind}`}>{suggestion.kind}</span>
+                          <span>
+                            <strong>{suggestion.title}</strong>
+                            <small>{suggestion.subtitle}</small>
+                          </span>
+                        </button>
+                      ))}
+                      {visibleSearchSuggestions.length === 0 && (
+                        <div className="home-search-empty">
+                          {librarySearchLoading ? 'Searching...' : 'No matching entries in the current map.'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           <nav className="graph-primary-nav" aria-label="Graph page navigation">
             <button type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Data Browser</button>
-            <button type="button" onClick={onOpenNetwork}>Analysis</button>
-            <button type="button" onClick={onOpenStructure}>Structure search</button>
-            <span>About</span>
-            <span className="graph-user-chip">Starase atlas 2026</span>
+            <button type="button" onClick={onOpenBlast}>BLAST</button>
+            <button type="button" onClick={() => setStructureOpen(true)}>Structure search</button>
+            <span className="graph-user-chip">NJU - China 2026</span>
           </nav>
         </header>
 
@@ -1049,38 +1831,66 @@ export function CompoundGraphHome({
         </div>
 
         <aside className="graph-filter-sidebar" aria-label="Graph filters and controls">
-          <p className="graph-filter-title">Data Filters</p>
-          <div className={`floating-pill dataset-pill dataset-pill-static ${datasetOpen ? 'is-open' : ''}`}>
-            <button className="dataset-pill-button" type="button" onClick={() => setDatasetOpen((open) => !open)}>
-              <span>Dataset</span>
-              <strong>{selectedDataset.label}</strong>
-              <ChevronDown size={16} />
+          <div className="home-filter-head">
+            <p className="graph-filter-title">Filters</p>
+            {anyFilterActive && (
+              <button className="home-filter-reset" type="button" onClick={resetActiveFilters}>
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="home-filter-group">
+            <button className={`home-filter-select ${speciesMenuOpen ? 'is-open' : ''}`} type="button" onClick={() => setSpeciesMenuOpen((open) => !open)} aria-expanded={speciesMenuOpen}>
+              <span className="home-filter-select-label">Organism</span>
+              <span className="home-filter-select-value">{activeFilters.species.length === 0 ? 'All organisms' : `${activeFilters.species.length} selected`}</span>
+              <ChevronDown size={14} />
             </button>
-            {datasetOpen && (
-              <div className="floating-menu dataset-menu dataset-select-menu">
-                {homeDatasetOptions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={item.disabled}
-                    className={item.id === selectedDatasetId ? 'is-active' : ''}
-                    onClick={() => {
-                      if (item.disabled) return
-                      setSelectedDatasetId(item.id)
-                      setDatasetOpen(false)
-                    }}
-                  >
-                    <span>{item.label}</span>
-                    <small>{item.detail}</small>
+            {speciesMenuOpen && (
+              <div className="home-filter-menu">
+                <div className="home-filter-search">
+                  <Search size={13} />
+                  <input value={speciesQuery} onChange={(event) => setSpeciesQuery(event.target.value)} placeholder="Search organisms…" autoFocus />
+                </div>
+                <div className="home-filter-list">
+                  {speciesSelectOptions.filter((species) => species.toLowerCase().includes(speciesQuery.trim().toLowerCase())).map((species) => {
+                    const checked = activeFilters.species.includes(species)
+                    return (
+                      <button key={species} type="button" className={checked ? 'is-checked' : ''} onClick={() => toggleSpeciesFilter(species)}>
+                        <span className={`home-filter-check ${checked ? 'checked' : ''}`}>{checked && <Check size={11} />}</span>
+                        <span className="home-filter-option-label">{species}</span>
+                      </button>
+                    )
+                  })}
+                  {speciesSelectOptions.length === 0 && <div className="home-filter-empty">No organism data yet.</div>}
+                </div>
+              </div>
+            )}
+            {activeFilters.species.length > 0 && (
+              <div className="home-chip-row home-species-chips">
+                {activeFilters.species.map((species) => (
+                  <button key={species} type="button" className="home-chip on" onClick={() => toggleSpeciesFilter(species)} title={`Remove ${species}`}>
+                    {species} <X size={11} />
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('compound')}>Compounds</button>
-          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('enzyme')}>Enzymes</button>
-          <button className="graph-filter-link" type="button" onClick={() => setSearchFilter('reaction')}>Reactions</button>
+          <div className="home-filter-group">
+            <p className="home-filter-label">Data source</p>
+            <div className="home-chip-row home-source-chips">
+              {HOME_SOURCE_ORDER.filter((key) => HOME_SOURCE_LABELS[key]).map((key) => {
+                const checked = activeFilters.sourceTypes.includes(key)
+                return (
+                  <button key={key} type="button" className={`home-chip ${checked ? 'on' : ''}`} onClick={() => toggleSourceFilter(key)} title={checked ? `Remove ${homeSourceLabel(key)}` : `Filter by ${homeSourceLabel(key)}`}>
+                    {homeSourceLabel(key)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div className={`floating-pill mapping-pill ${controlsOpen ? 'is-open' : ''}`}>
             <button type="button" onClick={() => setControlsOpen((open) => !open)}>
               <span>Graph controls</span>
@@ -1096,21 +1906,27 @@ export function CompoundGraphHome({
                   </div>
                 </div>
                 <div className="control-group">
-                  <label htmlFor="home-label-size">Label size</label>
+                  <label htmlFor="home-edge-thickness">Edge thickness</label>
                   <div className="control-slider-row">
-                    <input id="home-label-size" className="control-slider" type="range" min="0.85" max="2.1" step="0.05" value={labelScale} onChange={(event) => setLabelScale(Number(event.target.value))} />
-                    <span className="control-value">{labelScale.toFixed(2)}</span>
+                    <input id="home-edge-thickness" className="control-slider" type="range" min="0.5" max="2.4" step="0.05" value={edgeThickness} onChange={(event) => setEdgeThickness(Number(event.target.value))} />
+                    <span className="control-value">{edgeThickness.toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="control-group">
+                  <label htmlFor="home-label-font">Label font size</label>
+                  <div className="control-slider-row">
+                    <input id="home-label-font" className="control-slider" type="range" min="0.6" max="2.6" step="0.05" value={labelFontScale} onChange={(event) => setLabelFontScale(Number(event.target.value))} />
+                    <span className="control-value">{labelFontScale.toFixed(2)}×</span>
                   </div>
                 </div>
                 <div className="control-menu-actions">
                   <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
+                  <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
+                  <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
                 </div>
               </div>
             )}
           </div>
-
-          <button className="graph-filter-link graph-filter-action" type="button" onClick={clearPairSelection}>Clear selection</button>
-          <button className="graph-filter-link graph-filter-action" type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Open search library</button>
 
           <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
             Downloading table
@@ -1122,6 +1938,120 @@ export function CompoundGraphHome({
         {error && !loading && <div className="home-map-feedback error-state"><X size={18} /> {error}</div>}
         {mapExpanding && !loading && !error && <div className="home-map-feedback map-expanding-feedback"><Loader2 size={18} className="spin" /> Expanding map...</div>}
         {searchFeedback && !loading && !error && <div className="home-search-feedback">{searchFeedback}</div>}
+        {enzymeSearchLoading && !loading && (
+          <div className="home-scope-feedback scope-loading">
+            <Loader2 size={15} className="spin" /> Searching the library…
+          </div>
+        )}
+        {blastLoading && !loading && (
+          <div className="home-scope-feedback scope-loading">
+            <Loader2 size={15} className="spin" /> Drawing BLAST hits on the map…
+          </div>
+        )}
+        {searchMode === 'enzyme' && scopeSearch && !enzymeSearchLoading && (
+          <div className="home-scope-feedback">
+            <strong className="scope-query">“{scopeSearch.query}”</strong>
+            {scopeSearch.kind === 'compound' ? (
+              <span className="scope-count">
+                compound scope{scopeSearch.shown > 0 && scopeSearch.total > 0 ? ` · ${scopeSearch.shown}/${scopeSearch.total} family compound${scopeSearch.total === 1 ? '' : 's'}` : ''}
+                {scopeSearch.reactionCount ? ` · ${scopeSearch.reactionCount} reaction${scopeSearch.reactionCount === 1 ? '' : 's'}` : ''}
+              </span>
+            ) : (
+              <span className="scope-count">
+                {scopeSearch.total} enzyme hit{scopeSearch.total === 1 ? '' : 's'} · top {scopeSearch.shown} on the map{scopeSearch.total > scopeSearch.shown ? ` · ${scopeSearch.total - scopeSearch.shown} more in the table` : ''}
+              </span>
+            )}
+            {scopeSearch.kind === 'enzyme' && (
+              <button className="home-scope-action" type="button" onClick={() => onOpenSearch(scopeSearch.query)}>Open table</button>
+            )}
+            <button className="home-scope-action ghost" type="button" onClick={clearSearchScope}>Clear search</button>
+          </div>
+        )}
+        {searchMode === 'enzyme' && blastScope && !blastLoading && (
+          <div className="home-scope-feedback blast-scope-feedback">
+            <strong className="scope-query">BLASTp</strong>
+            <span className="scope-count">
+              {blastScope.hits} hit{blastScope.hits === 1 ? '' : 's'} · query {blastScope.queryLength} aa · threshold E-value ≤ {blastScope.threshold === 10 ? '10' : blastScope.threshold.toExponential(0)} · {blastScope.searchedSubjects} subjects
+            </span>
+            <button className="home-scope-action" type="button" onClick={onOpenBlastTable}>Table results</button>
+            <button className="home-scope-action ghost" type="button" onClick={clearSearchScope}>Clear search</button>
+          </div>
+        )}
+        {noResult && !enzymeSearchLoading && (
+          <div className="home-noresult-panel" role="status">
+            <h3>{searchMode === 'pathway' ? 'No pathway found' : 'Nothing matched on the map'}</h3>
+            <p>{noResultMessage || (searchMode === 'pathway' ? 'Try different start/end compounds or fewer intermediate steps.' : 'Try a different compound name, enzyme name, EC number, or organism.')}</p>
+            <div className="home-noresult-actions">
+              {searchMode === 'pathway' ? (
+                <button className="home-scope-action ghost" type="button" onClick={clearSearchScope}>Back to browse map</button>
+              ) : (
+                <button className="home-scope-action" type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Search table view</button>
+              )}
+              <button className="home-scope-action ghost" type="button" onClick={clearSearchScope}>Clear search</button>
+            </div>
+          </div>
+        )}
+
+        {searchMode === 'pathway' && !loading && !error && graph && !detailOpen && (composerOpen ? (
+          <PathwaySearchComposer
+            busy={pathwaySearchLoading}
+            externalError={pathwayError}
+            onRun={(payload) => void runPathwaySearch(payload)}
+            onDismissError={() => setPathwayError(null)}
+            onCollapse={() => setComposerOpen(false)}
+          />
+        ) : traceChain ? null : (
+          <button
+            className="pw-composer-launcher"
+            type="button"
+            onClick={() => setComposerOpen(true)}
+            title="Show pathway search"
+          >
+            <Route size={15} />
+            <span>Pathway search</span>
+          </button>
+        ))}
+
+        {/* 连星 floats directly beneath the composer pill (not in the results
+            header) so it never crowds the card list; it only makes sense once a
+            pathway session has results to trace across. */}
+        {searchMode === 'pathway' && !loading && !error && graph && !detailOpen && pathwaySession && !composerOpen && !traceChain && (
+          <button
+            className="trace-start-button"
+            type="button"
+            onClick={beginTrace}
+            disabled={Boolean(traceChain)}
+            title="Trace a route on the map: click compounds connected to the start, one step at a time, until you reach the end compound"
+          >
+            <Link2 size={13} />
+            <span>连星</span>
+          </button>
+        )}
+
+        {traceChain && searchMode === 'pathway' && !loading && !error && graph && !detailOpen && (
+          <div className="pw-trace-bar" role="status" aria-live="polite">
+            <span className="pw-trace-strong">
+              <Link2 size={13} />
+              <strong>{traceChain.length} node{traceChain.length === 1 ? '' : 's'}</strong>
+            </span>
+            <span className="pw-trace-current" title="Current compound">{compoundName(traceCurrentId || '')}</span>
+            {traceHint ? (
+              <span className="pw-trace-hint is-error">{traceHint}</span>
+            ) : (
+              <span className="pw-trace-guide">
+                Click a ringed compound connected to the current one{compoundName(traceEndId || '') ? <> — finish by reaching <strong>{compoundName(traceEndId || '')}</strong></> : null}. Revisiting a node is not allowed.
+              </span>
+            )}
+            <button type="button" className="pw-trace-undo" onClick={undoTrace} disabled={!traceChain || traceChain.length <= 1} title="Undo the last pick">
+              <ArrowLeft size={13} />
+              <span>Undo</span>
+            </button>
+            <button type="button" className="pw-trace-cancel" onClick={cancelTrace} title="Cancel tracing and restore the previous selection">
+              <X size={13} />
+              <span>Cancel</span>
+            </button>
+          </div>
+        )}
 
         {!loading && !error && graph && (
           <svg
@@ -1148,53 +2078,97 @@ export function CompoundGraphHome({
             </defs>
             <rect className="home-map-pan-layer" x="0" y="0" width={HOME_VIEWBOX_WIDTH} height={HOME_VIEWBOX_HEIGHT} />
 
-            <g className={`home-map-camera ${isMapPanning ? 'is-panning' : ''}`} transform={`translate(${camera.x} ${camera.y}) scale(${zoom})`}>
+            <g className="home-map-camera" transform={`translate(${camera.x} ${camera.y})`}>
               <g className="home-map-edges live-map-edges">
                 {viewModel.pairs.map((pair) => {
                   const source = positions[pair.sourceId]
                   const target = positions[pair.targetId]
                   if (!source || !target) return null
+                  const pairMeta = anyFilterActive ? pairFilterMeta.get(pair.key) : undefined
+                  if (pairMeta && !pairMeta.visible) return null
                   const pairGroupId = pair.edgeGroupId || pair.key
                   const isExpanded = selectedPairKey === pair.key && pairEdges.length > 0
-                  const expandedItems = expandedReactionGroups
+                  const expandedItems = expandedEdgeGroups
                   const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 5.2) : [0]
-                  const pairLineLabel = pair.count > 1 ? `enzyme*${pair.count}` : pair.edges[0]?.card?.primaryName || 'enzyme'
+                  const displayCount = pairMeta ? pairMeta.passing : pair.count
+                  // When a composite is filtered down to a single surviving enzyme, that enzyme's
+                  // accession is the one to annotate the collapsed line with.
+                  const filteredSingle = displayCount === 1 && anyFilterActive && pair.edgeGroupId
+                    ? homePairPassingUnits(pair, groupItemMap, activeFilters)[0]
+                    : undefined
+                  const singleUnit = filteredSingle || pair.edges[0]
+                  const singleUnitAccession = singleUnit ? homeUnitAccession(singleUnit) : null
+                  const pairLineLabel = displayCount > 1 ? `enzyme*${displayCount}` : (singleUnitAccession || pair.edges[0]?.card?.primaryName || 'enzyme')
                   const highlightedPair = highlightedEdgeGroupIds.has(pairGroupId) || pair.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
-                  const pathwayPair = Boolean(activePathway && (activePathway.edgeGroupIds.includes(pairGroupId) || pair.edgeIds.some((edgeId) => activePathway.edgeIds.includes(edgeId))))
-                  const showPairLabel = selectedPairKey === pair.key || highlightedPair || pathwayPair
+                  const pathwayPair = Boolean(activePathway && activePathwayStepKeys?.has(pair.key))
+                  const pairActive = selectedPairKey === pair.key
+                  const showPairLabel = pairActive || highlightedPair || pathwayPair
+                  const collapsedStroke = (pairActive || highlightedPair || pathwayPair ? 0.42 : 0.28) * edgeThickness
+                  // In a scoped result, expanding a composite can surface background
+                  // isoenzymes alongside the enzymes that were actually searched. Tag
+                  // each expanded line as retrieved (the searched enzymes) or not so
+                  // the searched edges can be drawn clearly stronger.
+                  const scopedRender = Boolean(scopeHitSet)
+                  const retrievedFlags = scopedRender ? expandedItems.map((group) => scopeHitSet!.has(group.enzymeId)) : null
+                  const retrievedColorOf = retrievedFlags ? new Array<number>(expandedItems.length).fill(0) : null
+                  if (retrievedFlags && retrievedColorOf) {
+                    let run = 0
+                    retrievedFlags.forEach((isRetrieved, index) => {
+                      if (isRetrieved) {
+                        retrievedColorOf[index] = run % 4
+                        run += 1
+                      }
+                    })
+                  }
                   return (
                     <g key={pair.key} className="home-map-edge-group">
                       {!isExpanded && (
                         <>
                           <path
                             d={edgePath(source, target, 0)}
-                            className={`home-map-path ${pair.count > 1 ? 'multi' : ''} ${selectedPairKey === pair.key ? 'active' : ''} ${highlightedPair ? 'highlighted' : ''} ${pathwayPair ? 'pathway' : ''}`}
+                            className={`home-map-path ${displayCount > 1 ? 'multi' : ''} ${pairActive ? 'active' : ''} ${highlightedPair ? 'highlighted' : ''} ${pathwayPair ? 'pathway' : ''}`}
+                            style={{ strokeWidth: collapsedStroke }}
                             markerEnd="url(#home-map-arrow)"
                             onPointerDown={(event) => event.stopPropagation()}
                             onClick={(event) => { event.stopPropagation(); void handlePairClick(pair) }}
                           />
                           <path d={edgePath(source, target, 0)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void handlePairClick(pair) }} />
-                          <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className={`home-edge-label ${showPairLabel ? 'is-visible' : ''}`} fontSize={1.02 * labelScale}>{pairLineLabel}</text>
+                          <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 1.8} className={`home-edge-label ${showPairLabel ? 'is-visible' : ''}`}>{pairLineLabel}</text>
                         </>
                       )}
                       {isExpanded && expandedItems.map((edge, index) => {
                         const offset = offsets[index] ?? 0
                         const highlightedEdge = highlightedPair || edge.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
-                        const pathwayEdge = Boolean(activePathway?.edgeIds.some((edgeId) => edge.edgeIds.includes(edgeId)))
+                        const pathwayEdge = Boolean(activePathway && activePathwayStepKeys?.has(pair.key))
                         const selectedEdgeGroup = edge.edgeIds.includes(selectedEdgeId || '')
-                        const reactionColorClass = expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`
+                        const retrieved = retrievedFlags ? retrievedFlags[index] : true
+                        const isBackground = scopedRender && !retrieved
+                        // Retrieved (searched) single edges keep the saturated reaction
+                        // hues (rotated among the first four so neighbouring hits stay
+                        // distinguishable); background isoenzymes collapse to the plain
+                        // `scope-background` tone.
+                        const reactionColorClass = scopedRender
+                          ? (retrieved ? `reaction-color-${retrievedColorOf![index]}` : 'scope-background')
+                          : (expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`)
+                        const edgeEmphasized = selectedEdgeGroup || highlightedEdge || pathwayEdge
+                        const expandedStroke = !scopedRender
+                          ? (edgeEmphasized ? 0.52 : 0.46) * edgeThickness
+                          : retrieved
+                            ? (edgeEmphasized ? 0.72 : 0.6) * edgeThickness
+                            : (edgeEmphasized ? 0.5 : 0.34) * edgeThickness
                         return (
-                          <g key={edge.key}>
+                          <g key={edge.key} className={isBackground ? 'scope-miss-edge' : (scopedRender ? 'scope-hit-edge' : undefined)}>
                             <path
                               d={edgePath(source, target, offset)}
-                              className={`expanded-edge live-expanded-edge ${reactionColorClass} ${selectedEdgeGroup ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
+                              className={`expanded-edge live-expanded-edge ${reactionColorClass} ${scopedRender && retrieved ? 'scope-retrieved' : ''} ${isBackground ? 'scope-background' : ''} ${selectedEdgeGroup ? 'selected' : ''} ${highlightedEdge ? 'highlighted' : ''} ${pathwayEdge ? 'pathway' : ''}`}
+                              style={{ strokeWidth: expandedStroke }}
                               markerStart={edge.directionMode === 'reverse' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               markerEnd={edge.directionMode === 'forward' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               onPointerDown={(event) => event.stopPropagation()}
                               onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }}
                             />
                             <path d={edgePath(source, target, offset)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }} />
-                            <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label" fontSize={0.94 * labelScale}>{edge.label}</text>
+                            <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label">{edge.label}</text>
                           </g>
                         )
                       })}
@@ -1212,11 +2186,14 @@ export function CompoundGraphHome({
                   const neighbor = selectedNeighborIds.has(node.compoundId) && !selected && !pairEndpoint
                   const pos = positions[node.compoundId]
                   if (!pos) return null
+                  const traceCurrent = Boolean(traceChain && node.compoundId === traceCurrentId)
+                  const traceReachable = Boolean(traceChain && traceNextIds?.has(node.compoundId))
+                  const traceGoal = Boolean(traceChain && node.compoundId === traceEndId)
                   const emphasized = selected || highlighted || pathway || pairEndpoint
                   const displayNodeSize = nodeSize * (emphasized ? 1.14 : neighbor ? 1.06 : 1)
-                  const showNodeLabel = importantLabelIds.has(node.compoundId) || emphasized || neighbor
+                  const showNodeLabel = importantLabelIds.has(node.compoundId) || emphasized || neighbor || Boolean(traceChain && (traceReachable || traceGoal))
                   return (
-                    <g key={node.compoundId} className={`home-map-node ${selected || pairEndpoint ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${pathway ? 'pathway' : ''} ${neighbor ? 'neighbor' : ''} ${activeNodeDragId === node.compoundId ? 'dragging' : ''}`}>
+                    <g key={node.compoundId} className={`home-map-node ${selected || pairEndpoint ? 'selected' : ''} ${highlighted ? 'highlighted' : ''} ${pathway ? 'pathway' : ''} ${neighbor ? 'neighbor' : ''} ${traceCurrent ? 'trace-current' : ''} ${traceReachable ? 'trace-reachable' : ''} ${traceGoal ? 'trace-goal' : ''} ${activeNodeDragId === node.compoundId ? 'dragging' : ''}`}>
                       {emphasized && (
                         <circle
                           className="selected-ring"
@@ -1235,8 +2212,17 @@ export function CompoundGraphHome({
                         onPointerUp={finishNodeDrag}
                         onPointerCancel={finishNodeDrag}
                       />
+                      {traceGoal && (
+                        <circle className="trace-goal-ring" cx={pos.x} cy={pos.y} r={displayNodeSize + 1.45} />
+                      )}
+                      {traceCurrent && (
+                        <circle className="trace-current-ring" cx={pos.x} cy={pos.y} r={displayNodeSize + 1.45} />
+                      )}
+                      {traceReachable && !traceGoal && (
+                        <circle className="trace-candidate-ring" cx={pos.x} cy={pos.y} r={displayNodeSize + 0.92} />
+                      )}
                       <title>{node.name}</title>
-                      <text x={pos.x} y={pos.y + displayNodeSize + 6.3} className={`home-map-node-name ${showNodeLabel ? 'is-visible' : ''}`} fontSize={2.35 * labelScale}>
+                      <text x={pos.x} y={pos.y + displayNodeSize + 6.3} className={`home-map-node-name ${showNodeLabel ? 'is-visible' : ''}`}>
                         {wrapCompoundLabel(node.name).map((line, lineIndex) => (
                           <tspan key={`${node.compoundId}:label:${lineIndex}`} x={pos.x} dy={lineIndex === 0 ? 0 : '1.2em'}>{line}</tspan>
                         ))}
@@ -1247,21 +2233,6 @@ export function CompoundGraphHome({
               </g>
             </g>
           </svg>
-        )}
-
-        {!loading && !error && graph && (
-          <div className="home-map-zoom-controls" role="group" aria-label="Map zoom controls">
-            <button type="button" onClick={() => setZoomAtPoint(zoom / HOME_ZOOM_STEP, { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 })} disabled={zoom <= HOME_ZOOM_MIN} title="Zoom out" aria-label="Zoom out">
-              <Minus size={15} />
-            </button>
-            <output aria-live="polite">{Math.round(zoom * 100)}%</output>
-            <button type="button" onClick={() => setZoomAtPoint(zoom * HOME_ZOOM_STEP, { x: HOME_VIEWBOX_WIDTH / 2, y: HOME_VIEWBOX_HEIGHT / 2 })} disabled={zoom >= HOME_ZOOM_MAX} title="Zoom in" aria-label="Zoom in">
-              <Plus size={15} />
-            </button>
-            <button type="button" onClick={resetMapView} title="Reset view" aria-label="Reset view">
-              <RotateCcw size={15} />
-            </button>
-          </div>
         )}
 
         {!selectedPair && selectedNode && (
@@ -1296,12 +2267,12 @@ export function CompoundGraphHome({
           </div>
         )}
 
-        {selectedPair && (
+        {selectedPair && !pickerOpen && (
           <div className="enzyme-card-stack live-enzyme-stack map-draggable-panel" style={panelStyle}>
             <div className="stack-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>{compoundName(selectedPair.sourceId)} <ChevronRight size={14} /> {compoundName(selectedPair.targetId)}</strong>
-                <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes / ${pairEdges.length || selectedPairTotal} reactions`}</span>
+                <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes · ${pairEdges.length || selectedPairTotal} edge${(pairEdges.length || selectedPairTotal) === 1 ? '' : 's'}`}</span>
               </div>
               <button className="stack-close-button" type="button" onClick={clearPairSelection} title="Close enzyme list">
                 <X size={18} />
@@ -1310,6 +2281,7 @@ export function CompoundGraphHome({
             {expandedEdgeGroups.map((group) => {
               const edge = group.representative
               const enzymeId = edge.card?.enzymeId || edge.enzymeId
+              const blastHit = blastHitMap.get(enzymeId)
               const queued = isQueued(enzymeId)
               const queueEntity = homeEnzymeToEntity(edge, enzymeId, compoundName(edge.sourceCompoundId), compoundName(edge.targetCompoundId))
               return (
@@ -1319,6 +2291,9 @@ export function CompoundGraphHome({
                   </button>
                   <button className="enzyme-card-copy" type="button" onClick={() => setSelectedEdgeId(group.representative.edgeId)}>
                     <h3>{edge.card?.primaryName || edge.label}</h3>
+                    {blastHit && (
+                      <span className="enzyme-card-blast-chip" title="BLAST E-value">E-value {formatScopeEValue(blastHit.eValue)}</span>
+                    )}
                     <p>{edge.card?.organismName || 'Unknown organism'}</p>
                     <p>{group.reactionIds.length > 1 ? `${group.reactionIds.length} reactions` : edge.card?.reactionEquation || edge.label}</p>
                     {group.reactionIds.length > 1 && <p>{group.reactionIds.slice(0, 4).join(', ')}{group.reactionIds.length > 4 ? '...' : ''}</p>}
@@ -1335,22 +2310,90 @@ export function CompoundGraphHome({
           </div>
         )}
 
-        {activePathway && !selectedPair && !selectedNode && (
+        {searchMode === 'pathway' && pathwaySession && !detailOpen && !selectedPair && !selectedNode && (
           <div className="pathway-result-card live-pathway-card map-draggable-panel" style={panelStyle}>
             <div className="stack-heading pathway-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
-                <strong>Pathway result</strong>
-                <span>{activePathway.stepCount} steps</span>
+                <strong>Pathway results</strong>
+                <span>{pathwaySession.total} route{pathwaySession.total === 1 ? '' : 's'} · {pathwaySession.query}</span>
               </div>
-              <button className="stack-close-button" type="button" onClick={clearPairSelection} title="Close pathway card">
-                <X size={18} />
-              </button>
+              <div className="pathway-heading-actions">
+                <button className="stack-close-button" type="button" onClick={clearSearchScope} title="Close pathway results and clear the search">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-            <p>{activePathway.summary}</p>
-            <div className="pathway-route-list">
-              {activePathway.compoundIds.map((compoundId, index) => (
-                <span key={`${activePathway.pathwayId}:${compoundId}:${index}`}>{compoundName(compoundId)}</span>
-              ))}
+            <div className="pathway-card-list">
+              {pathwaySession.cards.map((card, index) => {
+                const isActive = card.pathwayId === selectedPathwayId
+                const firstId = card.compoundIds[0]
+                const lastId = card.compoundIds[card.compoundIds.length - 1]
+                const queued = isQueued(card.pathwayId)
+                const queueEntity: Entity = {
+                  id: card.pathwayId,
+                  kind: 'pathway',
+                  name: `${compoundName(firstId)} → ${compoundName(lastId)}`,
+                  subtitle: `${card.stepCount} step${card.stepCount === 1 ? '' : 's'} · ${card.compoundIds.length} compound${card.compoundIds.length === 1 ? '' : 's'}`,
+                  description: card.summary,
+                  tags: ['Pathway'],
+                  fields: [],
+                  related: [],
+                  pathway: {
+                    startId: firstId,
+                    endId: lastId,
+                    compoundIds: card.compoundIds,
+                    compoundNames: card.compoundIds.map((cid) => compoundName(cid)),
+                    stepCount: card.stepCount,
+                  },
+                }
+                return (
+                  <div key={card.pathwayId} className={`pathway-card-row ${isActive ? 'is-active' : ''}`}>
+                    <button
+                      type="button"
+                      className="pathway-card-main"
+                      onClick={() => selectPathwayCard(card)}
+                      aria-pressed={isActive}
+                      title="Highlight this pathway on the map"
+                    >
+                      <span className="pathway-row-index">{index + 1}</span>
+                      <span className="pathway-row-main">
+                        <span className="pathway-row-summary">{card.summary}</span>
+                        <span className="pathway-row-meta">
+                          {card.stepCount} step{card.stepCount === 1 ? '' : 's'}
+                          {/* segments (each source/target + edge/group id) are the
+                              extension point for the upcoming pathway detail page. */}
+                        </span>
+                      </span>
+                      <ChevronRight size={14} className="pathway-row-chevron" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`pathway-queue-toggle ${queued ? 'is-queued' : ''}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onToggleQueue(queueEntity)
+                      }}
+                      aria-pressed={queued}
+                      title={queued ? 'Remove route from downloading table' : 'Add route to downloading table'}
+                    >
+                      {queued ? <Check size={14} /> : <Download size={14} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="pathway-detail-button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openPathwayDetail(card)
+                      }}
+                      aria-label={`查看路线 ${index + 1} 详情`}
+                      title="查看该路线详情"
+                    >
+                      <ArrowUpRight size={13} />
+                      <span>详情</span>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -1383,13 +2426,359 @@ export function CompoundGraphHome({
           </div>
         )}
 
+        {detailOpen && pathwayDetail && (
+          <div className="pw-detail-bar" role="region" aria-label="路线详情">
+            <button className="pw-detail-back" type="button" onClick={closePathwayDetail} title="返回通路结果列表">
+              <ArrowLeft size={14} />
+              <span>返回结果</span>
+            </button>
+            <div className="pw-detail-summary">
+              <strong>
+                {compoundName(pathwayDetail.chain[0])}
+                <span className="pw-detail-summary-arrow"> → </span>
+                {compoundName(pathwayDetail.chain[pathwayDetail.chain.length - 1])}
+              </strong>
+              <span>
+                {pathwayDetail.card.stepCount} 步 · {pathwayDetail.chain.length} 化合物
+              </span>
+            </div>
+            <button
+              className="pw-detail-download"
+              type="button"
+              onClick={openPicker}
+              disabled={pickerOpen}
+              aria-label="下载路线"
+              title="为每步选择酶后加入下载表"
+            >
+              <Download size={14} />
+              <span>下载</span>
+            </button>
+          </div>
+        )}
+
         <div className="map-footer-stats home-map-stats">
-          <span>Total compounds: {graph?.nodes.length ?? 0}</span>
-          <span>Total enzyme edges: {graph?.edges.length ?? 0}</span>
-          <span>Visible compound pairs: {viewModel.pairs.length}</span>
-          <span>Visible map edges: {visibleEdgeCount}</span>
+          {detailOpen && pathwayDetail ? (
+            <>
+              <span className="home-stats-scope">Pathway detail · “{pathwaySession?.query}”</span>
+              <span>Compounds in chain: {pathwayDetail.chain.length}</span>
+              <span>Steps: {pathwayDetail.card.stepCount}</span>
+            </>
+          ) : pathwaySession ? (
+            <>
+              <span className="home-stats-scope">Pathways · “{pathwaySession.query}”</span>
+              <span>Compounds in union: {pathwaySession.graph.nodes.length}</span>
+              <span>Pathways returned: {pathwaySession.cards.length} / {pathwaySession.total}</span>
+            </>
+          ) : scopeSearch ? (
+            <>
+              <span className="home-stats-scope">
+                Scope · “{scopeSearch.query}”
+                {scopeSearch.kind === 'compound'
+                  ? ` · compound${scopeSearch.reactionCount ? ` · ${scopeSearch.reactionCount} reactions` : ''}`
+                  : ` · ${scopeSearch.total} hit(s) · top ${scopeSearch.shown}`}
+              </span>
+              <span>Compounds in scope: {graph?.nodes.length ?? 0}</span>
+              <span>Enzyme edges in scope: {graph?.edges.length ?? 0}</span>
+            </>
+          ) : blastScope ? (
+            <>
+              <span className="home-stats-scope">Scope · BLASTp · {blastScope.hits} hit{blastScope.hits === 1 ? '' : 's'} · query {blastScope.queryLength} aa</span>
+              <span>Compounds in scope: {graph?.nodes.length ?? 0}</span>
+              <span>Enzyme edges in scope: {graph?.edges.length ?? 0}</span>
+            </>
+          ) : (
+            <>
+              <span>Total compounds: {graph?.nodes.length ?? 0}</span>
+              <span>Total enzyme edges: {graph?.edges.length ?? 0}</span>
+              <span>Visible compound pairs: {viewModel.pairs.length}</span>
+              <span>Visible map edges: {visibleEdgeCount}</span>
+            </>
+          )}
         </div>
+
+        <StructureSearchDrawer
+          open={structureOpen}
+          onClose={() => setStructureOpen(false)}
+          onTransferChebi={(chebiId) => {
+            // Drop the matched compound's ChEBI into the map search box only —
+            // the user decides when to run it.
+            setSearchValue(chebiId)
+            setSearchFocused(false)
+          }}
+        />
+
+        {pickerOpen && pathwayDetail && detailSteps.length > 0 && (
+          <PathwayEnzymePickerDrawer
+            card={pathwayDetail.card}
+            steps={detailSteps}
+            activeStepIndex={pickerStepIndex}
+            onActiveStepChange={setPickerActiveStep}
+            groupEdges={pickerGroupEdges}
+            groupLoadingIds={pickerGroupLoading}
+            onClose={closePicker}
+            onOpenEnzyme={onOpenEnzyme}
+            onAdd={(entity) => {
+              onToggleQueue(entity)
+              closePicker()
+              setSearchFeedback(`已加入下载表：${entity.name}`)
+            }}
+          />
+        )}
       </section>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Pathway-mode composer: ordered start → (…via…) → end with a whole-library
+ * compound dictionary autocomplete on every slot. Rendered only while
+ * searchMode === 'pathway', and it owns its slot text, so toggling modes
+ * resets a composition (each mount starts blank).
+ * ------------------------------------------------------------------------- */
+function PathwaySearchComposer({
+  busy,
+  externalError,
+  onRun,
+  onDismissError,
+  onCollapse,
+}: {
+  busy: boolean
+  externalError: string | null
+  onRun: (payload: PathwayComposerPayload) => void
+  onDismissError: () => void
+  onCollapse: () => void
+}) {
+  type ComposerSlot = { id: string | null; text: string }
+  type ActiveField = { field: 'start' | 'end' | 'via'; viaIndex: number }
+  const newSlot = (): ComposerSlot => ({ id: null, text: '' })
+  const [start, setStart] = useState<ComposerSlot>(newSlot)
+  const [end, setEnd] = useState<ComposerSlot>(newSlot)
+  const [vias, setVias] = useState<ComposerSlot[]>([])
+  const [active, setActive] = useState<ActiveField | null>(null)
+  const [suggestions, setSuggestions] = useState<CompoundSuggestion[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+
+  const activeText = active
+    ? active.field === 'start'
+      ? start.text
+      : active.field === 'end'
+        ? end.text
+        : vias[active.viaIndex]?.text ?? ''
+    : ''
+
+  const isSlotActive = (field: ActiveField['field'], viaIndex: number) => {
+    if (!active || active.field !== field) return false
+    return field !== 'via' || active.viaIndex === viaIndex
+  }
+
+  const updateStartText = (value: string) => {
+    setStart({ id: null, text: value })
+    onDismissError()
+  }
+  const updateEndText = (value: string) => {
+    setEnd({ id: null, text: value })
+    onDismissError()
+  }
+  const updateViaText = (index: number, value: string) => {
+    setVias((prev) => prev.map((via, itemIndex) => (itemIndex === index ? { id: null, text: value } : via)))
+    onDismissError()
+  }
+
+  const pickSuggestion = (item: CompoundSuggestion) => {
+    if (!active) return
+    const slot = { id: item.compoundId, text: item.name }
+    if (active.field === 'start') setStart(slot)
+    else if (active.field === 'end') setEnd(slot)
+    else {
+      setVias((prev) => prev.map((via, itemIndex) => (itemIndex === active.viaIndex ? slot : via)))
+    }
+    setActive(null)
+    setSuggestions([])
+    onDismissError()
+  }
+
+  const addVia = () => {
+    setVias((prev) => [...prev, newSlot()])
+    onDismissError()
+  }
+
+  const removeVia = (index: number) => {
+    setVias((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+    if (active?.field === 'via' && active.viaIndex === index) setActive(null)
+    onDismissError()
+  }
+
+  const canRun = !busy && start.text.trim().length > 0 && end.text.trim().length > 0
+
+  const submit = () => {
+    if (!canRun) return
+    onDismissError()
+    onRun({
+      startCompoundId: start.id || start.text.trim(),
+      endCompoundId: end.id || end.text.trim(),
+      viaCompoundIds: vias.map((via) => (via.id || via.text.trim())).filter((value) => value.length > 0),
+    })
+  }
+
+  const handleKeyDown = (event: { key: string }) => {
+    if (event.key === 'Enter') {
+      if (suggestions.length > 0) {
+        pickSuggestion(suggestions[0])
+      } else {
+        // Raw typed token: let the server resolve it on Run.
+        setActive(null)
+        setSuggestions([])
+      }
+      return
+    }
+    if (event.key === 'Escape') {
+      setActive(null)
+      setSuggestions([])
+    }
+  }
+
+  useEffect(() => {
+    const query = activeText.trim()
+    if (!active || query.length < 2) {
+      setSuggestions([])
+      setSuggestionsLoading(false)
+      return
+    }
+    let cancelled = false
+    setSuggestionsLoading(true)
+    const timer = window.setTimeout(() => {
+      suggestCompounds(query, 10)
+        .then((items) => {
+          if (cancelled) return
+          setSuggestions(items)
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions([])
+        })
+        .finally(() => {
+          if (!cancelled) setSuggestionsLoading(false)
+        })
+    }, 180)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [active, activeText])
+
+  const renderSlot = (
+    key: string,
+    badge: string,
+    field: ActiveField,
+    value: string,
+    placeholder: string,
+    onChange: (value: string) => void,
+    onRemove?: () => void,
+  ) => (
+    <div className={`pw-slot-chip ${onRemove ? 'is-removable' : ''}`} key={key}>
+      <span className="pw-slot-badge">{badge}</span>
+      <div className="pw-slot-control">
+        <input
+          className="pw-slot-input"
+          value={value}
+          placeholder={placeholder}
+          onFocus={() => setActive(field)}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        {isSlotActive(field.field, field.viaIndex) && activeText.trim().length >= 2 && (
+          <PathwaySuggestions items={suggestions} loading={suggestionsLoading} onPick={pickSuggestion} />
+        )}
+      </div>
+      {onRemove && (
+        <button className="pw-slot-remove" type="button" onClick={onRemove} title="Remove this intermediate" aria-label="Remove this intermediate">
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  )
+
+  return (
+    <div
+      className="home-pathway-composer"
+      onBlur={(event) => {
+        const next = event.relatedTarget
+        if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+          setActive(null)
+          setSuggestions([])
+        }
+      }}
+    >
+      <span className="pw-composer-title">Pathway</span>
+      <button
+        className="pw-composer-collapse"
+        type="button"
+        onClick={onCollapse}
+        title="Hide pathway search bar"
+        aria-label="Hide pathway search bar"
+      >
+        <ChevronsUp size={15} />
+      </button>
+      {renderSlot('slot:start', 'Start', { field: 'start', viaIndex: -1 }, start.text, 'Start compound (name / id / ChEBI)', updateStartText)}
+      {vias.map((via, index) =>
+        renderSlot(
+          `slot:via:${index}`,
+          `Via ${index + 1}`,
+          { field: 'via', viaIndex: index },
+          via.text,
+          'Pass through…',
+          (value) => updateViaText(index, value),
+          () => removeVia(index),
+        ),
+      )}
+      {renderSlot('slot:end', 'End', { field: 'end', viaIndex: -1 }, end.text, 'End compound (name / id / ChEBI)', updateEndText)}
+      <div className="pw-composer-actions">
+        <button className="pw-add-via" type="button" onClick={addVia} title="Add an intermediate compound the chain must pass through">
+          <Plus size={14} /> Add via
+        </button>
+        <span className="pw-composer-hint">≤ 6 steps · via order kept</span>
+        <button className="pw-run" type="button" disabled={!canRun} onClick={submit} title="Run pathway search">
+          {busy ? <Loader2 size={15} className="spin" /> : null}
+          {busy ? 'Searching…' : 'Find pathways'}
+        </button>
+      </div>
+      {externalError && (
+        <div className="pw-composer-status is-error" role="status">
+          <X size={13} /> {externalError}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Per-slot autocomplete dropdown fed by GET /compounds/suggest. */
+function PathwaySuggestions({
+  items,
+  loading,
+  onPick,
+}: {
+  items: CompoundSuggestion[]
+  loading: boolean
+  onPick: (item: CompoundSuggestion) => void
+}) {
+  if (loading && items.length === 0) {
+    return (
+      <div className="pw-slot-suggestions" onPointerDown={(event) => event.preventDefault()}>
+        <div className="pw-suggest-placeholder"><Loader2 size={13} className="spin" /> Looking up compounds…</div>
+      </div>
+    )
+  }
+  return (
+    <div className="pw-slot-suggestions" onPointerDown={(event) => event.preventDefault()}>
+      {items.length > 0 ? (
+        items.map((item) => (
+          <button key={item.compoundId} type="button" onClick={() => onPick(item)}>
+            <strong>{item.name}</strong>
+            <small>{item.chebiId || item.compoundId}</small>
+          </button>
+        ))
+      ) : (
+        <div className="pw-suggest-placeholder">No matching compounds in the library.</div>
+      )}
     </div>
   )
 }
@@ -1616,6 +3005,140 @@ function groupSequenceLinks(links: EnzymeSequenceLink[]) {
     grouped.set(link.category, current)
   })
   return Array.from(grouped.entries()).map(([category, groupLinks]) => ({ category, links: groupLinks }))
+}
+
+const HOME_SCOPE_MARGIN_X = 5
+const HOME_SCOPE_MARGIN_Y = 7
+// Separation target (world units) for a modest-size scope so neighbouring node
+// labels do not collide after the graph is fitted into the viewport
+// (~7.5 px each on a full-width stage, close to one node label height).
+// Dense blast/enzyme scopes physically cannot hold this gap for every pair
+// inside one frame, so relaxScopeNodeSpacing tapers it down with node count
+// (see scopeMinGapFor) rather than failing.
+const HOME_SCOPE_MIN_NODE_GAP = 15
+
+/** Pick a reachable inter-node gap for a scope of `nodeCount` compounds.
+ *
+ * Keeping every pair at the full base gap needs area ~ n·gap²/2 inside a fixed
+ * window; past ~40 nodes that no longer fits, so we step the target down to
+ * avoid the relaxation pushing most nodes against the edge (which would leave
+ * border nodes on top of each other).
+ */
+function scopeMinGapFor(nodeCount: number): number {
+  if (nodeCount <= 20) return 16
+  if (nodeCount <= 36) return 14
+  if (nodeCount <= 55) return 12
+  if (nodeCount <= 75) return 11
+  return 10
+}
+
+/** Rescale a freshly laid-out scope so its nodes fit inside the visible stage.
+ *
+ * The normal browse layout spreads nodes across the full (large) pan canvas,
+ * which is what lets the map grow as you expand. A map-search result, though,
+ * is a fixed small neighbourhood that should be readable in one frame — so we
+ * re-fit it into the viewport instead of letting it sit on the wide canvas.
+ * `focusId` (the searched compound, when it made it into the graph) is pinned
+ * to the stage centre so the neighbourhood reads as centred on it.
+ */
+function fitScopeHomePositions(positions: Record<string, Point>, focusId: string | null = null) {
+  const points = Object.values(positions)
+  if (points.length === 0) return positions
+  const minX = Math.min(...points.map((point) => point.x))
+  const maxX = Math.max(...points.map((point) => point.x))
+  const minY = Math.min(...points.map((point) => point.y))
+  const maxY = Math.max(...points.map((point) => point.y))
+  const availW = HOME_VIEWBOX_WIDTH - HOME_SCOPE_MARGIN_X * 2
+  const availH = HOME_VIEWBOX_HEIGHT - HOME_SCOPE_MARGIN_Y * 2
+  const focusPoint = focusId ? positions[focusId] : null
+  let scale: number
+  let originX: number
+  let originY: number
+  if (focusPoint) {
+    // Pin the focus node to the centre; guarantee every neighbour stays on screen.
+    const left = Math.max(focusPoint.x - minX, 0.001)
+    const right = Math.max(maxX - focusPoint.x, 0.001)
+    const up = Math.max(focusPoint.y - minY, 0.001)
+    const down = Math.max(maxY - focusPoint.y, 0.001)
+    scale = Math.min((availW / 2) / Math.max(left, right), (availH / 2) / Math.max(up, down))
+    originX = focusPoint.x
+    originY = focusPoint.y
+  } else {
+    scale = Math.min(availW / Math.max(maxX - minX, 0.001), availH / Math.max(maxY - minY, 0.001))
+    originX = (minX + maxX) / 2
+    originY = (minY + maxY) / 2
+  }
+  const targetX = HOME_VIEWBOX_WIDTH / 2
+  const targetY = HOME_VIEWBOX_HEIGHT / 2
+  const next: Record<string, Point> = {}
+  Object.entries(positions).forEach(([compoundId, point]) => {
+    next[compoundId] = { x: targetX + (point.x - originX) * scale, y: targetY + (point.y - originY) * scale }
+  })
+  return relaxScopeNodeSpacing(next, focusId, scopeMinGapFor(Object.keys(next).length))
+}
+
+/** Push only the too-close neighbours apart so their labels stop overlapping.
+ *
+ * A pure global scale change would have to stretch every edge to separate the
+ * single pair that actually collides, flinging distant nodes off-screen. This
+ * instead separates pairs that sit closer than `minGap`, leaving the rest of
+ * the (already well-spaced) layout untouched. The focus node — the searched
+ * compound pinned to the centre — is held fixed.
+ *
+ * Nodes pushed past the fitted window are folded back inside *every* pass:
+ * clamping mid-iteration lets border-crammed neighbours keep sliding apart
+ * along the window edge instead of stacking on top of one another once the
+ * relaxation ends.
+ */
+function relaxScopeNodeSpacing(positions: Record<string, Point>, focusId: string | null, minGap: number) {
+  const ids = Object.keys(positions)
+  if (ids.length < 2) return positions
+  const minX = HOME_SCOPE_MARGIN_X
+  const maxX = HOME_VIEWBOX_WIDTH - HOME_SCOPE_MARGIN_X
+  const minY = HOME_SCOPE_MARGIN_Y
+  const maxY = HOME_VIEWBOX_HEIGHT - HOME_SCOPE_MARGIN_Y
+  for (let iteration = 0; iteration < 220; iteration += 1) {
+    let moved = false
+    for (let first = 0; first < ids.length; first += 1) {
+      for (let second = first + 1; second < ids.length; second += 1) {
+        const a = positions[ids[first]]
+        const b = positions[ids[second]]
+        if (!a || !b) continue
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let distance = Math.hypot(dx, dy)
+        if (distance < 0.001) {
+          const jitter = stableJitter(`${ids[first]}:${ids[second]}:scope`)
+          dx = jitter.x || 0.1
+          dy = jitter.y || 0.1
+          distance = Math.hypot(dx, dy)
+        }
+        if (distance >= minGap) continue
+        const push = (minGap - distance) / 2
+        const unitX = dx / distance
+        const unitY = dy / distance
+        if (ids[first] !== focusId) {
+          a.x -= unitX * push
+          a.y -= unitY * push
+        }
+        if (ids[second] !== focusId) {
+          b.x += unitX * push
+          b.y += unitY * push
+        }
+        moved = true
+      }
+    }
+    if (!moved) break
+    // Keep the whole neighbourhood inside the fitted window as it breathes.
+    ids.forEach((compoundId) => {
+      if (compoundId === focusId) return
+      const point = positions[compoundId]
+      if (!point) return
+      point.x = Math.min(Math.max(point.x, minX), maxX)
+      point.y = Math.min(Math.max(point.y, minY), maxY)
+    })
+  }
+  return positions
 }
 
 function createHomeLayout(graph: HomeGraphData | null) {
@@ -1890,38 +3413,6 @@ function groupExpandedEdgesByEnzyme(edges: HomeGraphEdge[], referenceSourceId = 
     current.reactionIds = Array.from(new Set([...current.reactionIds, edge.reactionId]))
     current.directionMode = directionModeForEdges(nextEdges, current.sourceId, current.targetId)
     if (!current.label && (edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId)) current.label = edge.card?.uniprotId || edge.card?.databaseCode || edge.enzymeId
-  })
-
-  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
-}
-
-function groupExpandedEdgesByReaction(edges: HomeGraphEdge[], referenceSourceId = edges[0]?.sourceCompoundId, referenceTargetId = edges[0]?.targetCompoundId): ExpandedEdgeGroup[] {
-  const groups = new Map<string, ExpandedEdgeGroup>()
-  edges.forEach((edge) => {
-    const reactionId = edge.reactionId || edge.edgeId
-    const key = `${canonicalCompoundPairKey(edge.sourceCompoundId, edge.targetCompoundId)}::${reactionId}`
-    const current = groups.get(key)
-    if (!current) {
-      groups.set(key, {
-        key,
-        sourceId: referenceSourceId || edge.sourceCompoundId,
-        targetId: referenceTargetId || edge.targetCompoundId,
-        enzymeId: edge.card?.enzymeId || edge.enzymeId,
-        label: reactionId,
-        directionMode: directionModeForEdges([edge], referenceSourceId, referenceTargetId),
-        edges: [edge],
-        edgeIds: [edge.edgeId],
-        reactionIds: [reactionId],
-        representative: edge,
-      })
-      return
-    }
-    const nextEdges = [...current.edges, edge]
-    current.edges = nextEdges
-    current.edgeIds = Array.from(new Set([...current.edgeIds, edge.edgeId]))
-    current.reactionIds = Array.from(new Set([...current.reactionIds, reactionId]))
-    current.directionMode = directionModeForEdges(nextEdges, current.sourceId, current.targetId)
-    if (!current.label && reactionId) current.label = reactionId
   })
 
   return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
@@ -2292,25 +3783,11 @@ function edgePath(source: Point, target: Point, offset = 0) {
   const ny = dx / length
   return `M ${source.x} ${source.y} Q ${midX + nx * offset} ${midY + ny * offset} ${target.x} ${target.y}`
 }
-function svgClientPoint(svg: SVGSVGElement, clientX: number, clientY: number): Point {
-  const matrix = svg.getScreenCTM()
-  if (matrix) {
-    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
-    return { x: point.x, y: point.y }
-  }
+function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number) {
   const rect = svg.getBoundingClientRect()
   return {
-    x: ((clientX - rect.left) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
-    y: ((clientY - rect.top) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
-  }
-}
-
-function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number, scale = 1) {
-  const start = svgClientPoint(svg, startClientX, startClientY)
-  const end = svgClientPoint(svg, clientX, clientY)
-  return {
-    x: (end.x - start.x) / scale,
-    y: (end.y - start.y) / scale,
+    x: ((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
+    y: ((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
   }
 }
 function getNodeExpansionDirection(point: Point, camera: Point): ExpansionDirection | null {
@@ -2367,6 +3844,302 @@ function wrapCompoundLabel(name: string) {
   })
   pushCurrent()
   return rows.length > 0 ? rows : [clean]
+}
+
+/* ---------------------------------------------------------------------------
+ * Pathway detail sub-view: pure graph slicing + deterministic entity id used by
+ * the in-map single-route detail view and its per-step enzyme picker.
+ * ------------------------------------------------------------------------- */
+
+/** The one composite group OR the plain edges that back an oriented step
+ *  (source→target) in a union graph. A step is either a group (multi-enzyme
+ *  pair → its per-enzyme edges live behind loadExpandedEdgeGroup, not in
+ *  ``union.edges``) or the plain edges of a single-enzyme pair — never both. */
+function resolvePathwayStepPair(union: HomeGraphData, fromId: string, toId: string) {
+  const group = union.edgeGroups.find((item) => item.sourceCompoundId === fromId && item.targetCompoundId === toId) ?? null
+  const edges = union.edges.filter((edge) => edge.sourceCompoundId === fromId && edge.targetCompoundId === toId)
+  return { group, edges }
+}
+
+/** Subgraph of ``union`` that paints exactly one returned route: its chain
+ *  compounds plus only each adjacent step's own group/single edges. Other
+ *  routes' nodes and cross-edges are dropped, so the map shows one pathway. */
+function buildPathwayChainGraph(card: HomePathwayCard, union: HomeGraphData): HomeGraphData {
+  const keep = new Set(card.compoundIds)
+  const nodes = union.nodes.filter((node) => keep.has(node.compoundId))
+  const edgeGroups: HomeGraphEdgeGroup[] = []
+  const edges: HomeGraphEdge[] = []
+  for (let i = 0; i + 1 < card.compoundIds.length; i += 1) {
+    const pair = resolvePathwayStepPair(union, card.compoundIds[i], card.compoundIds[i + 1])
+    if (pair.group) edgeGroups.push(pair.group)
+    pair.edges.forEach((edge) => edges.push(edge))
+  }
+  return { nodes, edges, edgeGroups }
+}
+
+/** Stable 1..stepCount list of {step, source/target id+name, groupId|null, edges}
+ *  for the picker + drawer. Names resolve from the chain graph's own nodes. */
+function buildPathwayDetailSteps(card: HomePathwayCard, chainGraph: HomeGraphData): PathwayDetailStep[] {
+  const names = new Map(chainGraph.nodes.map((node) => [node.compoundId, node.name]))
+  const name = (id: string) => names.get(id) ?? id
+  const steps: PathwayDetailStep[] = []
+  for (let i = 0; i + 1 < card.compoundIds.length; i += 1) {
+    const sourceId = card.compoundIds[i]
+    const targetId = card.compoundIds[i + 1]
+    const pair = resolvePathwayStepPair(chainGraph, sourceId, targetId)
+    steps.push({
+      step: i + 1,
+      sourceId,
+      targetId,
+      sourceName: name(sourceId),
+      targetName: name(targetId),
+      groupId: pair.group?.edgeGroupId ?? null,
+      edges: pair.edges,
+    })
+  }
+  return steps
+}
+
+/** Candidate enzymes backing one step, deduped by the library enzymeId. Name /
+ *  organism / sourceType are display copies; ``enzymeId`` is kept verbatim (the
+ *  genuine DB primary key) so a future download re-hydrates full records via
+ *  POST /search/table/by-ids. ``uniprotId`` (accession) is the popup card's
+ *  primary label when the backing edge/card carries one. */
+function dedupeEnzymeChoices(edges: HomeGraphEdge[]): PathwayEnzymeChoice[] {
+  const seen = new Set<string>()
+  const out: PathwayEnzymeChoice[] = []
+  edges.forEach((edge) => {
+    if (!edge.enzymeId || seen.has(edge.enzymeId)) return
+    seen.add(edge.enzymeId)
+    const card = edge.card
+    out.push({
+      enzymeId: edge.enzymeId,
+      uniprotId: card?.uniprotId ?? null,
+      name: card?.primaryName || edge.label || edge.enzymeId,
+      organismName: card?.organismName ?? null,
+      sourceType: edge.sourceType ?? null,
+    })
+  })
+  return out
+}
+
+/** Deterministic id for an enzyme-picked route so it can coexist with the plain
+ *  route under the same (start,end) downloads group. Hash is over the sorted
+ *  per-step chosen enzymeIds — stable across StrictMode remounts (no Date.now()). */
+function pathwayEnzymeEntityId(cardId: string, perStep: Array<{ step: number; enzymeIds: string[] }>): string {
+  const payload = perStep.map((entry) => `${entry.step}:${[...entry.enzymeIds].sort().join(',')}`).join('|')
+  let hash = 0x811c9dc5
+  for (let i = 0; i < payload.length; i += 1) {
+    hash ^= payload.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `${cardId}#enz-${(hash >>> 0).toString(16)}`
+}
+
+/* ---------------------------------------------------------------------------
+ * Per-step enzyme picker (right slide-in drawer) for the pathway detail bar's
+ * 下载 button. It is NOT a modal: no backdrop, no auto-close from map operation —
+ * the map behind stays fully operable. The picker shows ONE current step at a
+ * time: a step-bar of chips at the top switches steps, and clicking that step's
+ * composite edge on the map does too (bidirectional, driven by the parent's
+ * pickerStepIndex). Composite step fan-outs are loaded lazily by the parent
+ * (pickerGroupEdges) and shared with the map's expanded-edge rendering. Each
+ * candidate card is keyed by the genuine library enzymeId (re-hydration door via
+ * POST /search/table/by-ids) and shows the UniProt accession as its primary
+ * label when present. Candidates deliberately ignore the map's filter sidebar.
+ * ------------------------------------------------------------------------- */
+function PathwayEnzymePickerDrawer({
+  card,
+  steps,
+  activeStepIndex,
+  onActiveStepChange,
+  groupEdges,
+  groupLoadingIds,
+  onClose,
+  onAdd,
+  onOpenEnzyme,
+}: {
+  card: HomePathwayCard
+  steps: PathwayDetailStep[]
+  activeStepIndex: number
+  onActiveStepChange: (index: number) => void
+  groupEdges: Record<string, HomeGraphEdge[]>
+  groupLoadingIds: string[]
+  onClose: () => void
+  onAdd: (entity: Entity) => void
+  onOpenEnzyme: (enzymeId: string) => void
+}) {
+  /** enzymeId list per 1-based step number (multi-select, freely revisitable). */
+  const [selection, setSelection] = useState<Record<number, string[]>>({})
+
+  const candidatesFor = (step: PathwayDetailStep): PathwayEnzymeChoice[] => {
+    if (step.groupId) return dedupeEnzymeChoices(groupEdges[step.groupId] ?? [])
+    return dedupeEnzymeChoices(step.edges)
+  }
+  const isLoading = (step: PathwayDetailStep) =>
+    Boolean(step.groupId && groupLoadingIds.includes(step.groupId) && !groupEdges[step.groupId])
+
+  const toggleChoice = (step: number, enzymeId: string) => {
+    setSelection((prev) => {
+      const current = prev[step] ?? []
+      const has = current.includes(enzymeId)
+      return { ...prev, [step]: has ? current.filter((id) => id !== enzymeId) : [...current, enzymeId] }
+    })
+  }
+
+  const chosenStepCount = steps.reduce((count, step) => count + ((selection[step.step]?.length ?? 0) > 0 ? 1 : 0), 0)
+  const canAdd = steps.length > 0 && steps.every((step) => (selection[step.step]?.length ?? 0) > 0)
+
+  const handleAdd = () => {
+    if (!canAdd) return
+    const names = new Map<string, string>()
+    steps.forEach((step) => {
+      names.set(step.sourceId, step.sourceName)
+      names.set(step.targetId, step.targetName)
+    })
+    const compoundNames = card.compoundIds.map((id) => names.get(id) ?? id)
+    const firstId = card.compoundIds[0]
+    const lastId = card.compoundIds[card.compoundIds.length - 1]
+    const enzymesByStep: PathwayQueueStep[] = steps.map((step) => {
+      const chosen = (selection[step.step] ?? [])
+        .map((enzymeId) => candidatesFor(step).find((candidate) => candidate.enzymeId === enzymeId))
+        .filter((candidate): candidate is PathwayEnzymeChoice => Boolean(candidate))
+      return {
+        step: step.step,
+        sourceId: step.sourceId,
+        sourceName: step.sourceName,
+        targetId: step.targetId,
+        targetName: step.targetName,
+        enzymes: chosen,
+      }
+    })
+    const entity: Entity = {
+      id: pathwayEnzymeEntityId(card.pathwayId, steps.map((step) => ({ step: step.step, enzymeIds: selection[step.step] ?? [] }))),
+      kind: 'pathway',
+      name: `${names.get(firstId) ?? firstId} → ${names.get(lastId) ?? lastId}`,
+      subtitle: `${card.stepCount} step${card.stepCount === 1 ? '' : 's'} · ${card.compoundIds.length} compound${card.compoundIds.length === 1 ? '' : 's'}`,
+      description: card.summary,
+      tags: ['Pathway'],
+      fields: [],
+      related: [],
+      pathway: {
+        startId: firstId,
+        endId: lastId,
+        compoundIds: card.compoundIds,
+        compoundNames,
+        stepCount: card.stepCount,
+        enzymesByStep,
+      },
+    }
+    onAdd(entity)
+  }
+
+  const activeStep = steps[activeStepIndex]
+  const activeLoading = activeStep ? isLoading(activeStep) : false
+  const activeCandidates = activeStep && !activeLoading ? candidatesFor(activeStep) : []
+
+  return (
+    <aside className="pw-enzyme-drawer" role="dialog" aria-label="为通路每一步选择酶">
+      <header className="pw-drawer-header">
+        <div>
+          <strong>选择每步酶</strong>
+          <span>点下方步骤、或图上该步的连线切换 · 可反复改选</span>
+        </div>
+        <button type="button" className="pw-drawer-close" onClick={onClose} title="关闭" aria-label="关闭选酶面板">
+          <X size={18} />
+        </button>
+      </header>
+
+      <div className="pw-drawer-stepper" role="tablist" aria-label={`通路步骤，共 ${steps.length} 步`}>
+        {steps.map((step, index) => {
+          const done = (selection[step.step]?.length ?? 0) > 0
+          const isActive = index === activeStepIndex
+          return (
+            <button
+              key={step.step}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`pw-drawer-chip${isActive ? ' is-active' : ''}${done ? ' is-done' : ''}`}
+              onClick={() => onActiveStepChange(index)}
+              title={`第 ${step.step} 步：${step.sourceName} → ${step.targetName}`}
+              aria-label={`第 ${step.step} 步，${done ? '已选' : '未选'}`}
+            >
+              <span className="pw-drawer-chip-tick">{done ? <Check size={12} /> : step.step}</span>
+              <span className="pw-drawer-chip-name">第 {step.step} 步</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="pw-drawer-body">
+        {activeStep && (
+          <section className="pw-drawer-step" key={activeStep.step}>
+            <h4 className="pw-drawer-step-head">
+              <span className="pw-drawer-step-idx">{activeStep.step}</span>
+              <span className="pw-drawer-step-names">
+                {activeStep.sourceName} <span className="pw-drawer-step-arrow">→</span> {activeStep.targetName}
+              </span>
+              {(selection[activeStep.step]?.length ?? 0) > 0 && (
+                <span className="pw-drawer-step-count">已选 {selection[activeStep.step]?.length}</span>
+              )}
+            </h4>
+            {activeLoading ? (
+              <p className="pw-drawer-step-loading">
+                <Loader2 size={14} className="pw-drawer-spin" /> 加载该步的酶…
+              </p>
+            ) : activeCandidates.length === 0 ? (
+              <p className="pw-drawer-step-empty">该步暂无酶数据</p>
+            ) : (
+              <div className="pw-drawer-candidates">
+                {activeCandidates.map((enzyme) => {
+                  const checked = (selection[activeStep.step] ?? []).includes(enzyme.enzymeId)
+                  const entryLabel = enzyme.uniprotId || enzyme.name
+                  return (
+                    <div key={enzyme.enzymeId} className={`pw-drawer-candidate ${checked ? 'is-checked' : ''}`}>
+                      <label className="pw-drawer-candidate-main">
+                        <input type="checkbox" checked={checked} onChange={() => toggleChoice(activeStep.step, enzyme.enzymeId)} />
+                        <span className="pw-drawer-candidate-copy">
+                          <strong className="pw-drawer-candidate-entry">{entryLabel}</strong>
+                          {enzyme.uniprotId && enzyme.name && enzyme.name !== enzyme.uniprotId ? (
+                            <em className="pw-drawer-candidate-name">{enzyme.name}</em>
+                          ) : null}
+                          {(enzyme.organismName || enzyme.sourceType) && (
+                            <span className="pw-drawer-candidate-sub">
+                              {enzyme.organismName ? <span className="pw-drawer-candidate-organism">{enzyme.organismName}</span> : null}
+                              {enzyme.sourceType ? <span className="pw-drawer-candidate-src">{enzyme.sourceType}</span> : null}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="pw-drawer-candidate-open"
+                        onClick={() => onOpenEnzyme(enzyme.enzymeId)}
+                        title={`查看 ${entryLabel} 详情`}
+                        aria-label={`查看 ${entryLabel} 详情`}
+                      >
+                        <ArrowUpRight size={13} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      <footer className="pw-drawer-footer">
+        <span className="pw-drawer-count">
+          已选 {chosenStepCount}/{steps.length} 步
+        </span>
+        <button type="button" className="pw-drawer-add" disabled={!canAdd} onClick={handleAdd}>
+          <Check size={15} /> 加入下载表
+        </button>
+      </footer>
+    </aside>
+  )
 }
 
 

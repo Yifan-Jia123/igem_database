@@ -14,8 +14,8 @@ from app.schemas.download import (
     DownloadItem, DownloadPreviewRequest, DownloadPreviewResponse,
     DownloadCreateRequest, DownloadCreateResponse,
 )
-from app.schemas.homology import (
-    HomologySearchRequest, HomologyResultItem, HomologyJobStatus,
+from app.schemas.blast import (
+    BlastSearchRequest, BlastHit, BlastPayload,
 )
 
 __all__ = [
@@ -29,5 +29,5 @@ __all__ = [
     "PathwaySearchRequest", "PathwaySearchResponse", "PathwayCard",
     "DownloadItem", "DownloadPreviewRequest", "DownloadPreviewResponse",
     "DownloadCreateRequest", "DownloadCreateResponse",
-    "HomologySearchRequest", "HomologyResultItem", "HomologyJobStatus",
+    "BlastSearchRequest", "BlastHit", "BlastPayload",
 ]

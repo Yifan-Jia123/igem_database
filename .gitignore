@@ -43,3 +43,9 @@ Thumbs.db
 /blast_db/
 /schema.out.txt
 /schema.err.txt
+
+# Local tooling / runtime dirs not part of the mirror
+.claude/
+/backend/blast_bin/
+/backend/blast_work/
+/backend/.env

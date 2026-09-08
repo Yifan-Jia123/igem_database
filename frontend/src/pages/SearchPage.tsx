@@ -27,7 +27,6 @@ export function SearchPage({
   addToQueue,
   openRecord,
   isQueued,
-  isQueuedId,
   filterOptions,
 }: {
   query: string
@@ -50,7 +49,6 @@ export function SearchPage({
   addToQueue: (id: string) => void
   openRecord: (entity: Entity) => void
   isQueued: boolean
-  isQueuedId: (id: string) => boolean
   filterOptions: FilterOptions
 }) {
   return (
@@ -66,6 +64,10 @@ export function SearchPage({
         </div>
         <div className="heading-actions">
           <span className="result-total">{filteredEntities.length} results</span>
+          <button className="outline-button" onClick={clearFilters}>
+            <RefreshCw size={15} />
+            Clear filters
+          </button>
         </div>
       </section>
 
@@ -140,7 +142,6 @@ export function SearchPage({
                 onSelect={() => setSelectedId(entity.id)}
                 addToQueue={addToQueue}
                 openRecord={openRecord}
-                isQueued={isQueuedId(entity.id)}
               />
             ))}
           </div>

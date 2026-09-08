@@ -10,7 +10,7 @@
   --celestial-paper: rgba(255, 255, 255, 0.86);
   position: relative;
   min-height: 100vh;
-  overflow-x: clip;
+  overflow-x: hidden;
   color: var(--celestial-ink);
   background:
     linear-gradient(180deg, rgba(250, 253, 255, 0.94), rgba(238, 246, 250, 0.92)),
@@ -75,19 +75,6 @@
   background: rgba(237, 227, 175, 0.12);
   border-color: rgba(237, 227, 175, 0.46);
   color: var(--celestial-gold);
-}
-
-.app-shell:not(.home-shell) .brand-mark,
-.app-shell:not(.home-shell) .atlas-logo {
-  overflow: hidden;
-}
-
-.app-shell:not(.home-shell) .brand-mark img,
-.app-shell:not(.home-shell) .atlas-logo img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: contain;
 }
 
 .app-shell:not(.home-shell) .brand-name {
@@ -281,19 +268,6 @@
   grid-template-columns: 260px minmax(0, 1fr) 330px;
 }
 
-.app-shell:not(.home-shell) .search-shell > .search-sidebar,
-.app-shell:not(.home-shell) .search-shell > .detail-panel {
-  min-height: 0;
-  max-height: calc(100vh - 98px);
-  overflow-x: clip;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  position: sticky;
-  top: 80px;
-  align-self: start;
-}
-
 .app-shell:not(.home-shell) .search-sidebar,
 .app-shell:not(.home-shell) .downloads-sidebar {
   background: linear-gradient(180deg, rgba(62, 92, 116, 0.96), rgba(82, 119, 148, 0.94));
@@ -318,8 +292,8 @@
 .app-shell:not(.home-shell) .filter-toggle,
 .app-shell:not(.home-shell) .filter-select,
 .app-shell:not(.home-shell) .chip-button,
-.app-shell:not(.home-shell) .downloads-format-trigger,
-.app-shell:not(.home-shell) .downloads-format-item {
+.app-shell:not(.home-shell) .downloads-format-item,
+.app-shell:not(.home-shell) .downloads-column-item {
   border-radius: 6px;
   border-color: rgba(237, 227, 175, 0.22);
   background: rgba(255, 255, 255, 0.12);
@@ -328,8 +302,8 @@
 
 .app-shell:not(.home-shell) .filter-toggle:hover,
 .app-shell:not(.home-shell) .chip-button:hover,
-.app-shell:not(.home-shell) .downloads-format-trigger:hover,
 .app-shell:not(.home-shell) .downloads-format-item:hover,
+.app-shell:not(.home-shell) .downloads-column-item:hover,
 .app-shell:not(.home-shell) .chip-button.active {
   border-color: rgba(237, 227, 175, 0.74);
   background: rgba(237, 227, 175, 0.2);
@@ -373,70 +347,12 @@
   background: rgba(249, 252, 254, 0.92);
 }
 
-.app-shell:not(.home-shell) .search-summary {
-  color: var(--celestial-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.app-shell:not(.home-shell) .search-summary strong {
-  color: #756a36;
-  font-weight: 800;
-}
-
 .app-shell:not(.home-shell) .search-result:hover,
 .app-shell:not(.home-shell) .search-result.selected,
 .app-shell:not(.home-shell) .download-row:hover {
   border-color: rgba(211, 190, 99, 0.54);
   box-shadow: 0 12px 22px rgba(8, 26, 58, 0.13);
   transform: translateY(-1px);
-}
-
-.app-shell:not(.home-shell) .search-result {
-  position: relative;
-}
-
-.app-shell:not(.home-shell) .search-result.selected {
-  border-color: rgba(211, 190, 99, 0.86);
-  background: rgba(237, 227, 175, 0.16);
-  box-shadow: inset 4px 0 0 var(--celestial-gold), 0 18px 32px rgba(8, 26, 58, 0.2);
-}
-
-.app-shell:not(.home-shell) .search-result.selected .result-name {
-  color: var(--celestial-ink);
-}
-
-.app-shell:not(.home-shell) .search-result.selected .result-subtitle,
-.app-shell:not(.home-shell) .search-result.selected .result-description {
-  color: var(--celestial-muted);
-}
-
-.app-shell:not(.home-shell) .search-result.selected.queued {
-  border-color: rgba(211, 190, 99, 0.86);
-}
-
-.app-shell:not(.home-shell) .search-result.queued {
-  border-color: rgba(237, 227, 175, 0.38);
-}
-
-.app-shell:not(.home-shell) .search-result .queue-action.is-queued {
-  border-color: rgba(237, 227, 175, 0.78);
-  background: rgba(237, 227, 175, 0.24);
-  color: var(--celestial-gold);
-}
-
-.app-shell:not(.home-shell) .queue-state {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 7px;
-  border: 1px solid rgba(237, 227, 175, 0.42);
-  border-radius: 999px;
-  background: rgba(237, 227, 175, 0.12);
-  color: var(--celestial-ink);
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
 }
 
 .app-shell:not(.home-shell) .queue-icon.compound,
@@ -465,49 +381,15 @@
   color: var(--celestial-ink);
 }
 
-.app-shell:not(.home-shell) .downloads-main.section-panel {
-  padding: 0;
-  overflow: hidden;
-}
-
 .app-shell:not(.home-shell) .downloads-shell {
-  grid-template-columns: minmax(0, 1fr) !important;
-  gap: 0;
+  grid-template-columns: 225px minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
 }
 
-.app-shell:not(.home-shell) .downloads-main {
-  width: 100%;
-  min-width: 0;
-}
-
-.app-shell:not(.home-shell) .downloads-page-actions {
-  align-items: stretch;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.app-shell:not(.home-shell) .downloads-format-dropdown {
-  display: flex;
-  position: relative;
-  min-width: 190px;
-  align-self: stretch;
-}
-
-.app-shell:not(.home-shell) .downloads-toolbar-button {
-  min-height: 46px;
-  min-width: 168px;
-  padding: 0 16px;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.app-shell:not(.home-shell) .downloads-page-actions .outline-button.downloads-toolbar-button,
-.app-shell:not(.home-shell) .downloads-page-actions .download-submit-pill.downloads-toolbar-button,
-.app-shell:not(.home-shell) .downloads-page-actions .downloads-format-trigger.downloads-toolbar-button {
-  height: 46px;
-  align-self: stretch;
+.app-shell:not(.home-shell) .downloads-main.section-panel {
+  padding: 0;
+  overflow: hidden;
 }
 
 .app-shell:not(.home-shell) .downloads-tabbar {
@@ -516,12 +398,12 @@
 }
 
 .app-shell:not(.home-shell) .downloads-tabbar button {
-  min-height: 46px;
+  min-height: 42px;
   border-radius: 6px 6px 0 0;
   border: 1px solid var(--celestial-line);
   background: rgba(238, 246, 250, 0.82);
   color: var(--celestial-ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -537,96 +419,34 @@
 
 .app-shell:not(.home-shell) .downloads-panel-group {
   gap: 0;
-  padding: 18px;
-}
-
-.app-shell:not(.home-shell) .downloads-format-trigger {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border: 1px solid rgba(7, 26, 58, 0.18);
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--celestial-ink);
-  font-size: 13px;
-  box-shadow: 0 8px 18px rgba(8, 26, 58, 0.08);
-}
-
-.app-shell:not(.home-shell) .downloads-format-trigger:disabled {
-  opacity: 0.55;
-}
-
-.app-shell:not(.home-shell) .downloads-format-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: grid;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid rgba(237, 227, 175, 0.24);
-  border-radius: 8px;
-  background: rgba(37, 58, 80, 0.98);
-  box-shadow: 0 18px 36px rgba(8, 26, 58, 0.2);
-}
-
-.app-shell:not(.home-shell) .downloads-format-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 12px;
-  font-size: 13px;
-}
-
-.app-shell:not(.home-shell) .downloads-format-item.active {
-  border-color: rgba(237, 227, 175, 0.82);
-  background: rgba(237, 227, 175, 0.26);
-}
-
-.app-shell:not(.home-shell) .downloads-summary-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 2px 14px;
-  color: var(--celestial-muted);
-  font-size: 13px;
-}
-
-.app-shell:not(.home-shell) .downloads-summary-line span:last-child {
-  font-weight: 700;
+  padding: 14px;
 }
 
 .app-shell:not(.home-shell) .download-table-header {
   display: grid;
-  grid-template-columns: 36px 120px minmax(0, 1.12fr) minmax(0, 1fr) 132px minmax(138px, auto);
+  grid-template-columns: 32px minmax(0, 1fr) 140px 116px;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--celestial-line);
   border-bottom: 0;
   border-radius: 6px 6px 0 0;
   background: #e8f1f6;
   color: var(--celestial-ink);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .app-shell:not(.home-shell) .download-table-header span:first-child {
-  grid-column: 1;
+  grid-column: 1 / 3;
 }
 
 .app-shell:not(.home-shell) .download-row,
 .app-shell:not(.home-shell) .downloads-panel-group .download-row {
   display: grid;
-  grid-template-columns: 36px 120px minmax(0, 1.12fr) minmax(0, 1fr) 132px minmax(138px, auto);
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 14px;
+  grid-template-columns: 32px minmax(0, 1fr) 140px 32px 32px 32px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 10px;
   border: 1px solid var(--celestial-line);
   border-radius: 0;
   background: rgba(255, 255, 255, 0.94);
@@ -638,9 +458,9 @@
 }
 
 .app-shell:not(.home-shell) .download-row .icon-button {
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
   padding: 0;
   background: var(--celestial-navy);
   border-color: var(--celestial-navy);
@@ -648,18 +468,9 @@
 }
 
 .app-shell:not(.home-shell) .queue-icon {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
-}
-
-.app-shell:not(.home-shell) .queue-id {
-  align-self: center;
-  min-width: 0;
-  color: var(--celestial-muted);
-  font-size: 13px;
-  font-weight: 700;
-  word-break: break-word;
 }
 
 .app-shell:not(.home-shell) .queue-copy {
@@ -668,56 +479,36 @@
 }
 
 .app-shell:not(.home-shell) .queue-copy strong {
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.35;
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
 }
 
-.app-shell:not(.home-shell) .queue-subtitle {
-  align-self: center;
-  min-width: 0;
-  color: var(--celestial-muted);
-  font-size: 13px;
-  line-height: 1.4;
-  word-break: break-word;
+.app-shell:not(.home-shell) .downloads-page .queue-copy small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .app-shell:not(.home-shell) .queue-kind {
   justify-self: start;
   margin-left: 0;
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: 999px;
   background: rgba(237, 227, 175, 0.72);
   color: #544913;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
-.app-shell:not(.home-shell) .queue-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-}
-
 .app-shell:not(.home-shell) .download-submit-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: auto;
-  min-width: 168px;
   border-radius: 6px;
   border-color: rgba(237, 227, 175, 0.9);
   background: var(--celestial-gold);
   color: var(--celestial-navy);
   font-weight: 800;
-}
-
-.app-shell:not(.home-shell) .downloads-export-button {
-  min-width: 168px;
 }
 
 .app-shell:not(.home-shell) .downloads-summary .summary-panel {
@@ -745,37 +536,6 @@
 .app-shell:not(.home-shell) .detail-panel {
   background: var(--celestial-paper);
   color: var(--celestial-ink);
-}
-
-.app-shell:not(.home-shell) .detail-panel .detail-description {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  white-space: normal;
-}
-
-.app-shell:not(.home-shell) .detail-panel .field-list {
-  min-width: 0;
-}
-
-.app-shell:not(.home-shell) .detail-panel .field-row {
-  min-width: 0;
-  align-items: flex-start;
-}
-
-.app-shell:not(.home-shell) .detail-panel .field-row span {
-  min-width: 72px;
-  flex: 0 1 36%;
-  color: var(--celestial-muted);
-}
-
-.app-shell:not(.home-shell) .detail-panel .field-row strong {
-  min-width: 0;
-  flex: 1 1 0;
-  max-width: none;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .app-shell:not(.home-shell) .field-list,
@@ -1003,18 +763,6 @@
   .app-shell:not(.home-shell) .search-sidebar {
     position: static;
   }
-
-  .app-shell:not(.home-shell) .search-shell > .search-sidebar,
-  .app-shell:not(.home-shell) .search-shell > .detail-panel {
-    max-height: none;
-    overflow: visible;
-    overflow-y: visible;
-    overscroll-behavior: auto;
-    scrollbar-gutter: auto;
-    position: static;
-    top: auto;
-    align-self: stretch;
-  }
 }
 
 @media (max-width: 1500px) {
@@ -1052,7 +800,6 @@
   }
 
   .app-shell:not(.home-shell) .sidebar {
-    position: fixed;
     left: -270px;
     margin: 0;
     top: 0;
@@ -1100,14 +847,9 @@
     display: none;
   }
 
-  .app-shell:not(.home-shell) .downloads-panel-group {
-    overflow-x: auto;
-  }
-
   .app-shell:not(.home-shell) .download-row,
   .app-shell:not(.home-shell) .downloads-panel-group .download-row {
-    grid-template-columns: 36px 120px minmax(0, 1.12fr) minmax(0, 1fr) 132px minmax(138px, auto);
-    min-width: 820px;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
     border-radius: 6px;
   }
 
@@ -1130,5 +872,276 @@
 
   .app-shell:not(.home-shell) .structure-hit-actions {
     grid-column: 2 / -1;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Pathway queue groups on the downloads page.
+   One "big card" per (start, end) pair; the small cards inside it render the
+   compound chain of each individual route. Everything is scoped to the
+   non-home shell so these rules never leak onto the map / search pages.
+   ------------------------------------------------------------------------- */
+.app-shell:not(.home-shell) .downloads-pw-group {
+  margin-top: 12px;
+  border: 1px solid var(--celestial-line);
+  border-radius: 12px;
+  background: rgba(250, 253, 255, 0.78);
+  box-shadow: 0 10px 24px rgba(16, 43, 85, 0.08);
+  overflow: hidden;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group:first-child {
+  margin-top: 2px;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--celestial-line-soft);
+  background: linear-gradient(180deg, rgba(237, 227, 175, 0.34), rgba(238, 246, 250, 0.55));
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head .queue-icon.pathway {
+  background: var(--celestial-navy);
+  color: var(--celestial-gold);
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head .queue-copy {
+  flex: 1 1 200px;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head .queue-copy strong {
+  font-size: 13px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head .queue-copy small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-head .queue-kind {
+  margin-right: 4px;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-count {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.92);
+  color: var(--celestial-navy);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+/* each queued route = one small card */
+.app-shell:not(.home-shell) .downloads-pw-route {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 30px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid var(--celestial-line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.app-shell:not(.home-shell) .downloads-pw-route:hover {
+  border-color: rgba(211, 190, 99, 0.72);
+}
+
+.app-shell:not(.home-shell) .downloads-pw-route-index {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.92);
+  color: var(--celestial-navy);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-node {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid rgba(16, 43, 85, 0.16);
+  border-radius: 999px;
+  background: #f7fbfe;
+  color: var(--celestial-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-node::after {
+  content: "\2192";
+  margin: 0 8px;
+  color: rgba(96, 112, 134, 0.75);
+  font-weight: 700;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-node:last-child::after {
+  content: none;
+  margin: 0;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-route-meta {
+  justify-self: end;
+  color: var(--celestial-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group .icon-button {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--celestial-navy);
+  border-color: var(--celestial-navy);
+  color: #ffffff;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-group .icon-button:hover {
+  background: rgba(16, 43, 85, 0.78);
+  color: #ffffff;
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(.home-shell) .downloads-pw-route {
+    grid-template-columns: 24px minmax(0, 1fr) 30px;
+  }
+
+  .app-shell:not(.home-shell) .downloads-pw-route-meta {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .app-shell:not(.home-shell) .downloads-pw-route .icon-button {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .app-shell:not(.home-shell) .downloads-pw-node {
+    font-size: 11px;
+  }
+}
+
+/* Enzyme-picked route marker: a small card that went through the pathway detail
+   page's per-step download picker. Plain routes carry no enzymesByStep and are
+   untouched — these rules only kick in when the extra block is present. */
+.app-shell:not(.home-shell) .downloads-pw-route.has-enzymes {
+  border-color: rgba(211, 190, 99, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(237, 227, 175, 0.55);
+}
+
+.app-shell:not(.home-shell) .downloads-pw-route-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.55);
+  border: 1px solid rgba(173, 150, 60, 0.55);
+  color: #6d5715;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+/* The enzyme listing is the route card's LAST grid child on purpose: it is
+   pinned to its own second row (explicit row/column), so appending it after the
+   remove button never disturbs the header row's auto-placement. */
+.app-shell:not(.home-shell) .downloads-pw-route-enzymes {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  display: grid;
+  gap: 7px;
+  padding: 6px 2px 2px;
+  border-top: 1px dashed rgba(173, 150, 60, 0.45);
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-step-label {
+  flex: 0 0 auto;
+  color: var(--celestial-ink, #16233a);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 9px;
+  border: 1px solid rgba(16, 43, 85, 0.14);
+  border-radius: 999px;
+  background: #fbf4dd;
+  color: var(--celestial-ink, #16233a);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-chip em {
+  color: var(--celestial-muted, #68758a);
+  font-style: normal;
+  font-size: 10px;
+}
+
+.app-shell:not(.home-shell) .downloads-pw-enzyme-missing {
+  color: var(--celestial-muted, #68758a);
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .app-shell:not(.home-shell) .downloads-pw-route-enzymes {
+    grid-column: 2;
+    grid-row: 3;
   }
 }

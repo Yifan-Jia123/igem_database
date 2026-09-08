@@ -7,7 +7,6 @@ import csv
 import json
 import io
 import zipfile
-from xml.sax.saxutils import escape as xml_escape
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,10 +59,8 @@ async def preview(
     db: AsyncSession,
 ) -> Tuple[List[str], int, str]:
     """Return columns, rowCount, and estimated filename."""
-    format = format.lower()
     columns = _resolve_columns(fields)
-    rows = await _fetch_entry_data(db, items, fields, download_type)
-    row_count = len([row for row in rows if row.get("sequence")]) if format == "fasta" else len(rows)
+    row_count = len(items)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{download_type}_{ts}.{format}"
@@ -88,7 +85,6 @@ async def generate_file(
 
     os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-    format = format.lower()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{download_type}_{ts}.{format}"
     filepath = os.path.join(DOWNLOADS_DIR, filename)
@@ -96,15 +92,12 @@ async def generate_file(
     if format == "fasta":
         rows = await _fetch_entry_data(db, items, fields, download_type)
         _write_fasta(filepath, rows, fields)
-    elif format == "xlsx":
-        rows = await _fetch_entry_data(db, items, fields, download_type)
-        _write_xlsx(filepath, rows, fields)
     elif format == "zip":
         await _write_zip(filepath, db, items, fields, download_type, include_graph_image)
     else:
         rows = await _fetch_entry_data(db, items, fields, download_type)
-        if format in ("csv", "tsv", "txt"):
-            delimiter = "\t" if format in ("tsv", "txt") else ","
+        if format in ("csv", "tsv"):
+            delimiter = "\t" if format == "tsv" else ","
             _write_delimited(filepath, rows, fields, delimiter)
         elif format == "json":
             _write_json(filepath, rows, fields)
@@ -296,81 +289,6 @@ def _write_fasta(filepath: str, rows: List[dict], fields: List[str]):
             sequence = row.get("sequence", "")
             if sequence:
                 f.write(f"{header}\n{sequence}\n")
-
-
-def _write_xlsx(filepath: str, rows: List[dict], fields: List[str]):
-    """Write a minimal XLSX workbook with one worksheet."""
-    valid_fields = [f for f in fields if f in FIELD_MAP]
-    headers = [FIELD_MAP[f]["label"] for f in valid_fields]
-
-    sheet_rows = [headers]
-    for row in rows:
-        sheet_rows.append([row.get(f, "") for f in valid_fields])
-
-    sheet_xml = _build_sheet_xml(sheet_rows)
-    workbook_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    <sheet name="Export" sheetId="1" r:id="rId1"/>
-  </sheets>
-</workbook>
-"""
-    workbook_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>
-"""
-    root_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>
-"""
-    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-</Types>
-"""
-    styles_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
-  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
-  <borders count="1"><border/></borders>
-  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
-</styleSheet>
-"""
-
-    with zipfile.ZipFile(filepath, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", content_types)
-        zf.writestr("_rels/.rels", root_rels)
-        zf.writestr("xl/workbook.xml", workbook_xml)
-        zf.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
-        zf.writestr("xl/styles.xml", styles_xml)
-        zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
-
-
-def _build_sheet_xml(rows: List[List[str]]) -> str:
-    def column_name(index: int) -> str:
-        name = ""
-        while index:
-            index, remainder = divmod(index - 1, 26)
-            name = chr(65 + remainder) + name
-        return name
-
-    parts = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>', '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
-    for row_index, row in enumerate(rows, start=1):
-        parts.append(f'<row r="{row_index}">')
-        for col_index, value in enumerate(row, start=1):
-            cell_ref = f"{column_name(col_index)}{row_index}"
-            text = xml_escape(_val(value))
-            parts.append(f'<c r="{cell_ref}" t="inlineStr"><is><t xml:space="preserve">{text}</t></is></c>')
-        parts.append('</row>')
-    parts.append('</sheetData></worksheet>')
-    return "".join(parts)
 
 
 async def _write_zip(

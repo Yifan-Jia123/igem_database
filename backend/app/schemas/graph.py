@@ -25,6 +25,21 @@ class ReactionEdge(CamelModel):
     card: Optional[EnzymeCard] = None
 
 
+class EdgeGroupItem(CamelModel):
+    """Minimal per-sub-edge summary carried on a collapsed composite edge.
+
+    Lets the client apply species/source-type filters and search highlights to
+    the individual edges inside a composite without expanding it.
+    """
+
+    edge_id: str
+    enzyme_id: str
+    label: Optional[str] = None
+    organism_name: Optional[str] = None
+    source_type: Optional[str] = None
+    review_status: Optional[str] = None
+
+
 class EdgeGroup(CamelModel):
     edge_group_id: str
     source_compound_id: str
@@ -32,6 +47,7 @@ class EdgeGroup(CamelModel):
     label: str
     count: int
     edge_ids: List[str] = []
+    items: List[EdgeGroupItem] = []
 
 
 class GraphPayload(CamelModel):

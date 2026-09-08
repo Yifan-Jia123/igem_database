@@ -22,6 +22,24 @@ class EnzymeCard(CamelModel):
     review_status: str
 
 
+class TableEnzymeCard(CamelModel):
+    """One row per enzyme for the table search-results page.
+
+    Unlike ``EnzymeCard`` (which is anchored to a single reaction edge), this
+    aggregates every reaction edge of the matched enzyme so the UI can show and
+    filter on the complete set of EC numbers and data sources it catalyses.
+    """
+
+    enzyme_id: str
+    primary_name: str
+    uniprot_id: Optional[str] = None
+    organism_name: Optional[str] = None
+    gene_name: Optional[str] = None
+    ec_numbers: List[str] = []
+    source_types: List[str] = []
+    reaction_count: int = 0
+
+
 class EnzymeReactionItem(CamelModel):
     reaction_id: str
     rhea_id: Optional[str] = None

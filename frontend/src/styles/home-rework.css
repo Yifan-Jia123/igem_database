@@ -1,0 +1,2048 @@
+/* ==========================================================================
+   Home rework additions (drawer, filters, search console, scope, no-result)
+   Appended after app.css so it can override home-scoped rules.
+   ========================================================================== */
+
+/* ---------- Structure search drawer (compound dictionary) ---------- */
+
+.structure-drawer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.structure-drawer-layer.is-open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.structure-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 9, 15, 0.62);
+  opacity: 0;
+  transition: opacity 0.24s ease;
+}
+
+.structure-drawer-layer.is-open .structure-drawer-backdrop {
+  opacity: 1;
+}
+
+.structure-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(580px, 94vw);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #0c1825 0%, #0a141f 100%);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transform: translateX(105%);
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.structure-drawer-layer.is-open .structure-drawer {
+  transform: translateX(0);
+}
+
+.structure-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(16, 31, 45, 0.7);
+  flex: 0 0 auto;
+}
+
+.structure-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.structure-drawer-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--teal);
+  background: rgba(114, 224, 196, 0.12);
+  border: 1px solid rgba(114, 224, 196, 0.28);
+}
+
+.structure-drawer-kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.structure-drawer-title h2 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.structure-drawer-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.structure-drawer-close:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.structure-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.structure-drawer-status {
+  font-size: 12px;
+  color: var(--ink-muted);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(122, 212, 255, 0.06);
+  border: 1px solid rgba(122, 212, 255, 0.14);
+}
+
+.structure-drawer-status.is-error {
+  color: var(--coral);
+  border-color: rgba(255, 143, 143, 0.3);
+  background: rgba(255, 143, 143, 0.07);
+}
+
+.structure-editor-block {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0a1420;
+}
+
+.structure-editor-block iframe {
+  display: block;
+  width: 100%;
+  height: 320px;
+  border: 0;
+}
+
+.structure-drawer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.structure-drawer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.structure-drawer-btn:hover {
+  border-color: var(--line-strong);
+}
+
+.structure-drawer-btn.ghost {
+  background: transparent;
+  color: var(--ink-muted);
+}
+
+.structure-drawer-btn.primary {
+  margin-left: auto;
+  border-color: transparent;
+  background: linear-gradient(135deg, #1b90c4, #1f6fb8);
+  color: #fff;
+}
+
+.structure-drawer-btn.primary:disabled {
+  opacity: 0.5;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.structure-result-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.structure-result-field {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12.5px;
+}
+
+.structure-result-field span {
+  color: var(--ink-muted);
+}
+
+.structure-result-field strong {
+  color: var(--ink);
+  word-break: break-all;
+  font-weight: 500;
+}
+
+.structure-drawer-alert {
+  font-size: 12.5px;
+  color: var(--coral);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 143, 143, 0.07);
+  border: 1px solid rgba(255, 143, 143, 0.24);
+}
+
+.structure-drawer-section {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.structure-drawer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.structure-drawer-section-head h3 {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.structure-drawer-section-head span {
+  font-size: 12px;
+  color: var(--ink-muted);
+  background: rgba(173, 205, 234, 0.1);
+  border-radius: 20px;
+  padding: 2px 9px;
+}
+
+.structure-drawer-hit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.structure-drawer-hit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(16, 31, 45, 0.55);
+}
+
+.structure-drawer-hit-img {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #0a1420;
+  border: 1px solid var(--line);
+  color: var(--teal);
+  overflow: hidden;
+}
+
+.structure-drawer-hit-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.structure-drawer-hit-main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.structure-drawer-hit-main strong {
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+.structure-drawer-hit-main span {
+  font-size: 11px;
+  color: var(--cyan);
+}
+
+.structure-drawer-hit-main small {
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.structure-drawer-hit-link {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  background: transparent;
+}
+
+.structure-drawer-hit-link:hover {
+  color: var(--cyan);
+  border-color: rgba(122, 212, 255, 0.4);
+}
+
+.structure-drawer-hit-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Quick-transfer: hand this compound's ChEBI to the page's search box. */
+.structure-drawer-hit-transfer {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--teal);
+  border: 1px solid rgba(114, 224, 196, 0.35);
+  background: rgba(114, 224, 196, 0.08);
+  cursor: pointer;
+}
+
+.structure-drawer-hit-transfer:hover {
+  color: #d9f7ec;
+  border-color: rgba(114, 224, 196, 0.65);
+  background: rgba(114, 224, 196, 0.22);
+}
+
+.structure-drawer-empty {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  padding: 18px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+@media (max-width: 640px) {
+  .structure-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+}
+
+/* ---------- Home filter sidebar (organism + data source) ---------- */
+
+.home-map-page .graph-filter-sidebar {
+  width: 216px;
+}
+
+.home-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.home-filter-head .graph-filter-title {
+  flex: 1 1 auto;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.home-filter-reset {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  padding: 2px 8px;
+  border: 1px solid rgba(237, 227, 175, 0.4);
+  border-radius: 20px;
+  background: rgba(237, 227, 175, 0.1);
+  color: var(--graph-gold, #f0e5b2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.home-filter-reset:hover {
+  background: rgba(237, 227, 175, 0.2);
+}
+
+.home-filter-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 10px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.home-filter-label {
+  margin: 0;
+  font-size: 11px;
+  color: rgba(248, 251, 255, 0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.home-filter-select {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(8, 26, 58, 0.35);
+  color: rgba(248, 251, 255, 0.92);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-filter-select:hover,
+.home-filter-select.is-open {
+  border-color: rgba(237, 227, 175, 0.5);
+}
+
+.home-filter-select-label {
+  color: rgba(248, 251, 255, 0.7);
+}
+
+.home-filter-select-value {
+  flex: 1 1 auto;
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.home-filter-select svg {
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+.home-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  width: 100%;
+  min-width: 210px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #16283c, #101f30);
+  box-shadow: 0 24px 50px rgba(8, 26, 58, 0.5);
+}
+
+.home-filter-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(248, 251, 255, 0.55);
+}
+
+.home-filter-search input {
+  flex: 1 1 auto;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.home-filter-search input::placeholder {
+  color: rgba(248, 251, 255, 0.45);
+}
+
+.home-filter-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.home-filter-list > button {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(248, 251, 255, 0.9);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-filter-list > button:hover {
+  background: rgba(237, 227, 175, 0.14);
+}
+
+.home-filter-list > button.is-checked {
+  color: #fff;
+}
+
+.home-filter-check {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  color: transparent;
+}
+
+.home-filter-check.checked {
+  border-color: var(--graph-gold, #f0e5b2);
+  background: var(--graph-gold, #f0e5b2);
+  color: var(--graph-navy, #081a3a);
+}
+
+.home-filter-option-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.home-filter-empty {
+  padding: 14px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(248, 251, 255, 0.5);
+}
+
+.home-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.home-chip {
+  max-width: 100%;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(248, 251, 255, 0.85);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-chip.on {
+  border-color: rgba(237, 227, 175, 0.65);
+  background: rgba(237, 227, 175, 0.18);
+  color: #fff;
+}
+
+.home-chip:hover {
+  border-color: rgba(237, 227, 175, 0.9);
+}
+
+.home-species-chips {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.home-species-chips .home-chip {
+  justify-content: space-between;
+}
+
+/* ---------- Home enzyme search: form toggle, scope pill, no-result ---------- */
+
+.home-map-page .home-search-bar {
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+}
+
+.home-search-enzyme-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.36);
+  color: rgba(8, 26, 58, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.home-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid rgba(8, 26, 58, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.home-result-toggle button {
+  min-width: 34px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(8, 26, 58, 0.75);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.home-result-toggle button.is-active {
+  background: var(--graph-navy, #081a3a);
+  color: var(--graph-gold, #f0e5b2);
+  font-weight: 700;
+}
+
+.home-result-toggle button:not(.is-active):hover {
+  color: var(--graph-navy, #081a3a);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.home-map-page .home-scope-feedback {
+  position: absolute;
+  top: 126px;
+  left: 50%;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, 60vw);
+  padding: 8px 12px;
+  border: 1px solid rgba(237, 227, 175, 0.4);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(20, 40, 63, 0.96), rgba(12, 27, 44, 0.96));
+  box-shadow: 0 18px 40px rgba(8, 26, 58, 0.4);
+  color: var(--ink, #ecf6ff);
+  font-size: 12.5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.home-map-page .home-scope-feedback.scope-loading {
+  border-color: rgba(122, 212, 255, 0.45);
+  color: rgba(248, 251, 255, 0.85);
+}
+
+.scope-query {
+  color: var(--graph-gold, #f0e5b2);
+  font-weight: 700;
+}
+
+.scope-count {
+  color: rgba(248, 251, 255, 0.82);
+}
+
+.home-scope-action {
+  padding: 4px 12px;
+  border: 1px solid rgba(237, 227, 175, 0.5);
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.16);
+  color: var(--graph-gold, #f0e5b2);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-scope-action:hover {
+  background: rgba(237, 227, 175, 0.28);
+}
+
+.home-scope-action.ghost {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: rgba(248, 251, 255, 0.82);
+}
+
+.home-scope-action.ghost:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.home-map-page .home-noresult-panel {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  z-index: 8;
+  width: min(430px, 76vw);
+  padding: 26px 28px;
+  border: 1px solid rgba(255, 143, 143, 0.4);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(26, 40, 58, 0.98), rgba(14, 27, 43, 0.98));
+  box-shadow: 0 30px 70px rgba(8, 26, 58, 0.55);
+  color: var(--ink, #ecf6ff);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.home-map-page .home-noresult-panel h3 {
+  margin: 0 0 8px;
+  color: var(--coral, #ff8f8f);
+  font-size: 17px;
+}
+
+.home-map-page .home-noresult-panel p {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: rgba(248, 251, 255, 0.75);
+  word-break: break-word;
+}
+
+.home-noresult-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .home-map-page .home-scope-feedback {
+    top: 142px;
+    max-width: 88vw;
+    white-space: normal;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+
+/* Scope-aware footer note: highlight the active enzyme-search scope */
+.home-map-page .home-map-stats .home-stats-scope {
+  color: var(--graph-navy, #081a3a);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-map-page .home-map-stats .home-stats-scope::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #2f9e68;
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18);
+  flex: 0 0 auto;
+}
+
+/* ---------------------------------------------------------------------------
+   BLAST scope on the map. The shared home-map scope pill is reused; a teal
+   rail + label set the run apart from a keyword enzyme scope.
+--------------------------------------------------------------------------- */
+.home-map-page .home-scope-feedback.blast-scope-feedback {
+  border-color: rgba(114, 224, 196, 0.55);
+}
+
+.home-map-page .home-scope-feedback.blast-scope-feedback .scope-query {
+  color: #9beacf;
+}
+
+.home-scope-feedback.blast-scope-feedback .scope-query::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: 0;
+  border-radius: 50%;
+  background: #3ecf9f;
+  box-shadow: 0 0 0 3px rgba(62, 207, 159, 0.2);
+}
+
+/* E-value chip on a hit enzyme card in the map's side stack. */
+.home-map-page .enzyme-card .enzyme-card-blast-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin: 0 0 6px;
+  padding: 1px 8px;
+  border: 1px solid rgba(114, 224, 196, 0.45);
+  border-radius: 999px;
+  background: rgba(114, 224, 196, 0.14);
+  color: #9beacf;
+  font: 600 10px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+ * Scoped map search — retrieved single edges vs background isoenzymes.
+ * When a composite (collapsed) edge is expanded on a search-result subgraph,
+ * extra isoenzymes that the search did NOT retrieve can surface. The retrieved
+ * single edges keep the saturated reaction hues + a thicker stroke; the
+ * background ones are drawn paler/thinner and their labels are dimmed, so the
+ * searched edges clearly lead the eye.
+ * ------------------------------------------------------------------------- */
+.home-map-page .live-expanded-edge.scope-background {
+  stroke: rgba(152, 160, 168, 0.55);
+  stroke-width: 0.3;
+  opacity: 0.72;
+}
+/* A background line that is individually selected still reads as "active" (and
+ * its labels unhide), but the whole-bundle "highlighted" state must NOT wash it
+ * back to the retrieved hue — that is the contrast this scope is about. */
+.home-map-page .live-expanded-edge.scope-background.selected,
+.home-map-page .live-expanded-edge.scope-background.pathway {
+  stroke: #a8687d;
+  opacity: 1;
+}
+.home-map-page .scope-miss-edge .expanded-edge-label {
+  opacity: 0.45;
+}
+/* Picking a background line brings its label back up with the rose stroke. */
+.home-map-page .scope-miss-edge:has(.live-expanded-edge.selected) .expanded-edge-label {
+  opacity: 0.9;
+}
+/* ---------------------------------------------------------------------------
+ * Clickable brand ("Starase Atlas") — home control on both top bars.
+ * The brand used to be inert text; now it navigates home + clears the search
+ * state. Strip the native button chrome while keeping the existing brand look,
+ * then give it a subtle hover/focus affordance. Both pages mount the brand
+ * inside `.home-map-page` (search results reuses that root class).
+ * ------------------------------------------------------------------------- */
+.home-map-page button.atlas-brand {
+  border: none;
+  background: none;
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  justify-content: flex-start;
+  cursor: pointer;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-map-page button.atlas-brand .atlas-logo {
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.home-map-page button.atlas-brand:hover .atlas-logo {
+  border-color: rgba(237, 227, 175, 0.9);
+  background: rgba(237, 227, 175, 0.22);
+  color: #ffe9a8;
+}
+
+.home-map-page button.atlas-brand:hover > span:last-child {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: rgba(237, 227, 175, 0.5);
+  text-decoration-thickness: 1px;
+}
+
+.home-map-page button.atlas-brand:focus-visible {
+  outline: 2px solid rgba(237, 227, 175, 0.85);
+  outline-offset: 3px;
+}
+
+.home-map-page button.atlas-brand:active .atlas-logo {
+  transform: translateY(0.5px);
+}
+
+/* ---------- Pathway search system: mode toggle, composer, results ---------- */
+
+/* Two-mode segmented control that replaced the static "Search" tag. */
+.home-map-page .home-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 2px;
+  gap: 2px;
+}
+
+.home-map-page .home-mode-toggle button {
+  min-width: 0;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(8, 26, 58, 0.78);
+  font: 600 11.5px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.home-map-page .home-mode-toggle button.is-active {
+  background: var(--graph-navy, #081a3a);
+  color: var(--graph-gold, #f0e5b2);
+  font-weight: 700;
+}
+
+.home-map-page .home-mode-toggle button:not(.is-active):hover {
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--graph-navy, #081a3a);
+}
+
+/* Pathway mode hides the keyword input / Map|Table / submit, so the gold
+   search bar wraps only the segmented control and stays compact & centered. */
+.home-map-page .home-search-bar.pathway-mode {
+  grid-template-columns: auto;
+  width: auto;
+  justify-self: center;
+}
+
+.home-map-page .home-search-bar.pathway-mode .home-mode-toggle {
+  height: 32px;
+  padding: 2px 3px;
+}
+
+/* Composer pill floating over the map, below the title band. */
+.home-map-page .home-pathway-composer {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  z-index: 9;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  max-width: min(900px, calc(100vw - 340px));
+  padding: 8px 10px;
+  border: 1px solid rgba(237, 227, 175, 0.55);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(16, 35, 62, 0.97), rgba(9, 24, 47, 0.97));
+  box-shadow: 0 18px 44px rgba(8, 26, 58, 0.35);
+  color: var(--ink, #ecf6ff);
+  transform: translateX(-50%);
+}
+
+.pw-composer-title {
+  color: var(--graph-gold, #f0e5b2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pw-slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 32px;
+  padding: 2px 3px 2px 8px;
+  border: 1px solid rgba(237, 227, 175, 0.4);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pw-slot-badge {
+  flex: 0 0 auto;
+  color: rgba(236, 246, 255, 0.72);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pw-slot-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.pw-slot-input {
+  width: 170px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 6px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #ffffff;
+  font: 500 12.5px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.pw-slot-chip.is-via .pw-slot-input {
+  width: 128px;
+}
+
+.pw-slot-input::placeholder {
+  color: rgba(236, 246, 255, 0.45);
+}
+
+.pw-slot-remove {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(236, 246, 255, 0.82);
+  cursor: pointer;
+}
+
+.pw-slot-remove:hover {
+  background: rgba(255, 138, 138, 0.3);
+  color: #ffffff;
+}
+
+.pw-slot-suggestions {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 30;
+  width: max(250px, min(360px, 46vw));
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid rgba(237, 227, 175, 0.45);
+  border-radius: 10px;
+  background: rgba(9, 24, 47, 0.99);
+  box-shadow: 0 18px 40px rgba(8, 26, 58, 0.4);
+}
+
+.pw-slot-suggestions button {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pw-slot-suggestions button:hover {
+  background: rgba(237, 227, 175, 0.14);
+}
+
+.pw-slot-suggestions strong {
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pw-slot-suggestions small {
+  color: rgba(236, 246, 255, 0.55);
+  font-size: 10.5px;
+}
+
+.pw-suggest-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: rgba(236, 246, 255, 0.55);
+  font-size: 12px;
+}
+
+.pw-composer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pw-add-via {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px dashed rgba(237, 227, 175, 0.5);
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(236, 246, 255, 0.82);
+  font: 600 11.5px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pw-add-via:hover {
+  color: var(--graph-gold, #f0e5b2);
+  border-color: rgba(237, 227, 175, 0.9);
+}
+
+.pw-composer-hint {
+  color: rgba(236, 246, 255, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.pw-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--graph-gold, #f0e5b2);
+  color: var(--graph-navy, #081a3a);
+  font: 700 12.5px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pw-run:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pw-run:not(:disabled):hover {
+  filter: brightness(1.06);
+}
+
+.pw-composer-status {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pw-composer-status.is-error {
+  border: 1px solid rgba(255, 143, 143, 0.45);
+  background: rgba(255, 143, 143, 0.14);
+  color: #ffd9d9;
+}
+
+/* Results list: sits lower than the composer so they never overlap. */
+.home-map-page .pathway-result-card {
+  top: 205px;
+  right: 24px;
+  left: auto;
+  width: min(470px, calc(100vw - 340px));
+  max-height: calc(100vh - 298px);
+  padding: 16px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.home-map-page .pathway-result-card .pathway-heading {
+  flex: 0 0 auto;
+}
+
+.pathway-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 2px 4px;
+}
+
+.pathway-card-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.4);
+  color: #0e1726;
+  text-align: left;
+}
+
+/* The tappable area of a row (route text + chevron) — selects/highlights the
+   pathway on the map. The sibling queue toggle is its own button so neither
+   swallows the other's click. */
+.pathway-card-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Round “add route to downloading table” toggle at the far right of each row. */
+.pathway-queue-toggle {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(8, 26, 58, 0.25);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.65);
+  color: rgba(8, 26, 58, 0.72);
+  cursor: pointer;
+}
+
+.pathway-queue-toggle:hover {
+  border-color: rgba(8, 26, 58, 0.6);
+  background: #ffffff;
+  color: #0e1726;
+}
+
+.pathway-queue-toggle.is-queued {
+  border-color: rgba(8, 26, 58, 0.6);
+  background: rgba(8, 26, 58, 0.88);
+  color: var(--graph-gold, #f0e5b2);
+}
+
+.pathway-card-row:hover {
+  background: rgba(237, 227, 175, 0.3);
+}
+
+.pathway-card-row.is-active {
+  border-color: rgba(8, 26, 58, 0.5);
+  background: rgba(237, 227, 175, 0.24);
+  box-shadow: inset 3px 0 0 var(--graph-gold, #f0e5b2);
+}
+
+.pathway-row-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(8, 26, 58, 0.85);
+  color: var(--graph-gold, #f0e5b2);
+  font: 700 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.pathway-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pathway-row-summary {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #0e1726;
+}
+
+.pathway-row-meta {
+  color: rgba(14, 23, 38, 0.58);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.pathway-row-chevron {
+  flex: 0 0 auto;
+  color: rgba(14, 23, 38, 0.4);
+}
+
+/* Collapse control inside the pathway composer pill. */
+.home-map-page .pw-composer-collapse {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  margin-left: -2px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(236, 246, 255, 0.72);
+  cursor: pointer;
+}
+
+.home-map-page .pw-composer-collapse:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+/* Compact pill shown while the composer is hidden (keeps the map clear). */
+.home-map-page .pw-composer-launcher {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid rgba(237, 227, 175, 0.5);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(16, 35, 62, 0.96), rgba(9, 24, 47, 0.96));
+  box-shadow: 0 10px 26px rgba(8, 26, 58, 0.32);
+  color: var(--graph-gold, #f0e5b2);
+  font: 600 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.home-map-page .pw-composer-launcher:hover {
+  border-color: rgba(237, 227, 175, 0.9);
+  color: #fff7d8;
+}
+
+.home-map-page .pw-composer-launcher span {
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+}
+
+/* ---------------------------------------------------------------------------
+ * 连星 ("trace a route"): pick the map's compounds one hop at a time from the
+ * session start compound to its end, then return the traced chain as a card.
+ * ------------------------------------------------------------------------- */
+
+/* Results-header actions (currently just the close button). */
+.home-map-page .pathway-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* Floating 连星 pill, parked directly beneath the composer/launcher capsule so
+   it never overlaps the pathway card list on the right. */
+.home-map-page .trace-start-button {
+  position: absolute;
+  top: 196px;
+  left: 50%;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 15px;
+  border: 1px solid rgba(237, 227, 175, 0.5);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(16, 35, 62, 0.96), rgba(9, 24, 47, 0.96));
+  box-shadow: 0 12px 30px rgba(8, 26, 58, 0.34);
+  color: var(--graph-gold, #f0e5b2);
+  font: 700 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.home-map-page .trace-start-button:hover {
+  border-color: rgba(237, 227, 175, 0.9);
+  color: #fff7d8;
+}
+
+.home-map-page .trace-start-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Trace bar: occupies the same top-centre slot as the composer pill while the
+ * user is walking the map. */
+.home-map-page .pw-trace-bar {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  z-index: 9;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  max-width: min(760px, calc(100vw - 400px));
+  padding: 7px 12px;
+  border: 1px solid rgba(237, 227, 175, 0.6);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(16, 35, 62, 0.98), rgba(9, 24, 47, 0.98));
+  box-shadow: 0 18px 44px rgba(8, 26, 58, 0.38);
+  color: var(--ink, #ecf6ff);
+  transform: translateX(-50%);
+  /* The whole point of a trace is clicking the map beneath the pill, so the bar
+     must never swallow pointer events; only its buttons stay interactive. */
+  pointer-events: none;
+}
+
+.home-map-page .pw-trace-bar button {
+  pointer-events: auto;
+}
+
+.home-map-page .pw-trace-strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--graph-gold, #f0e5b2);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.home-map-page .pw-trace-strong strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.home-map-page .pw-trace-current {
+  padding: 2px 9px;
+  border: 1px solid rgba(237, 227, 175, 0.4);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font: 600 11.5px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.home-map-page .pw-trace-guide {
+  color: rgba(236, 246, 255, 0.78);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.home-map-page .pw-trace-guide strong {
+  color: #9bd8c9;
+}
+
+.home-map-page .pw-trace-hint.is-error {
+  color: #ffb9b9;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.home-map-page .pw-trace-undo,
+.home-map-page .pw-trace-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(237, 227, 175, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--graph-gold, #f0e5b2);
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.home-map-page .pw-trace-undo:hover:not(:disabled) {
+  border-color: rgba(237, 227, 175, 0.95);
+  color: #fff7d8;
+}
+
+.home-map-page .pw-trace-undo:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.home-map-page .pw-trace-cancel {
+  border-color: rgba(255, 143, 143, 0.5);
+  color: #ffc9c9;
+}
+
+.home-map-page .pw-trace-cancel:hover {
+  border-color: rgba(255, 143, 143, 0.95);
+  background: rgba(255, 143, 143, 0.16);
+  color: #ffffff;
+}
+
+/* Node rings drawn on top of map compounds during a trace. */
+.home-map-page circle.trace-goal-ring,
+.home-map-page circle.trace-current-ring,
+.home-map-page circle.trace-candidate-ring {
+  fill: none;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-map-page circle.trace-goal-ring {
+  stroke: rgba(129, 216, 200, 0.95);
+  stroke-width: 0.7;
+  animation: home-trace-pulse 1.2s ease-in-out infinite;
+}
+
+.home-map-page circle.trace-current-ring {
+  stroke: #fff7d8;
+  stroke-width: 0.85;
+}
+
+.home-map-page circle.trace-candidate-ring {
+  stroke: rgba(240, 229, 178, 0.95);
+  stroke-width: 0.55;
+  stroke-dasharray: 1.7 1.35;
+  animation: home-trace-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes home-trace-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ==========================================================================
+   Pathway detail sub-view (single-route map view) + per-step enzyme picker.
+   ========================================================================== */
+
+/* “详情” at the far right of each pathway result row — navy/gold round button
+   matching the queue toggle's visual language (a flex third child). */
+.home-map-page .pathway-detail-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 7px;
+  border: 1px solid rgba(8, 26, 58, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(8, 26, 58, 0.78);
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-map-page .pathway-detail-button:hover {
+  border-color: rgba(8, 26, 58, 0.6);
+  background: #ffffff;
+  color: #0e1726;
+}
+
+/* Detail bar: owns the top-centre capsule slot (composer / launcher / trace bar
+   are all hidden while the in-map detail sub-view is open, so this never
+   overlaps a floating panel). */
+.home-map-page .pw-detail-bar {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  max-width: min(720px, calc(100vw - 320px));
+  padding: 0 8px 0 5px;
+  border: 1px solid rgba(237, 227, 175, 0.6);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(16, 35, 62, 0.98), rgba(9, 24, 47, 0.98));
+  box-shadow: 0 14px 34px rgba(8, 26, 58, 0.36);
+  color: var(--ink, #ecf6ff);
+  transform: translateX(-50%);
+}
+
+.home-map-page .pw-detail-back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.18);
+  color: var(--graph-gold, #f0e5b2);
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-map-page .pw-detail-back:hover {
+  background: rgba(237, 227, 175, 0.32);
+  color: #fff7d8;
+}
+
+.home-map-page .pw-detail-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.home-map-page .pw-detail-summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ffffff;
+  font: 700 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.home-map-page .pw-detail-summary-arrow {
+  color: var(--graph-gold, #f0e5b2);
+}
+
+.home-map-page .pw-detail-summary span:last-child {
+  flex: 0 0 auto;
+  color: rgba(236, 246, 255, 0.72);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.home-map-page .pw-detail-download {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--graph-gold, #f0e5b2);
+  color: var(--graph-navy, #081a3a);
+  font: 800 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-map-page .pw-detail-download:hover {
+  filter: brightness(1.05);
+}
+
+.home-map-page .pw-detail-download:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Per-step enzyme picker: NON-blocking right slide-in drawer (navy header + gold
+ * CTA). There is deliberately no full-viewport layer/backdrop and no backdrop
+ * click-to-close: the detail map stays fully operable behind the panel and map
+ * interaction never closes it (only its own 关闭 button / 加入下载表 do). The body
+ * shows ONE current step at a time under a step-bar of chips. */
+.pw-enzyme-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1150;
+  width: min(400px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: #f6f9fd;
+  border-left: 1px solid rgba(8, 26, 58, 0.28);
+  box-shadow: -18px 0 44px rgba(8, 26, 58, 0.3);
+  animation: pw-drawer-slide 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pw-drawer-slide {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.pw-drawer-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--graph-navy, #081a3a);
+  border-bottom: 1px solid rgba(237, 227, 175, 0.3);
+}
+
+.pw-drawer-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pw-drawer-header strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.pw-drawer-header span {
+  color: rgba(236, 246, 255, 0.72);
+  font-size: 11px;
+}
+
+.pw-drawer-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(237, 227, 175, 0.4);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--graph-gold, #f0e5b2);
+  cursor: pointer;
+}
+
+.pw-drawer-close:hover {
+  background: rgba(237, 227, 175, 0.18);
+}
+
+/* Step-bar chips (1..N). done/current/pending are all clickable — steps are
+ * freely revisitable, no forced forward-only ordering. */
+.pw-drawer-stepper {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--graph-navy, #081a3a);
+  border-bottom: 1px solid rgba(237, 227, 175, 0.3);
+}
+
+.pw-drawer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 6px;
+  border: 1px solid rgba(237, 227, 175, 0.34);
+  border-radius: 999px;
+  background: rgba(236, 246, 255, 0.06);
+  color: rgba(236, 246, 255, 0.82);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.pw-drawer-chip:hover {
+  background: rgba(236, 246, 255, 0.14);
+}
+
+.pw-drawer-chip-tick {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(236, 246, 255, 0.16);
+  color: rgba(236, 246, 255, 0.92);
+  font: 800 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.pw-drawer-chip-name {
+  font: 600 11px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.pw-drawer-chip.is-active {
+  border-color: var(--graph-gold, #f0e5b2);
+  background: rgba(237, 227, 175, 0.2);
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(237, 227, 175, 0.35);
+}
+
+.pw-drawer-chip.is-done .pw-drawer-chip-tick {
+  background: var(--graph-gold, #f0e5b2);
+  color: var(--graph-navy, #081a3a);
+}
+
+.pw-drawer-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.pw-drawer-step {
+  border: 1px solid rgba(8, 26, 58, 0.14);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.pw-drawer-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.pw-drawer-step-idx {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--graph-navy, #081a3a);
+  color: var(--graph-gold, #f0e5b2);
+  font: 800 10px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.pw-drawer-step-names {
+  flex: 1 1 auto;
+  font: 600 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #0e1726;
+  min-width: 0;
+}
+
+.pw-drawer-step-arrow {
+  color: rgba(8, 26, 58, 0.4);
+  margin: 0 2px;
+}
+
+.pw-drawer-step-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(8, 26, 58, 0.6);
+}
+
+.pw-drawer-step-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: rgba(8, 26, 58, 0.55);
+  font-size: 12px;
+}
+
+.pw-drawer-step-empty {
+  margin: 2px 0 0;
+  color: rgba(8, 26, 58, 0.5);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.pw-drawer-spin {
+  animation: pw-drawer-rot 0.9s linear infinite;
+}
+
+@keyframes pw-drawer-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pw-drawer-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Candidate card: UniProt entry (accession) is the PRIMARY label; the enzyme
+ * name (when present and different) sits beneath it, then organism + source.
+ * The row = a click-to-toggle label (checkbox + copy) plus a trailing 详情
+ * button that opens the app-wide enzyme detail page for that library enzyme. */
+.pw-drawer-candidate {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f7fafe;
+}
+
+.pw-drawer-candidate:hover {
+  background: #eef4fb;
+}
+
+.pw-drawer-candidate.is-checked {
+  border-color: rgba(211, 190, 99, 0.8);
+  background: rgba(237, 227, 175, 0.28);
+}
+
+/* Clickable part: checkbox + copy block (NOT the trailing 详情 button). */
+.pw-drawer-candidate-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.pw-drawer-candidate-main input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  accent-color: #081a3a;
+  cursor: pointer;
+}
+
+/* Jump to the enzyme's full detail page (App 'enzyme' view). */
+.pw-drawer-candidate-open {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(8, 26, 58, 0.45);
+  cursor: pointer;
+}
+
+.pw-drawer-candidate-open:hover {
+  background: rgba(8, 26, 58, 0.1);
+  color: #081a3a;
+}
+
+.pw-drawer-candidate-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pw-drawer-candidate-entry {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0a1b38;
+  letter-spacing: 0.02em;
+}
+
+.pw-drawer-candidate-name {
+  font-style: normal;
+  font-size: 11px;
+  color: rgba(8, 26, 58, 0.66);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pw-drawer-candidate-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  min-width: 0;
+}
+
+.pw-drawer-candidate-organism {
+  flex: 0 1 auto;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 11px;
+  color: rgba(8, 26, 58, 0.58);
+}
+
+.pw-drawer-candidate-src {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(8, 26, 58, 0.08);
+  color: rgba(8, 26, 58, 0.66);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pw-drawer-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(237, 227, 175, 0.5);
+  background: var(--graph-navy, #081a3a);
+}
+
+.pw-drawer-count {
+  color: rgba(236, 246, 255, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pw-drawer-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--graph-gold, #f0e5b2);
+  color: var(--graph-navy, #081a3a);
+  font: 800 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.pw-drawer-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

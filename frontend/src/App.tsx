@@ -1,24 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  ArrowDownToLine,
   ChevronRight,
   CircleHelp,
   Database,
   Download,
-  FlaskConical,
   Menu,
+  Network,
   Search,
   Settings2,
   Sparkles,
   X,
 } from 'lucide-react'
 import { entities as mockEntities, filterOptions as mockFilterOptions, graphEdges as mockGraphEdges, graphNodes as mockGraphNodes } from './data'
-import { loadApiDataset, searchApiEntries, searchHomologyEntries } from './api'
+import { loadApiDataset } from './api'
+import type { BlastPayload, BlastSession } from './api'
 import { EnzymeDetailView } from './graphExperience'
+import { BlastDrawer } from './components/BlastDrawer'
 import { DownloadsPage } from './pages/DownloadsPage'
 import { HomePage } from './pages/HomePage'
-import { SearchPage } from './pages/SearchPage'
-import { StructureSearchPage } from './pages/StructureSearchPage'
-import { getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
+import { SearchResultsPage } from './pages/SearchResultsPage'
+import { csvCell, getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
 
@@ -33,7 +35,6 @@ type QueueEntry = string | Entity
 const navigation = [
   { view: 'home', label: 'Overview', icon: Sparkles },
   { view: 'search', label: 'Search library', icon: Search },
-  { view: 'structure', label: 'Structure search', icon: FlaskConical },
   { view: 'downloads', label: 'Download queue', icon: Download },
 ] as const
 
@@ -48,10 +49,13 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [downloadedIds, setDownloadedIds] = useState<string[]>(['CHEBI:17115', 'ENZ:Q9ZSY2'])
   const [queuedEntitiesById, setQueuedEntitiesById] = useState<Record<string, Entity>>({})
-  const [apiSearchResults, setApiSearchResults] = useState<Entity[] | null>(null)
-  const [apiSearchLoading, setApiSearchLoading] = useState(false)
-  const [apiSearchError, setApiSearchError] = useState<string | null>(null)
   const [datasetRevision, setDatasetRevision] = useState(0)
+  const [autoMapSearch, setAutoMapSearch] = useState<{ query: string; nonce: number } | null>(null)
+  const [blastOpen, setBlastOpen] = useState(false)
+  /** Last completed BLAST run, shown through the keyword-search table/map result views. */
+  const [blastSession, setBlastSession] = useState<BlastSession | null>(null)
+  /** One-shot hand-off telling the home map to scope itself to the active BLAST session. */
+  const [autoBlastScope, setAutoBlastScope] = useState<{ sessionId: number; nonce: number } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -81,59 +85,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const trimmedQuery = query.trim()
-    if (!trimmedQuery || searchKind === 'compound' || searchKind === 'reaction') {
-      setApiSearchResults(null)
-      setApiSearchLoading(false)
-      setApiSearchError(null)
-      return
-    }
-
-    let cancelled = false
-    setApiSearchLoading(true)
-    setApiSearchError(null)
-
-    const timer = window.setTimeout(() => {
-      const organismName = selectedSpecies && selectedSpecies !== filterOptions.species[0] ? selectedSpecies : undefined
-
-      const isHomologySearch = looksLikeProteinSequence(trimmedQuery)
-      const searchPromise = isHomologySearch
-        ? searchHomologyEntries(trimmedQuery)
-        : searchApiEntries({ q: trimmedQuery, organismName })
-
-      searchPromise
-        .then((results) => {
-          if (cancelled) return
-
-          if (results.length > 0) {
-            const knownIds = new Set(entities.map((entity) => entity.id))
-            entities = [...entities, ...results.filter((entity) => !knownIds.has(entity.id))]
-            setSelectedId((current) => (current && results.some((entity) => entity.id === current) ? current : results[0].id))
-            setDatasetRevision((revision) => revision + 1)
-          } else {
-            setSelectedId(null)
-          }
-
-          setApiSearchResults(results)
-        })
-        .catch((error) => {
-          if (cancelled) return
-          console.warn('Backend search failed; showing loaded graph records.', error)
-          setApiSearchResults(null)
-          setApiSearchError(isHomologySearch ? 'Homology search unavailable; showing loaded graph records.' : 'Backend search unavailable; showing loaded graph records.')
-        })
-        .finally(() => {
-          if (!cancelled) setApiSearchLoading(false)
-        })
-    }, 250)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [query, searchKind, selectedSpecies])
-
   const filters = { query, searchKind, species: selectedSpecies, compoundClass: selectedClass, enzymeFamily: selectedFamily }
   const selected = selectedId ? getEntity(selectedId) : undefined
   const downloadedItems = useMemo(
@@ -141,17 +92,6 @@ function App() {
     [downloadedIds, queuedEntitiesById, datasetRevision],
   )
   const queuedIds = useMemo(() => new Set(downloadedIds), [downloadedIds])
-
-  const localFilteredEntities = useMemo(() => entities.filter((entity) => matchesFilters(entity, filters, filterOptions)), [filters, datasetRevision])
-  const filteredEntities = apiSearchResults ? apiSearchResults.filter((entity) => matchesFilters(entity, { ...filters, query: '' }, filterOptions)) : localFilteredEntities
-
-  useEffect(() => {
-    if (view !== 'search') return
-    setSelectedId((current) => {
-      if (current && filteredEntities.some((entity) => entity.id === current)) return current
-      return filteredEntities[0]?.id ?? null
-    })
-  }, [view, filteredEntities])
 
   const visibleNodeIds = useMemo(
     () =>
@@ -209,13 +149,97 @@ function App() {
 
   const openRecord = (entity: Entity) => {
     const url = getExternalRecordUrl(entity)
+    // A pathway queued from the map is a search artifact with no external record.
+    if (!url) return
     window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const exportQueue = () => {
+    if (downloadedItems.length === 0) return
+
+    const rows = [
+      ['id', 'kind', 'name', 'subtitle', 'species', 'compoundClass', 'enzymeFamily', 'tags', 'description'],
+      ...downloadedItems.map((entity) => [
+        entity.id,
+        entity.kind,
+        entity.name,
+        entity.subtitle,
+        entity.species ?? '',
+        entity.compoundClass ?? '',
+        entity.enzymeFamily ?? '',
+        entity.tags.join(' | '),
+        entity.description,
+      ]),
+    ]
+
+    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'terpene-atlas-download-queue.csv'
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   const goTo = (nextView: View, id?: string) => {
     setView(nextView)
     if (id) setSelectedId(id)
     setSidebarOpen(false)
+  }
+
+  const openBlast = () => {
+    setBlastOpen(true)
+  }
+
+  const closeBlast = () => {
+    setBlastOpen(false)
+  }
+
+  /** Leave the BLAST drawer and jump elsewhere (close it first). */
+  const goFromBlast = (nextView: View, id?: string) => {
+    setBlastOpen(false)
+    goTo(nextView, id)
+  }
+
+  /**
+   * Drawer CTA: close the drawer and open this BLAST run inside the shared
+   * keyword-search result views — the table form, or the map scoped to the
+   * hit enzymes. ``payload`` is only echoed here (never applied) because the
+   * drawer keeps drawing its own hit list; the shared session is ``blastSession``.
+   */
+  const enterBlastResults = (payload: BlastPayload, mode: 'table' | 'map') => {
+    const session: BlastSession = { id: Date.now(), payload }
+    setBlastSession(session)
+    setBlastOpen(false)
+    if (mode === 'map') {
+      setAutoBlastScope({ sessionId: session.id, nonce: Date.now() })
+      goTo('home')
+    } else {
+      goTo('search')
+    }
+  }
+
+  /** Drop the BLAST session (back to plain keyword library results). */
+  const exitBlastSession = () => {
+    setBlastSession(null)
+    setAutoBlastScope(null)
+  }
+
+  /** Table-results banner -> map: scope the home map to the active BLAST hits. */
+  const openBlastMap = () => {
+    if (!blastSession) return
+    setAutoBlastScope({ sessionId: blastSession.id, nonce: Date.now() })
+    goTo('home')
+  }
+
+  /** Map scope banner -> table: keep the session, jump to its table form. */
+  const openBlastTable = () => {
+    goTo('search')
+  }
+
+  const consumeBlastScope = () => {
+    setAutoBlastScope(null)
   }
 
   const clearFilters = () => {
@@ -226,16 +250,27 @@ function App() {
     setSelectedFamily(filterOptions.families[0])
   }
 
+  /** Brand click: land on the plain browse home map with every piece of search
+   *  state — keyword query, filters, BLAST session and pending auto-scopes —
+   *  dropped. The map's own compound-scope/edge selection is cleared by the
+   *  map component itself (it owns that state). */
+  const resetHome = () => {
+    exitBlastSession()
+    setAutoMapSearch(null)
+    clearFilters()
+    goTo('home')
+  }
+
   return (
-    <div className={`app-shell ${view === 'home' ? 'home-shell' : ''}`}>
-      {view !== 'home' && <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+    <div className={`app-shell ${view === 'home' || view === 'search' ? 'home-shell' : ''}`}>
+      {view !== 'home' && view !== 'search' && <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand-lockup">
           <div className="brand-mark">
-            <img src="/starase-atlas-logo.png" alt="Starase atlas logo" />
+            <Network size={19} strokeWidth={2.4} />
           </div>
           <div>
-            <div className="brand-name">Starase atlas</div>
-            <div className="brand-subtitle">Metabolic database</div>
+            <div className="brand-name">Terpene Atlas</div>
+            <div className="brand-subtitle">NJU-CHINA 2026</div>
           </div>
           <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} title="Close navigation">
             <X size={17} />
@@ -285,14 +320,28 @@ function App() {
       </aside>}
 
       <main className="main-area">
-        {view !== 'home' && <header className="topbar">
+        {view !== 'home' && view !== 'search' && <header className="topbar">
           <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} title="Open navigation">
             <Menu size={20} />
           </button>
           <div className="crumbs">
-            <span>Starase atlas</span>
+            <span>Terpene Atlas</span>
             <ChevronRight size={14} />
             <strong>{viewLabel(view)}</strong>
+          </div>
+          <div className="topbar-actions">
+            <div className="sync-state">
+              <span className="status-dot" />
+              Live dataset
+            </div>
+            <button className="topbar-download" onClick={() => goTo('downloads')}>
+              <Download size={16} />
+              {queueCount > 0 ? `${queueCount} queued` : 'Queue empty'}
+            </button>
+            <button className="topbar-secondary" onClick={exportQueue} disabled={queueCount === 0}>
+              <ArrowDownToLine size={16} />
+              Export CSV
+            </button>
           </div>
         </header>}
 
@@ -305,17 +354,24 @@ function App() {
             downloadedItems={downloadedItems}
             onOpenSearch={(nextQuery) => {
               const nextSearch = nextQuery || ''
+              exitBlastSession()
               setQuery(nextSearch)
               setSearchKind(looksLikeProteinSequence(nextSearch) ? 'enzyme' : 'all')
               goTo('search')
             }}
-            onOpenNetwork={() => goTo('home')}
-            onOpenStructure={() => goTo('structure')}
             onOpenDownloads={() => goTo('downloads')}
             onOpenEnzyme={(id) => goTo('enzyme', id)}
+            onOpenBlast={openBlast}
+            onOpenBlastTable={openBlastTable}
             onToggleQueue={toggleQueue}
             openRecord={openRecord}
             isQueued={(id) => queuedIds.has(id)}
+            autoMapSearch={autoMapSearch}
+            onAutoMapSearchConsumed={() => setAutoMapSearch(null)}
+            blastSession={blastSession}
+            autoBlastScope={autoBlastScope}
+            onAutoBlastScopeConsumed={consumeBlastScope}
+            onResetHome={resetHome}
           />
         )}
 
@@ -329,35 +385,25 @@ function App() {
         )}
 
         {view === 'search' && (
-          <SearchPage
+          <SearchResultsPage
             query={query}
             setQuery={setQuery}
-            searchKind={searchKind}
-            setSearchKind={setSearchKind}
-            selectedSpecies={selectedSpecies}
-            setSelectedSpecies={setSelectedSpecies}
-            selectedClass={selectedClass}
-            setSelectedClass={setSelectedClass}
-            selectedFamily={selectedFamily}
-            setSelectedFamily={setSelectedFamily}
-            clearFilters={clearFilters}
-            filteredEntities={filteredEntities}
-            apiSearchLoading={apiSearchLoading}
-            apiSearchError={apiSearchError}
-            selectedId={selectedId}
-            selectedEntity={selected}
-            setSelectedId={setSelectedId}
-            addToQueue={toggleQueue}
-            openRecord={openRecord}
-            isQueued={selected ? queuedIds.has(selected.id) : false}
-            isQueuedId={(id) => queuedIds.has(id)}
-            filterOptions={filterOptions}
-          />
-        )}
-
-        {view === 'structure' && (
-          <StructureSearchPage
-            onOpenCompound={(id) => goTo('search', id)}
+            onOpenMap={(nextQuery) => {
+              exitBlastSession()
+              const trimmed = (nextQuery || '').trim()
+              setAutoMapSearch(trimmed ? { query: trimmed, nonce: Date.now() } : null)
+              goTo('home')
+            }}
+            onOpenDownloads={() => goTo('downloads')}
+            onOpenEnzyme={(id) => goTo('enzyme', id)}
+            onOpenBlast={openBlast}
+            onToggleQueue={toggleQueue}
+            isQueued={(id) => queuedIds.has(id)}
+            queueCount={queueCount}
+            blastSession={blastSession}
+            onExitBlast={exitBlastSession}
+            onOpenBlastMap={openBlastMap}
+            onResetHome={resetHome}
           />
         )}
 
@@ -366,11 +412,23 @@ function App() {
             downloadedItems={downloadedItems}
             removeFromQueue={removeFromQueue}
             clearQueue={clearQueue}
+            exportQueue={exportQueue}
             onOpenEntity={(id) => { const entity = getEntity(id); if (entity?.kind === 'enzyme') goTo('enzyme', id); else goTo('search', id) }}
             openRecord={openRecord}
           />
         )}
       </main>
+
+      <BlastDrawer
+        open={blastOpen}
+        onClose={closeBlast}
+        onOpenDownloads={() => goFromBlast('downloads')}
+        onOpenEnzyme={(id) => goFromBlast('enzyme', id)}
+        onToggleQueue={toggleQueue}
+        isQueued={(id) => queuedIds.has(id)}
+        queueCount={queueCount}
+        onOpenResults={enterBlastResults}
+      />
     </div>
   )
 }
@@ -382,8 +440,6 @@ function viewLabel(view: View) {
 
     case 'search':
       return 'Search library'
-    case 'structure':
-      return 'Structure search'
     case 'downloads':
       return 'Download queue'
     case 'enzyme':

@@ -6,7 +6,6 @@ import {
   Download,
   FlaskConical,
   Menu,
-  Network,
   Search,
   Settings2,
   Sparkles,
@@ -232,11 +231,11 @@ function App() {
       {view !== 'home' && <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand-lockup">
           <div className="brand-mark">
-            <Network size={19} strokeWidth={2.4} />
+            <img src="/starase-atlas-logo.png" alt="Starase atlas logo" />
           </div>
           <div>
-            <div className="brand-name">Terpene Atlas</div>
-            <div className="brand-subtitle">NJU-CHINA 2026</div>
+            <div className="brand-name">Starase atlas</div>
+            <div className="brand-subtitle">Metabolic database</div>
           </div>
           <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} title="Close navigation">
             <X size={17} />
@@ -291,7 +290,7 @@ function App() {
             <Menu size={20} />
           </button>
           <div className="crumbs">
-            <span>Terpene Atlas</span>
+            <span>Starase atlas</span>
             <ChevronRight size={14} />
             <strong>{viewLabel(view)}</strong>
           </div>

@@ -954,9 +954,9 @@ export function CompoundGraphHome({
         <header className="graph-top-nav">
           <div className="atlas-brand">
             <span className="atlas-logo">
-              <Network size={18} />
+              <img src="/starase-atlas-logo.png" alt="Starase atlas logo" />
             </span>
-            <span>Starase Atlas</span>
+            <span>Starase atlas</span>
           </div>
 
           <div className="home-search-bar">
@@ -1035,7 +1035,7 @@ export function CompoundGraphHome({
             <button type="button" onClick={onOpenNetwork}>Analysis</button>
             <button type="button" onClick={onOpenStructure}>Structure search</button>
             <span>About</span>
-            <span className="graph-user-chip">NJU - China 2026</span>
+            <span className="graph-user-chip">Starase atlas 2026</span>
           </nav>
         </header>
 

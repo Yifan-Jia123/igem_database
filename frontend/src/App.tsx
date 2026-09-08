@@ -111,6 +111,8 @@ function App() {
             entities = [...entities, ...results.filter((entity) => !knownIds.has(entity.id))]
             setSelectedId((current) => (current && results.some((entity) => entity.id === current) ? current : results[0].id))
             setDatasetRevision((revision) => revision + 1)
+          } else {
+            setSelectedId(null)
           }
 
           setApiSearchResults(results)
@@ -142,6 +144,15 @@ function App() {
 
   const localFilteredEntities = useMemo(() => entities.filter((entity) => matchesFilters(entity, filters, filterOptions)), [filters, datasetRevision])
   const filteredEntities = apiSearchResults ? apiSearchResults.filter((entity) => matchesFilters(entity, { ...filters, query: '' }, filterOptions)) : localFilteredEntities
+
+  useEffect(() => {
+    if (view !== 'search') return
+    setSelectedId((current) => {
+      if (current && filteredEntities.some((entity) => entity.id === current)) return current
+      return filteredEntities[0]?.id ?? null
+    })
+  }, [view, filteredEntities])
+
   const visibleNodeIds = useMemo(
     () =>
       new Set(
@@ -339,6 +350,7 @@ function App() {
             addToQueue={toggleQueue}
             openRecord={openRecord}
             isQueued={selected ? queuedIds.has(selected.id) : false}
+            isQueuedId={(id) => queuedIds.has(id)}
             filterOptions={filterOptions}
           />
         )}

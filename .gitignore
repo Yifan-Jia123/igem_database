@@ -49,3 +49,7 @@ Thumbs.db
 /backend/blast_bin/
 /backend/blast_work/
 /backend/.env
+
+# Generated download payloads and stray test logs
+/backend/app/downloads/
+/frontend/src/pw_e2e.log

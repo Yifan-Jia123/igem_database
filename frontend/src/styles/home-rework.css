@@ -897,8 +897,11 @@
 
 /* ---------- Pathway search system: mode toggle, composer, results ---------- */
 
-/* Two-mode segmented control that replaced the static "Search" tag. */
-.home-map-page .home-mode-toggle {
+/* Two-mode segmented control that replaced the static "Search" tag. It is
+   shared by the home map and the three pages that carry the same top bar
+   (search results, enzyme detail, downloads), so it is not scoped to
+   `.home-map-page` — only the pathway-mode pairing below is. */
+.home-mode-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -907,7 +910,7 @@
   gap: 2px;
 }
 
-.home-map-page .home-mode-toggle button {
+.home-mode-toggle button {
   min-width: 0;
   min-height: 26px;
   padding: 0 10px;
@@ -920,13 +923,13 @@
   cursor: pointer;
 }
 
-.home-map-page .home-mode-toggle button.is-active {
+.home-mode-toggle button.is-active {
   background: var(--graph-navy, #081a3a);
   color: var(--graph-gold, #f0e5b2);
   font-weight: 700;
 }
 
-.home-map-page .home-mode-toggle button:not(.is-active):hover {
+.home-mode-toggle button:not(.is-active):hover {
   background: rgba(255, 255, 255, 0.42);
   color: var(--graph-navy, #081a3a);
 }

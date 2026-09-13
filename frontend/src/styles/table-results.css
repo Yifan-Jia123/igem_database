@@ -22,8 +22,13 @@
 }
 
 /* --- Top bar: same anatomy as home, wider centre so the download button fits */
+/* The centre is `minmax(0, 1fr)` and the nav is `auto`, not two bounded tracks:
+   the bar now holds the mode toggle and the Map|Table toggle as well, so a
+   greedy centre column starved the nav and its buttons rendered on top of the
+   search box's submit. `auto` gives the nav exactly the width it needs and the
+   bar absorbs whatever is left. */
 .search-table-page .graph-top-nav {
-  grid-template-columns: minmax(150px, 210px) minmax(600px, 900px) minmax(120px, 1fr);
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) auto;
   gap: 14px;
 }
 

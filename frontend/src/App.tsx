@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowDownToLine,
   ChevronRight,
   CircleHelp,
   Database,
@@ -20,7 +19,7 @@ import { BlastDrawer } from './components/BlastDrawer'
 import { DownloadsPage } from './pages/DownloadsPage'
 import { HomePage } from './pages/HomePage'
 import { SearchResultsPage } from './pages/SearchResultsPage'
-import { csvCell, getExternalRecordUrl, looksLikeProteinSequence, matchesFilters } from './lib/entities'
+import { getExternalRecordUrl, isExportableKind, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
 
@@ -47,10 +46,10 @@ function App() {
   const [selectedClass, setSelectedClass] = useState(filterOptions.classes[0])
   const [selectedFamily, setSelectedFamily] = useState(filterOptions.families[0])
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [downloadedIds, setDownloadedIds] = useState<string[]>(['CHEBI:17115', 'ENZ:Q9ZSY2'])
+  const [downloadedIds, setDownloadedIds] = useState<string[]>([])
   const [queuedEntitiesById, setQueuedEntitiesById] = useState<Record<string, Entity>>({})
   const [datasetRevision, setDatasetRevision] = useState(0)
-  const [autoMapSearch, setAutoMapSearch] = useState<{ query: string; nonce: number } | null>(null)
+  const [autoMapSearch, setAutoMapSearch] = useState<{ query: string; mode: 'enzyme' | 'pathway'; nonce: number } | null>(null)
   const [blastOpen, setBlastOpen] = useState(false)
   /** Last completed BLAST run, shown through the keyword-search table/map result views. */
   const [blastSession, setBlastSession] = useState<BlastSession | null>(null)
@@ -121,12 +120,6 @@ function App() {
     })
   }
 
-  const addToQueue = (entry: QueueEntry) => {
-    const id = typeof entry === 'string' ? entry : entry.id
-    rememberQueuedEntity(entry)
-    setDownloadedIds((current) => (current.includes(id) ? current : [...current, id]))
-  }
-
   const removeFromQueue = (id: string) => {
     setDownloadedIds((current) => current.filter((item) => item !== id))
     forgetQueuedEntity(id)
@@ -134,7 +127,17 @@ function App() {
 
   const toggleQueue = (entry: QueueEntry) => {
     const id = typeof entry === 'string' ? entry : entry.id
-    if (downloadedIds.includes(id)) {
+    const alreadyQueued = downloadedIds.includes(id)
+
+    // Guard at the queue itself: a compound or bare reaction has no exportable
+    // payload, so nothing may put one in front of the download pages. Removal is
+    // never gated — an id the dataset cannot resolve any more must still leave.
+    if (!alreadyQueued) {
+      const kind = typeof entry === 'string' ? getEntity(entry)?.kind : entry.kind
+      if (!kind || !isExportableKind(kind)) return
+    }
+
+    if (alreadyQueued) {
       forgetQueuedEntity(id)
     } else {
       rememberQueuedEntity(entry)
@@ -154,33 +157,6 @@ function App() {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const exportQueue = () => {
-    if (downloadedItems.length === 0) return
-
-    const rows = [
-      ['id', 'kind', 'name', 'subtitle', 'species', 'compoundClass', 'enzymeFamily', 'tags', 'description'],
-      ...downloadedItems.map((entity) => [
-        entity.id,
-        entity.kind,
-        entity.name,
-        entity.subtitle,
-        entity.species ?? '',
-        entity.compoundClass ?? '',
-        entity.enzymeFamily ?? '',
-        entity.tags.join(' | '),
-        entity.description,
-      ]),
-    ]
-
-    const csv = rows.map((row) => row.map(csvCell).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'terpene-atlas-download-queue.csv'
-    anchor.click()
-    URL.revokeObjectURL(url)
-  }
 
   const goTo = (nextView: View, id?: string) => {
     setView(nextView)
@@ -242,6 +218,30 @@ function App() {
     setAutoBlastScope(null)
   }
 
+  /** Detail-page search box / "Data Browser": straight to the library results
+   *  table, mirroring the home map's own submit behaviour. */
+  const openLibrarySearch = (nextQuery: string) => {
+    exitBlastSession()
+    setQuery(nextQuery || '')
+    setSearchKind(looksLikeProteinSequence(nextQuery || '') ? 'enzyme' : 'all')
+    goTo('search')
+  }
+
+  /** Hand a query to the home map — the Map half of every page's Map|Table
+   *  toggle, and the destination of their Pathway half.
+   *
+   * `mode` selects what the map should do with it: an enzyme search run on
+   * arrival, or the pathway composer opened for a chain that no single keyword
+   * could express. Pathway mode therefore carries an empty query without being
+   * a no-op, which is why the "nothing to search for" guard only applies to the
+   * enzyme half. */
+  const openMapSearch = (nextQuery: string, mode: 'enzyme' | 'pathway' = 'enzyme') => {
+    exitBlastSession()
+    const trimmed = (nextQuery || '').trim()
+    setAutoMapSearch(trimmed || mode === 'pathway' ? { query: trimmed, mode, nonce: Date.now() } : null)
+    goTo('home')
+  }
+
   const clearFilters = () => {
     setQuery('')
     setSearchKind('all')
@@ -261,9 +261,19 @@ function App() {
     goTo('home')
   }
 
+  // The workspace sidebar only renders on views that keep the workspace chrome,
+  // which narrows `view` at the point of use — but its nav compares against
+  // every destination, so it needs the unnarrowed value.
+  const currentView: View = view
+
   return (
     <div className={`app-shell ${view === 'home' || view === 'search' ? 'home-shell' : ''}`}>
-      {view !== 'home' && view !== 'search' && <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+      {/* The enzyme detail and downloads pages bring their own chrome (a
+          home-style top nav, plus a module rail on the detail page), so the
+          workspace sidebar/topbar stay out of their way. On the downloads page
+          the topbar's "N queued" button was the worst of both: it rendered
+          there but only navigated to the page it was already on. */}
+      {view !== 'home' && view !== 'search' && view !== 'enzyme' && view !== 'downloads' && <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand-lockup">
           <div className="brand-mark">
             <Network size={19} strokeWidth={2.4} />
@@ -280,7 +290,7 @@ function App() {
         <div className="sidebar-section-label">Workspace</div>
         <nav className="primary-nav">
           {navigation.map(({ view: itemView, label, icon: Icon }) => (
-            <button key={itemView} className={`nav-item ${view === itemView ? 'active' : ''}`} onClick={() => goTo(itemView)}>
+            <button key={itemView} className={`nav-item ${currentView === itemView ? 'active' : ''}`} onClick={() => goTo(itemView)}>
               <Icon size={18} />
               <span>{label}</span>
               {itemView === 'downloads' && queueCount > 0 && <span className="nav-count accent">{queueCount}</span>}
@@ -320,7 +330,7 @@ function App() {
       </aside>}
 
       <main className="main-area">
-        {view !== 'home' && view !== 'search' && <header className="topbar">
+        {view !== 'home' && view !== 'search' && view !== 'enzyme' && view !== 'downloads' && <header className="topbar">
           <button className="icon-button mobile-menu" onClick={() => setSidebarOpen(true)} title="Open navigation">
             <Menu size={20} />
           </button>
@@ -337,10 +347,6 @@ function App() {
             <button className="topbar-download" onClick={() => goTo('downloads')}>
               <Download size={16} />
               {queueCount > 0 ? `${queueCount} queued` : 'Queue empty'}
-            </button>
-            <button className="topbar-secondary" onClick={exportQueue} disabled={queueCount === 0}>
-              <ArrowDownToLine size={16} />
-              Export CSV
             </button>
           </div>
         </header>}
@@ -381,6 +387,13 @@ function App() {
             onBack={() => goTo('home')}
             onToggleQueue={toggleQueue}
             isQueued={(id) => queuedIds.has(id)}
+            queueCount={queueCount}
+            onOpenDownloads={() => goTo('downloads')}
+            onOpenBlast={openBlast}
+            onOpenSearch={openLibrarySearch}
+            onOpenMapScoped={openMapSearch}
+            onOpenMap={(nextQuery) => openMapSearch(nextQuery)}
+            onOpenPathwaySearch={() => openMapSearch('', 'pathway')}
           />
         )}
 
@@ -388,12 +401,8 @@ function App() {
           <SearchResultsPage
             query={query}
             setQuery={setQuery}
-            onOpenMap={(nextQuery) => {
-              exitBlastSession()
-              const trimmed = (nextQuery || '').trim()
-              setAutoMapSearch(trimmed ? { query: trimmed, nonce: Date.now() } : null)
-              goTo('home')
-            }}
+            onOpenMap={(nextQuery) => openMapSearch(nextQuery)}
+            onOpenPathwaySearch={() => openMapSearch('', 'pathway')}
             onOpenDownloads={() => goTo('downloads')}
             onOpenEnzyme={(id) => goTo('enzyme', id)}
             onOpenBlast={openBlast}
@@ -412,9 +421,19 @@ function App() {
             downloadedItems={downloadedItems}
             removeFromQueue={removeFromQueue}
             clearQueue={clearQueue}
-            exportQueue={exportQueue}
-            onOpenEntity={(id) => { const entity = getEntity(id); if (entity?.kind === 'enzyme') goTo('enzyme', id); else goTo('search', id) }}
+            // The queue hands back the entity it holds rather than an id to
+            // re-resolve: `getEntity` reads the graph sample, which is 60
+            // compound nodes and no enzymes, so every enzyme queued from the
+            // search page missed the lookup and fell through to the search view.
+            // Every row in that tab is an enzyme, so the destination is settled.
+            onOpenEntity={(entity) => goTo('enzyme', entity.id)}
             openRecord={openRecord}
+            queueCount={queueCount}
+            onResetHome={resetHome}
+            onOpenSearch={openLibrarySearch}
+            onOpenBlast={openBlast}
+            onOpenMap={(nextQuery) => openMapSearch(nextQuery)}
+            onOpenPathwaySearch={() => openMapSearch('', 'pathway')}
           />
         )}
       </main>

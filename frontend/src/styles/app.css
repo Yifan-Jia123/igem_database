@@ -1034,9 +1034,17 @@ select:focus-visible {
   padding: 0;
 }
 
-.icon-button:hover {
+.icon-button:not(:disabled):hover {
   color: #07111b;
   background: var(--amber);
+}
+
+/* A disabled row action has to look inert, or it reads as one more button that
+   ignores the click. */
+.icon-button:disabled {
+  color: var(--muted, #6b7a8f);
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .icon-button.bordered {

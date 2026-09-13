@@ -172,6 +172,7 @@ export function SearchResultsPage({
   query,
   setQuery,
   onOpenMap,
+  onOpenPathwaySearch,
   onOpenDownloads,
   onOpenEnzyme,
   onOpenBlast,
@@ -186,6 +187,7 @@ export function SearchResultsPage({
   query: string
   setQuery: (value: string) => void
   onOpenMap: (query: string) => void
+  onOpenPathwaySearch: () => void
   onOpenDownloads: () => void
   onOpenEnzyme: (enzymeId: string) => void
   onOpenBlast: () => void
@@ -495,7 +497,10 @@ export function SearchResultsPage({
             </button>
 
             <div className="home-search-bar search-table-search-bar">
-              <span className="home-search-enzyme-tag">Search</span>
+              <div className="home-mode-toggle" role="group" aria-label="Search mode">
+                <button type="button" className="is-active" aria-current="page" title="Search compounds and enzymes by keyword / BLAST">Enzyme</button>
+                <button type="button" onClick={onOpenPathwaySearch} title="Find compound chains from a start through optional waypoints to an end">Pathway</button>
+              </div>
               <input
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -506,7 +511,7 @@ export function SearchResultsPage({
                 aria-label="Search the enzyme library"
               />
               <div className="home-result-toggle" role="group" aria-label="Search result view">
-                <button type="button" onClick={goToMap}>Map</button>
+                <button type="button" onClick={goToMap} title="Show these results on the map">Map</button>
                 <button type="button" className="is-active" aria-current="page">Table</button>
               </div>
               <button className="home-search-submit" type="button" onClick={() => submitKeywordSearch(draft)} title="Search">

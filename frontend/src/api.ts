@@ -308,6 +308,34 @@ function enzymeEntity(enzyme: EnzymeCard, source?: CompoundCard, target?: Compou
   }
 }
 
+/** The queue entry for an enzyme the detail page has already loaded.
+ *
+ * A queue entry has to carry its own `kind` and fields: `toggleQueue` resolves
+ * a bare id through the graph sample — 60 compound nodes, no enzymes — so the
+ * exportable-kind guard drops it before it ever reaches the table. The detail
+ * page holds the record already, so it hands the entry over whole.
+ */
+export function enzymeDetailQueueEntity(detail: EnzymeDetailData): Entity {
+  return {
+    id: detail.enzymeId,
+    kind: 'enzyme',
+    name: detail.primaryName,
+    subtitle: [detail.uniprotId || detail.databaseCode, detail.organismName].filter(Boolean).join(' · '),
+    description: detail.secondaryNames.length > 0
+      ? detail.secondaryNames.join('; ')
+      : 'Enzyme record from the terpene pathway database.',
+    tags: ['Enzyme'],
+    species: detail.organismName || undefined,
+    fields: [
+      field('UniProt', detail.uniprotId),
+      field('Organism', detail.organismName),
+      field('Gene name', detail.gene?.geneName),
+      field('EC number', detail.reactions.map((reaction) => reaction.ecNumber).filter(Boolean)[0]),
+    ].filter(Boolean) as Array<{ label: string; value: string }>,
+    related: [],
+  }
+}
+
 function reactionEntity(edge: ReactionEdge, source?: CompoundCard, target?: CompoundCard, enzyme?: EnzymeCard | null): Entity {
   return {
     id: edge.reactionId,
@@ -782,40 +810,128 @@ export async function loadExpandedEdgeGroup(edgeGroupId: string): Promise<HomeGr
   return payload.edges
 }
 
-export async function createEnzymeDownload(enzymeId: string, label: string): Promise<{ fileUrl?: string | null; status: string }> {
-  const payload = await request<{ fileUrl?: string | null; status: string }>('/download/files', {
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
+
+/** A hand-picked enzyme on one pathway step. */
+export type DownloadPathwayStep = {
+  step: number
+  sourceId: string
+  sourceName: string
+  targetId: string
+  targetName: string
+  enzymes: Array<{
+    enzymeId: string
+    name?: string
+    organismName?: string | null
+    uniprotId?: string | null
+  }>
+}
+
+/** One record to export. An enzyme item only needs `entityId`; a pathway item also
+ *  carries its ordered compound chain and any per-step enzyme choices, because
+ *  there is no server-side route cache to resolve a pathway id against. */
+export type DownloadItem = {
+  entityType: 'enzyme' | 'pathway'
+  entityId: string
+  displayLabel?: string
+  compoundIds?: string[]
+  compoundNames?: string[]
+  steps?: DownloadPathwayStep[]
+}
+
+export type DownloadFieldGroup = {
+  key: string
+  label: string
+  fields: Array<{ key: string; label: string }>
+}
+
+export type DownloadFieldCatalog = {
+  groups: DownloadFieldGroup[]
+  defaultFields: string[]
+  formats: Record<string, Array<{ key: string; label: string }>>
+}
+
+export type DownloadResult = {
+  fileUrl: string
+  status: string
+  stats: Record<string, number>
+  unknownFields: string[]
+}
+
+export type DownloadRequest = {
+  downloadType: 'enzyme' | 'pathway'
+  items: DownloadItem[]
+  fields: string[]
+  format: string
+  /** The pathway export bundles the enzyme page's table too, so a pathway
+   *  download also sends whatever enzymes the queue is holding. */
+  enzymeItems?: DownloadItem[]
+}
+
+/** The column universe, so the picker never mirrors the backend's FIELD_MAP. */
+export async function fetchDownloadFields(): Promise<DownloadFieldCatalog> {
+  return request<DownloadFieldCatalog>('/download/fields')
+}
+
+/** What the current setup would write, without writing it. */
+export type DownloadPreview = {
+  /** The real header row. Not necessarily the picked columns — FASTA force-adds
+   *  the fields it cannot do without. */
+  columns: string[]
+  /** Rows the database can actually resolve, so an id that no longer exists is
+   *  not counted. */
+  rowCount: number
+  estimatedFileName: string
+  unknownFields: string[]
+}
+
+/** POST a download request and return its `data`.
+ *
+ *  Written out rather than going through `request`, because the service refuses a
+ *  format the page may not ask for with a FastAPI `detail` string — and that
+ *  string is the only thing worth showing the user. */
+async function postDownload<T>(path: string, body: DownloadRequest): Promise<T> {
+  const response = await fetch(`${API_PREFIX}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      downloadType: 'enzyme',
-      items: [
-        {
-          entityType: 'enzyme',
-          entityId: enzymeId,
-          displayLabel: label,
-        },
-      ],
-      fields: [
-        'primaryName',
-        'databaseCode',
-        'uniprotId',
-        'organismName',
-        'ecNumber',
-        'reactionEquation',
-        'direction',
-        'smiles',
-        'geneName',
-        'genbankId',
-        'doi',
-        'pubmedId',
-      ],
-      format: 'csv',
-      includeExternalLinks: true,
-      includeGraphImage: false,
-    }),
+    body: JSON.stringify(body),
   })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.detail || payload?.error?.message || `Download failed (${response.status})`)
+  }
+  if (!payload?.success) {
+    throw new Error(payload?.error?.message || 'Download failed')
+  }
+  return payload.data as T
+}
 
-  return payload
+/** Build an export and return its URL. */
+export async function createDownload(body: DownloadRequest): Promise<DownloadResult> {
+  return postDownload<DownloadResult>('/download/files', body)
+}
+
+/** Count what the setup would write, so the page can say what a download is
+ *  about to produce. Takes the same body as `createDownload`, so what is
+ *  previewed and what is written are the same request. */
+export async function previewDownload(body: DownloadRequest): Promise<DownloadPreview> {
+  return postDownload<DownloadPreview>('/download/preview', body)
+}
+
+/** The enzyme detail page's single-record export. */
+export async function createEnzymeDownload(enzymeId: string, label: string): Promise<DownloadResult> {
+  return createDownload({
+    downloadType: 'enzyme',
+    items: [{ entityType: 'enzyme', entityId: enzymeId, displayLabel: label }],
+    fields: [
+      'databaseCode', 'primaryName', 'uniprotId', 'organismName',
+      'ecNumber', 'reactionEquation', 'direction', 'reactionSmiles',
+      'geneName', 'genbankId', 'doi', 'pubmedId',
+    ],
+    format: 'csv',
+  })
 }
 
 export async function searchStructureByInchikey(inchikey: string): Promise<StructureSearchResult> {

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import {
   createEnzymeDownload,
+  enzymeDetailQueueEntity,
   loadExpandedEdgeGroup,
   loadEnzymeDetail,
   loadGraphForEnzymes,
@@ -32,6 +33,7 @@ import {
   type BlastSession,
   type CompoundSuggestion,
   type EnzymeDetailData,
+  type EnzymeEvidenceDetail,
   type EnzymeSequenceLink,
   type HomeGraphCompound,
   type HomeGraphData,
@@ -41,6 +43,7 @@ import {
   type HomePathwayCard,
 } from './api'
 import { StructureSearchDrawer } from './components/StructureSearchDrawer'
+import { fileNameFromUrl, saveFile } from './lib/saveFile'
 import type { Entity, EntityKind, PathwayEnzymeChoice, PathwayQueueStep } from './types'
 
 const HOME_EXPANSION_LIMIT = 36
@@ -267,7 +270,7 @@ export function CompoundGraphHome({
   isQueued: (id: string) => boolean
   queueCount: number
   /** When the table-results page hands back to the map, run this query's scope search on mount. */
-  autoMapSearch?: { query: string; nonce: number } | null
+  autoMapSearch?: { query: string; mode: 'enzyme' | 'pathway'; nonce: number } | null
   onAutoMapSearchConsumed?: () => void
   /** Last completed BLAST run (for scoping the map to its hit enzymes). */
   blastSession?: BlastSession | null
@@ -1438,14 +1441,21 @@ export function CompoundGraphHome({
     await runMapEnzymeSearch(trimmed)
   }
 
-  // Re-entering from the table results page with a query (Map toggle): scope the
-  // map to that query as soon as the browse graph has finished loading.
+  // Re-entering from another page's search bar (its Map half, or its Pathway
+  // half): act on it as soon as the browse graph has finished loading.
   useEffect(() => {
     if (!autoMapSearch) return
     if (autoSearchHandledRef.current === autoMapSearch.nonce) return
     if (loading || mapExpanding || !graph || graph.nodes.length === 0) return
     autoSearchHandledRef.current = autoMapSearch.nonce
     setResultMode('map')
+    // Pathway mode has no query to run — it opens the composer, which is where
+    // a chain is actually described (start / waypoints / end).
+    if (autoMapSearch.mode === 'pathway') {
+      setSearchMode('pathway')
+      onAutoMapSearchConsumed?.()
+      return
+    }
     setSearchMode('enzyme')
     void runMapEnzymeSearch(autoMapSearch.query)
     onAutoMapSearchConsumed?.()
@@ -1716,8 +1726,6 @@ export function CompoundGraphHome({
     if (chebiId?.startsWith('CHEBI:')) return `/api/v1/assets/compounds/${encodeURIComponent(chebiId)}/structure.svg?v=4`
     return compound.structureImageUrl || null
   }
-  const selectedNodeQueueEntity = selectedNode ? homeCompoundToEntity(selectedNode, compoundImageUrl(selectedNode)) : null
-
   const searchPlaceholder = 'Search compounds or enzymes (e.g. limonene, germacrene D synthase)'
 
   const selectedNeighborIds = new Set<string>()
@@ -2260,10 +2268,9 @@ export function CompoundGraphHome({
               {selectedNode.formula && <p><span>Formula :</span><strong>{selectedNode.formula}</strong></p>}
               {selectedNode.smiles && <p className="popover-smiles-row"><span>Smiles :</span><strong>{selectedNode.smiles}</strong></p>}
             </div>
-            <button className="popover-cart" type="button" onClick={() => onToggleQueue(selectedNodeQueueEntity || selectedNode.compoundId)}>
-              <span className={`check-box ${isQueued(selectedNode.compoundId) ? 'checked' : ''}`}>{isQueued(selectedNode.compoundId) && <Check size={17} />}</span>
-              {isQueued(selectedNode.compoundId) ? 'In downloading table' : 'Add to downloading table'}
-            </button>
+            {/* Compounds are not queueable: both Downloading-table pages export
+                enzymes, and a compound has no enzyme to export. Compounds still
+                appear in a route's exported Markdown diagram. */}
           </div>
         )}
 
@@ -2783,11 +2790,61 @@ function PathwaySuggestions({
   )
 }
 
-export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued }: { enzymeId: string | null; onBack: () => void; onToggleQueue: (id: string) => void; isQueued: (id: string) => boolean }) {
+/** Left-rail modules of the enzyme detail page. Order drives both the rail and
+ *  the scroll-spy, so they can never drift apart. */
+const ENZYME_MODULES = [
+  { id: 'basic', label: 'Basic Information' },
+  { id: 'reactions', label: 'Reactions' },
+  { id: 'sequence', label: 'Sequence' },
+  { id: 'process', label: 'Biological Process' },
+  { id: 'xref', label: 'Cross-references' },
+  { id: 'references', label: 'References' },
+] as const
+
+/** Masses reach us as numbers on the enzyme but as numeric strings on isoforms
+ *  ("48114.9"), so normalise before any arithmetic. */
+function parseMass(raw: number | string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  const value = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).replace(/[^0-9.eE+-]/g, ''))
+  return Number.isFinite(value) ? value : null
+}
+
+/** Signed delta chip text; null when there is nothing to report. */
+function formatDelta(value: number, unit: string, digits: number): string | null {
+  const threshold = digits === 0 ? 0.5 : 0.5 * Math.pow(10, -digits)
+  if (!Number.isFinite(value) || Math.abs(value) < threshold) return null
+  const sign = value > 0 ? '+' : '−'
+  return `${sign}${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: digits })} ${unit}`
+}
+
+/** Sequence comparison ignores the line wrapping the backend uses for display. */
+function normalizeSequence(raw: string | null | undefined): string {
+  return (raw || '').replace(/\s+/g, '').toUpperCase()
+}
+
+export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, queueCount, onOpenDownloads, onOpenBlast, onOpenSearch, onOpenMap, onOpenPathwaySearch, onOpenMapScoped }: {
+  enzymeId: string | null
+  onBack: () => void
+  onToggleQueue: (entry: string | Entity) => void
+  isQueued: (id: string) => boolean
+  queueCount: number
+  onOpenDownloads: () => void
+  onOpenBlast: () => void
+  onOpenSearch: (query: string) => void
+  onOpenMap: (query: string) => void
+  onOpenPathwaySearch: () => void
+  onOpenMapScoped: (query: string) => void
+}) {
   const [detail, setDetail] = useState<EnzymeDetailData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [downloadState, setDownloadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [structureOpen, setStructureOpen] = useState(false)
+  const [searchDraft, setSearchDraft] = useState('')
+  const [activeModule, setActiveModule] = useState<string>(ENZYME_MODULES[0].id)
+  /** The element that actually scrolls — the page itself is locked by
+   *  `html:has(.home-map-page) { overflow: hidden }`. */
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!enzymeId) return
@@ -2802,20 +2859,75 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued }: 
     return () => { cancelled = true }
   }, [enzymeId])
 
-  if (!enzymeId) return <div className="detail-page empty-detail-page"><div className="detail-empty-card"><Dna size={30} /><h2>No enzyme selected</h2><button className="primary-button" type="button" onClick={onBack}><ArrowLeft size={15} /> Back home</button></div></div>
+  /** A fresh record starts at the top, on its first module. */
+  useEffect(() => {
+    setActiveModule(ENZYME_MODULES[0].id)
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [enzymeId])
 
-  const queued = isQueued(enzymeId)
+  /** Scroll spy: highlight the rail entry of the module the reader is looking
+   *  at. Bound to the inner container because the window never scrolls here. */
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container || !detail) return
+    const sync = () => {
+      // Bottom fallback: the last module can never reach the container top, so
+      // without this it would be unreachable by scrolling.
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 4) {
+        setActiveModule(ENZYME_MODULES[ENZYME_MODULES.length - 1].id)
+        return
+      }
+      const containerTop = container.getBoundingClientRect().top
+      let current: string = ENZYME_MODULES[0].id
+      for (const module of ENZYME_MODULES) {
+        const node = container.querySelector<HTMLElement>(`[data-module="${module.id}"]`)
+        if (node && node.getBoundingClientRect().top - containerTop <= 48) current = module.id
+      }
+      setActiveModule(current)
+    }
+    sync()
+    container.addEventListener('scroll', sync, { passive: true })
+    return () => container.removeEventListener('scroll', sync)
+  }, [detail])
+
+  const jumpToModule = (id: string) => {
+    // Set first so the rail answers the click immediately, before the smooth
+    // scroll settles.
+    setActiveModule(id)
+    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-module="${id}"]`)
+    node?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const queued = enzymeId ? isQueued(enzymeId) : false
   const names = detail ? [detail.primaryName, ...detail.secondaryNames].filter(Boolean) : []
-  const sequenceRows = detail?.sequence ? formatSequenceRows(detail.sequence) : []
-  const sequenceLength = detail?.length || detail?.sequence?.length || null
-  const groupedSequenceLinks = groupSequenceLinks(detail?.sequenceLinks || [])
+  // Some records only carry the canonical sequence on their isoform rows.
+  const canonicalSequence = detail?.sequence || detail?.isoforms.find((isoform) => isoform.canonicalSequence)?.canonicalSequence || null
+  const sequenceRows = canonicalSequence ? formatSequenceRows(canonicalSequence) : []
+  const sequenceLength = detail?.length || canonicalSequence?.length || null
+  const sequenceXrefRows = pairSequenceLinks(detail?.sequenceLinks || [])
+  const canonicalLengthValue = detail?.length ?? detail?.isoforms.find((isoform) => isoform.canonicalLength)?.canonicalLength ?? null
+  const canonicalMassValue = parseMass(detail?.mass) ?? parseMass(detail?.isoforms.find((isoform) => isoform.canonicalMass)?.canonicalMass)
+  const isoforms = detail?.isoforms || []
+  // UniProt numbers the canonical sequence as isoform -1, so the rows routinely
+  // include a variant that *is* the canonical — same residues, same length, and
+  // a mass differing only by rounding (48115 vs 48114.9). Listing it as its own
+  // block would print the sequence twice under a meaningless "No length
+  // difference" chip, so it is folded into the canonical block and merely
+  // supplies its isoform id.
+  const canonicalKey = normalizeSequence(canonicalSequence)
+  const canonicalIsoform = canonicalKey ? isoforms.find((isoform) => normalizeSequence(isoform.sequence) === canonicalKey) || null : null
+  const variantIsoforms = canonicalIsoform ? isoforms.filter((isoform) => isoform !== canonicalIsoform) : isoforms
+
   const handleDownload = async () => {
     if (!detail) return
     setDownloadState('loading')
     try {
       const payload = await createEnzymeDownload(detail.enzymeId, detail.primaryName)
       if (payload.fileUrl) {
-        window.open(payload.fileUrl, '_blank', 'noopener,noreferrer')
+        // Not `window.open`: this runs after an await, so the popup is outside
+        // the click's user activation and a normal browser blocks it — the
+        // button then does nothing at all, with no error to show for it.
+        saveFile(payload.fileUrl, fileNameFromUrl(payload.fileUrl))
         setDownloadState('ready')
       } else {
         setDownloadState('error')
@@ -2826,104 +2938,322 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued }: 
   }
 
   return (
-    <div className="enzyme-detail-page">
-      <section className="detail-atlas-hero">
-        <div>
-          <div className="eyebrow"><Dna size={14} /> Enzyme detail</div>
-          <h1>{detail?.primaryName || enzymeId}</h1>
-          <p>{detail?.organismName || 'Loading detail from the backend...'}</p>
-        </div>
-        <div className="detail-hero-actions atlas-detail-actions">
-          <button className="secondary-button" type="button" onClick={onBack}><ArrowLeft size={15} /> Back</button>
-          <button className="secondary-button" type="button" onClick={() => onToggleQueue(enzymeId)}>{queued ? <Check size={15} /> : <Download size={15} />}{queued ? 'Queued' : 'Download'}</button>
-          <button className="secondary-button" type="button" onClick={handleDownload} disabled={downloadState === 'loading'}>{downloadState === 'loading' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Export record</button>
+    <div className="home-map-page enzyme-atlas-page">
+      <section className="enzyme-atlas-stage">
+        {/* Same anatomy as the home map / search table top bar. */}
+        <header className="graph-top-nav enzyme-topnav">
+          <button type="button" className="atlas-brand" onClick={onBack} title="Back to the Atlas home map" aria-label="Starase Atlas home">
+            <span className="atlas-logo">
+              <Network size={18} />
+            </span>
+            <span>Starase Atlas</span>
+          </button>
+
+          <div className="enzyme-topnav-slot">
+            <button className="download-list-button" type="button" onClick={onOpenDownloads} title="Open download list">
+              <Download size={15} />
+              <span>Downloading table</span>
+              {queueCount > 0 && <span className="download-list-badge">{queueCount}</span>}
+            </button>
+
+            <div className="home-search-bar enzyme-search-bar">
+              <div className="home-mode-toggle" role="group" aria-label="Search mode">
+                <button type="button" className="is-active" aria-current="page" title="Search compounds and enzymes by keyword / BLAST">Enzyme</button>
+                <button type="button" onClick={onOpenPathwaySearch} title="Find compound chains from a start through optional waypoints to an end">Pathway</button>
+              </div>
+              <input
+                value={searchDraft}
+                onChange={(event) => setSearchDraft(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') onOpenSearch(searchDraft) }}
+                placeholder="Search enzymes by name, UniProt, EC or gene…"
+                aria-label="Search the enzyme library"
+              />
+              <div className="home-result-toggle" role="group" aria-label="Search result view">
+                <button type="button" onClick={() => onOpenMap(searchDraft)} title="Show these results on the map">Map</button>
+                <button type="button" className="is-active" aria-current="page">Table</button>
+              </div>
+              <button className="home-search-submit" type="button" onClick={() => onOpenSearch(searchDraft)} title="Search">
+                <Search size={18} />
+              </button>
+            </div>
+          </div>
+
+          <nav className="graph-primary-nav" aria-label="Enzyme detail navigation">
+            <button type="button" onClick={() => onOpenSearch('')}>Data Browser</button>
+            <button type="button" onClick={onOpenBlast}>BLAST</button>
+            <button type="button" onClick={() => setStructureOpen(true)}>Structure search</button>
+            <span className="graph-user-chip">NJU - China 2026</span>
+          </nav>
+        </header>
+
+        <div className="enzyme-atlas-body">
+          <aside className="enzyme-module-rail" aria-label="Enzyme detail sections">
+            <div className="enzyme-module-rail-title">Sections</div>
+            <nav>
+              {ENZYME_MODULES.map((module) => (
+                <button
+                  key={module.id}
+                  type="button"
+                  className={activeModule === module.id ? 'is-active' : ''}
+                  aria-current={activeModule === module.id ? 'true' : undefined}
+                  onClick={() => jumpToModule(module.id)}
+                >
+                  {module.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
+
+          <div className="enzyme-atlas-main" ref={scrollRef}>
+            <div className="enzyme-detail-page">
+              <section className="detail-atlas-hero">
+                <div>
+                  <div className="eyebrow"><Dna size={14} /> Enzyme detail</div>
+                  <h1>{detail?.primaryName || enzymeId || 'No enzyme selected'}</h1>
+                  <p>{detail?.organismName || (loading ? 'Loading detail from the backend...' : '—')}</p>
+                </div>
+                <div className="detail-hero-actions atlas-detail-actions">
+                  <button className="secondary-button" type="button" onClick={onBack}><ArrowLeft size={15} /> Back</button>
+                  {/* The entry is handed over whole rather than as an id: the
+                      queue's exportable-kind guard resolves ids through the
+                      graph sample, which holds no enzymes, so a bare id was
+                      dropped without a word. Disabled until the record lands,
+                      like the export button beside it. */}
+                  {enzymeId && (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={!detail}
+                      title={detail ? undefined : 'Loading the record'}
+                      onClick={() => detail && onToggleQueue(enzymeDetailQueueEntity(detail))}
+                    >{queued ? <Check size={15} /> : <Download size={15} />}{queued ? 'Queued' : 'Download'}</button>
+                  )}
+                  <button className="secondary-button" type="button" onClick={handleDownload} disabled={!detail || downloadState === 'loading'}>{downloadState === 'loading' ? <Loader2 size={15} className="spin" /> : <Download size={15} />} Export record</button>
+                </div>
+              </section>
+
+              {loading && <div className="detail-status"><Loader2 size={18} className="spin" /> Loading enzyme detail...</div>}
+              {error && <div className="detail-status error-state"><X size={18} /> {error}</div>}
+              {!enzymeId && !loading && (
+                <div className="detail-empty-card"><Dna size={30} /><h2>No enzyme selected</h2><button className="primary-button" type="button" onClick={onBack}><ArrowLeft size={15} /> Back home</button></div>
+              )}
+
+              {detail && (
+                <>
+                  {/* 1. 基本信息 — identity and gene record. The UniProt jump link
+                      lives on the card itself; every other external database is
+                      already linked from Cross-references, so there is no link card. */}
+                  <section className="enzyme-module" data-module="basic" id="enzyme-module-basic">
+                    <div className="section-title-row"><h3>Basic Information</h3></div>
+                    <div className="detail-card main-detail-card">
+                      <div className="detail-card-topline">
+                        <span className="detail-chip"><Link2 size={13} /> {detail.databaseCode}</span>
+                        {detail.uniprotId && <a className="detail-link" href={detail.uniprotUrl || `https://www.uniprot.org/uniprotkb/${detail.uniprotId}`} target="_blank" rel="noreferrer">UniProt {detail.uniprotId} <ExternalLink size={12} /></a>}
+                      </div>
+                      <div className="detail-name-stack"><h2>{detail.primaryName}</h2><p>{detail.organismName || 'Unknown organism'}</p></div>
+                      <div className="tag-row compact">{names.map((name) => <span key={name} className="tag">{name}</span>)}</div>
+                      <dl className="detail-facts">
+                        <div><dt>Library code</dt><dd>{detail.databaseCode}</dd></div>
+                        <div><dt>Species</dt><dd>{detail.organismName || 'n/a'}</dd></div>
+                        <div><dt>UniProt</dt><dd>{detail.uniprotId || 'n/a'}</dd></div>
+                        <div><dt>Gene name</dt><dd>{detail.gene?.geneName || 'n/a'}</dd></div>
+                        <div><dt>Length</dt><dd>{sequenceLength ? `${sequenceLength} aa` : 'n/a'}</dd></div>
+                        <div><dt>Mass (Da)</dt><dd>{detail.mass ? Math.round(detail.mass).toLocaleString() : 'n/a'}</dd></div>
+                      </dl>
+                    </div>
+                  </section>
+
+                  {/* 2. 反应信息 */}
+                  <section className="enzyme-module" data-module="reactions" id="enzyme-module-reactions">
+                    <div className="section-title-row"><h3>Reactions</h3></div>
+                    {detail.reactions.length > 0 ? (
+                      <div className="reaction-list">
+                        {detail.reactions.map((reaction) => (
+                          <article key={reaction.reactionId} className="reaction-card">
+                            <div className="reaction-card-head">
+                              <div><strong>{reaction.equation}</strong><p>{reaction.direction}</p></div>
+                              {reaction.rheaUrl ? <a href={reaction.rheaUrl} target="_blank" rel="noreferrer">{reaction.rheaId || 'Rhea'} <ExternalLink size={12} /></a> : <span>{reaction.rheaId || 'Rhea n/a'}</span>}
+                            </div>
+                            <div className="reaction-meta-grid">
+                              <div><span>EC</span><strong>{reaction.ecNumber || 'n/a'}</strong></div>
+                              <div className="is-smiles"><span>SMILES</span><strong>{reaction.smiles || 'n/a'}</strong></div>
+                              <div><span>Source type</span><strong>{reaction.sourceType}</strong></div>
+                              <div><span>Review</span><strong>{reaction.reviewStatus}</strong></div>
+                            </div>
+                            <div className="reaction-compounds">
+                              <div><span>Substrates</span><div className="tag-row compact">{reaction.substrates.map((compound) => <CompoundTag key={compound.compoundId} compound={compound} />)}</div></div>
+                              <div><span>Products</span><div className="tag-row compact">{reaction.products.map((compound) => <CompoundTag key={compound.compoundId} compound={compound} />)}</div></div>
+                            </div>
+                            <ReactionAtomMap rheaId={reaction.rheaId} reactionId={reaction.reactionId} />
+                          </article>
+                        ))}
+                      </div>
+                    ) : <p className="muted-copy">No reaction records available.</p>}
+                  </section>
+
+                  {/* 3. 序列 — canonical first, then one block per isoform */}
+                  <section className="enzyme-module" data-module="sequence" id="enzyme-module-sequence">
+                    <div className="section-title-row">
+                      <h3>Sequence</h3>
+                      {canonicalSequence && <button className="small-text-button" type="button" onClick={() => void navigator.clipboard?.writeText(canonicalSequence)}>Copy</button>}
+                    </div>
+
+                    {!canonicalSequence && isoforms.length === 0 && <p className="muted-copy">No amino acid sequence available.</p>}
+
+                    {canonicalSequence && (
+                      <div className="detail-card enzyme-sequence-block">
+                        <div className="enzyme-sequence-head">
+                          <strong>Canonical</strong>
+                          {canonicalIsoform?.isoformId && <span className="enzyme-sequence-badge is-id">Isoform {canonicalIsoform.isoformId}</span>}
+                          <span className="enzyme-sequence-badge">{sequenceLength || canonicalSequence.length} aa</span>
+                          {canonicalMassValue != null
+                            ? <span className="enzyme-sequence-badge">{Math.round(canonicalMassValue).toLocaleString()} Da</span>
+                            : detail.mass ? <span className="enzyme-sequence-badge">{Math.round(detail.mass).toLocaleString()} Da</span> : null}
+                        </div>
+                        <div className="amino-sequence-view" aria-label="Canonical amino acid sequence">
+                          {sequenceRows.map((row) => (
+                            <div key={row.start} className="amino-sequence-row">
+                              <div className="sequence-ruler"><span />{row.chunks.map((chunk, index) => <span key={`${row.start}:${index}`}>{row.start + index * 10 + chunk.length - 1}</span>)}</div>
+                              <div className="sequence-line"><span>{row.start}</span><code>{row.chunks.join(' ')}</code></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {variantIsoforms.map((isoform, index) => {
+                      const isoformRows = isoform.sequence ? formatSequenceRows(isoform.sequence) : []
+                      const lengthDelta = isoform.isoformLength != null && canonicalLengthValue != null ? isoform.isoformLength - canonicalLengthValue : null
+                      const massDeltaValue = (() => {
+                        const isoformMass = parseMass(isoform.isoformMass)
+                        return isoformMass != null && canonicalMassValue != null ? isoformMass - canonicalMassValue : null
+                      })()
+                      const lengthDeltaLabel = lengthDelta === null ? null : formatDelta(lengthDelta, 'aa', 0)
+                      const massDeltaLabel = massDeltaValue === null ? null : formatDelta(massDeltaValue, 'Da', 0)
+                      const label = isoform.isoformId || `Isoform ${index + 1}`
+                      return (
+                        <div key={`${label}:${index}`} className="detail-card enzyme-sequence-block enzyme-isoform-block">
+                          <div className="enzyme-sequence-head">
+                            <strong>Isoform {label}</strong>
+                            {isoform.isoformLength != null && <span className="enzyme-sequence-badge">{isoform.isoformLength} aa</span>}
+                            {isoform.isoformMass && <span className="enzyme-sequence-badge">{Number(parseMass(isoform.isoformMass) || 0).toLocaleString()} Da</span>}
+                            <span className={`enzyme-isoform-delta ${lengthDelta === null || lengthDelta === 0 ? 'is-same' : lengthDelta > 0 ? 'is-up' : 'is-down'}`}>
+                              {lengthDeltaLabel || 'No length difference'}
+                            </span>
+                            {massDeltaLabel && (
+                              <span className={`enzyme-isoform-delta ${massDeltaValue && massDeltaValue > 0 ? 'is-up' : 'is-down'}`}>{massDeltaLabel}</span>
+                            )}
+                            {isoform.sequence && <button className="small-text-button" type="button" onClick={() => void navigator.clipboard?.writeText(isoform.sequence || '')}>Copy</button>}
+                          </div>
+                          {isoformRows.length > 0 ? (
+                            <div className="amino-sequence-view" aria-label={`Isoform ${label} amino acid sequence`}>
+                              {isoformRows.map((row) => (
+                                <div key={row.start} className="amino-sequence-row">
+                                  <div className="sequence-ruler"><span />{row.chunks.map((chunk, chunkIndex) => <span key={`${row.start}:${chunkIndex}`}>{row.start + chunkIndex * 10 + chunk.length - 1}</span>)}</div>
+                                  <div className="sequence-line"><span>{row.start}</span><code>{row.chunks.join(' ')}</code></div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <p className="muted-copy">No sequence recorded for this isoform.</p>}
+                        </div>
+                      )
+                    })}
+                  </section>
+
+                  {/* 4. 生物过程 — the GO table has no aspect column, and in this
+                      dataset every term is a biological process, so the module
+                      renders `goTerms` as-is. */}
+                  <section className="enzyme-module" data-module="process" id="enzyme-module-process">
+                    <div className="section-title-row"><h3>Biological Process</h3></div>
+                    {detail.goTerms.length > 0 ? (
+                      <div className="enzyme-xref-table is-two-col">
+                        <div className="enzyme-xref-head"><span>GO ID</span><span>Biological process</span></div>
+                        <div className="enzyme-xref-body">
+                          {detail.goTerms.map((term, index) => (
+                            <div key={`${term.goId || 'go'}:${index}`} className="enzyme-xref-row">
+                              <span className="enzyme-xref-acc">
+                                {term.goUrl ? <a href={term.goUrl} target="_blank" rel="noreferrer">{term.goId || 'GO'} <ExternalLink size={12} /></a> : (term.goId || '—')}
+                              </span>
+                              <span className="enzyme-xref-term">{term.goTerm || '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : <p className="muted-copy">No biological process annotations available.</p>}
+                  </section>
+
+                  {/* 5. 相关序列编号及链接 — nucleotide paired with its protein */}
+                  <section className="enzyme-module" data-module="xref" id="enzyme-module-xref">
+                    <div className="section-title-row"><h3>Cross-references</h3></div>
+                    {sequenceXrefRows.length > 0 ? (
+                      <div className="enzyme-xref-table is-seq-pairs">
+                        <div className="enzyme-xref-head"><span>Nucleotide sequence</span><span>Protein sequence</span><span>Molecule type</span></div>
+                        <div className="enzyme-xref-body">
+                          {sequenceXrefRows.map((row) => (
+                            <div key={row.key} className="enzyme-xref-row">
+                              <SequenceXrefCellView cell={row.nucleotide} />
+                              <SequenceXrefCellView cell={row.protein} />
+                              <span className="enzyme-xref-molecule">{row.moleculeType ? row.moleculeType.replace(/_/g, ' ') : '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : <p className="muted-copy">No sequence links available.</p>}
+                  </section>
+
+                  {/* 6. 参考文献 */}
+                  <section className="enzyme-module" data-module="references" id="enzyme-module-references">
+                    <div className="section-title-row"><h3>References</h3></div>
+                    <div className="detail-reference-list">
+                      {detail.evidence.length > 0 ? detail.evidence.map((item, index) => {
+                        const citation = [item.journal, item.volume, item.pages, item.publicationYear].filter(Boolean).join(' · ')
+                        // `url` usually duplicates the PubMed/DOI link — only show it when it is neither.
+                        const pubmedUrl = item.pubmedId ? `https://pubmed.ncbi.nlm.nih.gov/${item.pubmedId}/` : null
+                        const doiUrl = item.doi ? `https://doi.org/${item.doi}` : null
+                        const extraUrl = item.url && item.url !== pubmedUrl && item.url !== doiUrl ? item.url : null
+                        // The title is the primary jump target; the buttons stay as explicit labels.
+                        const titleUrl = referenceUrl(item)
+                        const title = item.title || item.sourceDescription || 'Untitled evidence record'
+                        const authors = item.authors ? formatReferenceAuthors(item.authors) : null
+                        return (
+                          <div key={`${item.doi || item.pubmedId || index}`} className="reference-row enzyme-reference-row">
+                            <div className="enzyme-reference-main">
+                              {titleUrl
+                                ? <a className="enzyme-reference-title is-link" href={titleUrl} target="_blank" rel="noreferrer">{title} <ExternalLink size={11} /></a>
+                                : <strong className="enzyme-reference-title">{title}</strong>}
+                              {authors && <p className="enzyme-reference-authors" title={authors.truncated ? item.authors || undefined : undefined}>{authors.text}</p>}
+                              {citation && <p className="enzyme-reference-citation">{citation}</p>}
+                              <div className="enzyme-reference-tags">
+                                {item.referenceType && <span className="enzyme-reference-tag">{item.referenceType}</span>}
+                                {item.positions && <span className="enzyme-reference-tag is-position">{item.positions}</span>}
+                                {item.reviewStatus && <span className="enzyme-reference-tag is-review">{item.reviewStatus}</span>}
+                              </div>
+                            </div>
+                            <div className="reference-links">
+                              {extraUrl && <a href={extraUrl} target="_blank" rel="noreferrer">Source</a>}
+                              {doiUrl && <a href={doiUrl} target="_blank" rel="noreferrer">DOI</a>}
+                              {pubmedUrl && <a href={pubmedUrl} target="_blank" rel="noreferrer">PubMed</a>}
+                            </div>
+                          </div>
+                        )
+                      }) : <p className="muted-copy">No evidence links available.</p>}
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
-      {loading && <div className="detail-status"><Loader2 size={18} className="spin" /> Loading enzyme detail...</div>}
-      {error && <div className="detail-status error-state"><X size={18} /> {error}</div>}
-      {detail && (
-        <div className="enzyme-detail-grid">
-          <section className="detail-card main-detail-card">
-            <div className="detail-card-topline">
-              <span className="detail-chip"><Link2 size={13} /> {detail.databaseCode}</span>
-              {detail.uniprotId && <a className="detail-link" href={`https://www.uniprot.org/uniprotkb/${detail.uniprotId}`} target="_blank" rel="noreferrer">UniProt {detail.uniprotId} <ExternalLink size={12} /></a>}
-            </div>
-            <div className="detail-name-stack"><h2>{detail.primaryName}</h2><p>{detail.organismName || 'Unknown organism'}</p></div>
-            <div className="tag-row compact">{names.map((name) => <span key={name} className="tag">{name}</span>)}</div>
-            <dl className="detail-facts">
-              <div><dt>Library code</dt><dd>{detail.databaseCode}</dd></div>
-              <div><dt>Species</dt><dd>{detail.organismName || 'n/a'}</dd></div>
-              <div><dt>UniProt</dt><dd>{detail.uniprotId || 'n/a'}</dd></div>
-              <div><dt>Length</dt><dd>{sequenceLength ? `${sequenceLength} aa` : 'n/a'}</dd></div>
-              <div><dt>Mass (Da)</dt><dd>{detail.mass ? Math.round(detail.mass).toLocaleString() : 'n/a'}</dd></div>
-            </dl>
-          </section>
-
-          <section className="detail-card detail-stack-card">
-            <div className="section-title-row"><h3>Gene</h3></div>
-            {detail.gene ? (
-              <div className="detail-copy-list">
-                <div><span>Gene name</span><strong>{detail.gene.geneName || 'n/a'}</strong></div>
-                <div><span>GenBank</span><strong>{detail.gene.genbankId || 'n/a'}</strong></div>
-                <div><span>ENA accession</span><strong>{detail.gene.enaAccession || 'n/a'}</strong></div>
-                <div><span>Protein accession</span><strong>{detail.gene.proteinAccession || 'n/a'}</strong></div>
-              </div>
-            ) : <p className="muted-copy">No gene record available.</p>}
-          </section>
-
-          <section className="detail-card detail-stack-card sequence-links-card">
-            <div className="section-title-row"><h3>Sequence links</h3></div>
-            {groupedSequenceLinks.length > 0 ? (
-              <div className="sequence-link-groups">
-                {groupedSequenceLinks.map((group) => (
-                  <div key={group.category} className="sequence-link-group">
-                    <span>{group.category}</span>
-                    <div>
-                      {group.links.map((link) => (
-                        <a key={`${link.category}:${link.accession}:${link.relatedAccession || ''}`} href={link.url || link.relatedUrl || '#'} target="_blank" rel="noreferrer">
-                          <strong>{link.accession}</strong>
-                          {link.relatedAccession && <small>{link.relatedAccession}</small>}
-                          <ExternalLink size={12} />
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : <p className="muted-copy">No sequence links available.</p>}
-          </section>
-
-          <section className="detail-card detail-stack-card amino-sequence-card">
-            <div className="section-title-row">
-              <h3>Amino acid sequence</h3>
-              {detail.sequence && <button className="small-text-button" type="button" onClick={() => void navigator.clipboard?.writeText(detail.sequence || '')}>Copy</button>}
-            </div>
-            {detail.sequence ? (
-              <>
-                <div className="sequence-summary">
-                  <div><span>Length</span><strong>{sequenceLength || detail.sequence.length}</strong></div>
-                  <div><span>Mass (Da)</span><strong>{detail.mass ? Math.round(detail.mass).toLocaleString() : 'n/a'}</strong></div>
-                </div>
-                <div className="amino-sequence-view" aria-label="Amino acid sequence">
-                  {sequenceRows.map((row) => (
-                    <div key={row.start} className="amino-sequence-row">
-                      <div className="sequence-ruler"><span />{row.chunks.map((chunk, index) => <span key={`${row.start}:${index}`}>{row.start + index * 10 + chunk.length - 1}</span>)}</div>
-                      <div className="sequence-line"><span>{row.start}</span><code>{row.chunks.join(' ')}</code></div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : <p className="muted-copy">No amino acid sequence available.</p>}
-          </section>
-
-          <section className="detail-card detail-stack-card"><div className="section-title-row"><h3>Evidence</h3></div><div className="detail-reference-list">{detail.evidence.length > 0 ? detail.evidence.map((item, index) => <div key={`${item.doi || item.pubmedId || index}`} className="reference-row"><div><strong>{item.sourceDescription || 'Evidence record'}</strong><p>{item.reviewStatus || 'official'}</p></div><div className="reference-links">{item.doi && <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noreferrer">DOI</a>}{item.pubmedId && <a href={`https://pubmed.ncbi.nlm.nih.gov/${item.pubmedId}/`} target="_blank" rel="noreferrer">PubMed</a>}</div></div>) : <p className="muted-copy">No evidence links available.</p>}</div></section>
-
-          <section className="detail-card detail-stack-card reactions-card"><div className="section-title-row"><h3>Reactions</h3></div><div className="reaction-list">{detail.reactions.map((reaction) => <article key={reaction.reactionId} className="reaction-card"><div className="reaction-card-head"><div><strong>{reaction.equation}</strong><p>{reaction.direction}</p></div>{reaction.rheaUrl ? <a href={reaction.rheaUrl} target="_blank" rel="noreferrer">{reaction.rheaId || 'Rhea'} <ExternalLink size={12} /></a> : <span>{reaction.rheaId || 'Rhea n/a'}</span>}</div><div className="reaction-meta-grid"><div><span>EC</span><strong>{reaction.ecNumber || 'n/a'}</strong></div><div><span>SMILES</span><strong>{reaction.smiles || 'n/a'}</strong></div><div><span>Source type</span><strong>{reaction.sourceType}</strong></div><div><span>Review</span><strong>{reaction.reviewStatus}</strong></div></div><div className="reaction-compounds"><div><span>Substrates</span><div className="tag-row compact">{reaction.substrates.map((compound) => <span key={compound.compoundId} className="tag">{compound.name}</span>)}</div></div><div><span>Products</span><div className="tag-row compact">{reaction.products.map((compound) => <span key={compound.compoundId} className="tag">{compound.name}</span>)}</div></div></div>{reaction.atomMapImageUrl && <div className="atom-map-wrap"><img src={reaction.atomMapImageUrl} alt={`${reaction.reactionId} atom map`} /></div>}</article>)}</div></section>
-
-          <section className="detail-card detail-stack-card"><div className="section-title-row"><h3>Links</h3></div><div className="link-list">{detail.links.map((link) => <a key={`${link.label}:${link.url}`} href={link.url} target="_blank" rel="noreferrer"><span>{link.label}</span><ExternalLink size={12} /></a>)}</div></section>
-        </div>
-      )}
+      <StructureSearchDrawer
+        open={structureOpen}
+        onClose={() => setStructureOpen(false)}
+        onTransferChebi={(chebiId) => {
+          setStructureOpen(false)
+          onOpenMapScoped(chebiId)
+        }}
+      />
     </div>
   )
 }
@@ -2931,27 +3261,6 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued }: 
 type SequenceRow = {
   start: number
   chunks: string[]
-}
-
-function homeCompoundToEntity(compound: HomeGraphCompound, imageUrl?: string | null): Entity {
-  return {
-    id: compound.compoundId,
-    kind: 'compound',
-    name: compound.name,
-    subtitle: compound.chebiId || compound.compoundId,
-    description: compound.description || compound.smiles || 'Compound record from the terpene pathway graph.',
-    tags: ['Compound'],
-    imageLabel: imageUrl || compound.chebiId ? '2D structure' : undefined,
-    imageUrl: imageUrl || undefined,
-    fields: [
-      entityField('Formula', compound.formula),
-      entityField('Average mass', compound.averageMass),
-      entityField('Charge', compound.charge),
-      entityField('ChEBI', compound.chebiId),
-      entityField('SMILES', compound.smiles),
-    ].filter(Boolean) as Array<{ label: string; value: string }>,
-    related: [],
-  }
 }
 
 function homeEnzymeToEntity(edge: HomeGraphEdge, enzymeId: string, sourceName: string, targetName: string): Entity {
@@ -2985,6 +3294,28 @@ function entityField(label: string, rawValue: string | number | null | undefined
   return { label, value: String(rawValue) }
 }
 
+/** Authors past this many are abbreviated — the source lists up to 230 names,
+ *  which is six lines of text on a card. Records at or below it render in full. */
+const REFERENCE_AUTHOR_LIMIT = 10
+
+/** The citation line as a reader expects it: first `REFERENCE_AUTHOR_LIMIT`
+ *  names, then `et al.` The source separates names with `;` (verified: no row
+ *  uses a bare comma instead). */
+function formatReferenceAuthors(authors: string): { text: string; truncated: boolean } {
+  const names = authors.split(';').map((name) => name.trim()).filter(Boolean)
+  if (names.length <= REFERENCE_AUTHOR_LIMIT) return { text: names.join('; '), truncated: false }
+  return { text: `${names.slice(0, REFERENCE_AUTHOR_LIMIT).join('; ')}; et al.`, truncated: true }
+}
+
+/** Where the title links to. The DOI is the canonical article identifier, so it
+ *  wins; PubMed is the fallback, and `url` (which duplicates PubMed on every
+ *  row we have) the last resort. Returns null when the record carries no link. */
+function referenceUrl(item: EnzymeEvidenceDetail): string | null {
+  if (item.doi) return `https://doi.org/${item.doi}`
+  if (item.pubmedId) return `https://pubmed.ncbi.nlm.nih.gov/${item.pubmedId}/`
+  return item.url || null
+}
+
 function formatSequenceRows(sequence: string): SequenceRow[] {
   const clean = sequence.replace(/\s+/g, '').toUpperCase()
   const rows: SequenceRow[] = []
@@ -2996,15 +3327,135 @@ function formatSequenceRows(sequence: string): SequenceRow[] {
   return rows
 }
 
-function groupSequenceLinks(links: EnzymeSequenceLink[]) {
-  const grouped = new Map<string, EnzymeSequenceLink[]>()
+/** One side of a cross-reference row: the accession plus a link per database
+ *  that carries it (three for INSDC, one for RefSeq). */
+type SequenceXrefCell = {
+  accession: string
+  links: Array<{ source: string; url: string }>
+}
+
+/** A nucleotide paired with its protein — the shape of one `ID_n` row in the
+ *  source workbook. Either side can be absent. */
+type SequenceXrefRow = {
+  key: string
+  nucleotide: SequenceXrefCell | null
+  protein: SequenceXrefCell | null
+  moleculeType: string | null
+}
+
+/** Database order inside a cell, so the links never reshuffle between renders. */
+const XREF_SOURCE_ORDER = ['EMBL', 'GenBank', 'DDBJ', 'RefSeq']
+
+/** The source workbook keeps nucleotide and protein accessions side by side in
+ *  one wide row per `ID_n` (`INSDC_Nuc_ID_3` / `INSDC_Prot_ID_3` / …). The ETL
+ *  flattens that into one link row per accession and drops `n`, but it mirrors
+ *  each accession's partner onto both rows — so the unordered (accession,
+ *  partner) pair reconstructs the original row exactly. Verified against the
+ *  whole table: no pair has ever carried two different molecule types. */
+function pairSequenceLinks(links: EnzymeSequenceLink[]): SequenceXrefRow[] {
+  const rows = new Map<string, SequenceXrefRow>()
   links.forEach((link) => {
-    if (!link.accession) return
-    const current = grouped.get(link.category) || []
-    current.push(link)
-    grouped.set(link.category, current)
+    const accession = link.accession || ''
+    if (!accession) return
+    const category = link.category || ''
+    const family = /^INSDC/i.test(category) ? 'INSDC' : 'RefSeq'
+    const kind = /protein/i.test(category) ? 'protein' : 'nucleotide'
+    const partner = link.relatedAccession || ''
+    // Both halves of a pair must land on the same key, so normalise the order.
+    const key = `${family}|${[accession, partner].sort().join('~')}`
+    const row = rows.get(key) || { key, nucleotide: null, protein: null, moleculeType: null }
+    rows.set(key, row)
+    // Molecule type only rides along as the category's "(mRNA)" suffix, and only
+    // INSDC rows have one — RefSeq rows legitimately leave it blank.
+    const molecule = category.match(/\(([^)]+)\)\s*$/)?.[1]
+    if (molecule) row.moleculeType = molecule
+    const cell = row[kind] || { accession, links: [] }
+    row[kind] = cell
+    if (link.url && !cell.links.some((entry) => entry.url === link.url)) {
+      const named = category.match(/\b(EMBL|GenBank|DDBJ)\b/)
+      cell.links.push({ source: named ? named[1] : family, url: link.url })
+    }
   })
-  return Array.from(grouped.entries()).map(([category, groupLinks]) => ({ category, links: groupLinks }))
+  const ordered = Array.from(rows.values())
+  ordered.forEach((row) => {
+    for (const cell of [row.nucleotide, row.protein]) {
+      cell?.links.sort((a, b) => XREF_SOURCE_ORDER.indexOf(a.source) - XREF_SOURCE_ORDER.indexOf(b.source))
+    }
+  })
+  return ordered
+}
+
+/** Rhea draws the atom map for a reaction; we never compute one ourselves, so
+ *  the image is fetched through the backend proxy. The proxy figures out which
+ *  of the reaction's four Rhea ids actually carries a drawing and answers 404
+ *  when none does (polymer reactions have no structure diagram at all). */
+/** A substrate/product chip. Every compound in the table carries a ChEBI id, so
+ *  these link out; the plain span is only for a row that somehow has neither.
+ *  `chebiUrl` is used verbatim — ChEBI does not accept the colon percent-encoded
+ *  (`/chebi/CHEBI%3A57310` is a 404), so it must not be passed through `encodeURIComponent`. */
+function CompoundTag({ compound }: { compound: HomeGraphCompound }) {
+  if (!compound.chebiUrl && !compound.chebiId) return <span className="tag">{compound.name}</span>
+  const href = compound.chebiUrl || `https://www.ebi.ac.uk/chebi/searchId.do?chebiId=${compound.chebiId}`
+  return (
+    <a className="tag is-chebi" href={href} target="_blank" rel="noreferrer" title={`Open ${compound.chebiId || compound.name} in ChEBI`}>
+      {compound.name}
+      <ExternalLink size={9} />
+    </a>
+  )
+}
+
+function reactionAtomMapUrl(rheaId: string) {
+  return `/api/v1/assets/reactions/${encodeURIComponent(rheaId)}/atom-map.svg`
+}
+
+/** The atom-mapped reaction drawing, with the attribution Rhea's CC BY 4.0
+ *  licence requires. A reaction without a drawing drops the panel entirely
+ *  rather than leaving a broken image in the card. */
+function ReactionAtomMap({ rheaId, reactionId }: { rheaId?: string | null; reactionId: string }) {
+  const [failed, setFailed] = useState(false)
+  if (!rheaId || failed) return null
+  return (
+    <div className="atom-map-wrap">
+      <div className="atom-map-head">
+        <span>Atom map</span>
+        <a href={`https://www.rhea-db.org/rhea/${encodeURIComponent(rheaId.split(':').pop() || rheaId)}`} target="_blank" rel="noreferrer">
+          {rheaId} <ExternalLink size={11} />
+        </a>
+      </div>
+      <img
+        className="atom-map"
+        src={reactionAtomMapUrl(rheaId)}
+        alt={`Atom-mapped structure of ${reactionId}`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+      <p className="atom-map-credit">
+        Structure and atom numbering from <a href="https://www.rhea-db.org" target="_blank" rel="noreferrer">Rhea</a> (CC BY 4.0, SIB Swiss Institute of Bioinformatics).
+      </p>
+    </div>
+  )
+}
+
+/** One cell of the cross-reference table: the accession with a link per database
+ *  holding it. A missing side renders as an em dash instead of collapsing the
+ *  row, so the pairing stays legible (a genomic segment with no protein partner
+ *  is a real shape in this dataset, not a gap to hide). */
+function SequenceXrefCellView({ cell }: { cell: SequenceXrefCell | null }) {
+  if (!cell) return <span className="enzyme-xref-none">—</span>
+  return (
+    <span className="enzyme-xref-cell">
+      <span className="enzyme-xref-acc">{cell.accession}</span>
+      {cell.links.length > 0 && (
+        <span className="enzyme-xref-sources">
+          {cell.links.map((link) => (
+            <a key={link.url} href={link.url} target="_blank" rel="noreferrer" title={`${link.source}: ${cell.accession}`}>
+              {link.source} <ExternalLink size={11} />
+            </a>
+          ))}
+        </span>
+      )}
+    </span>
+  )
 }
 
 const HOME_SCOPE_MARGIN_X = 5

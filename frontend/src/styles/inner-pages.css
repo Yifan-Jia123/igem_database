@@ -1145,3 +1145,608 @@
     grid-row: 3;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Download setup panel.
+
+   The sidebar now carries the real export controls (format radio, a 32-field
+   column picker, a preview of the file, the download button), so it is wider
+   than the 225px it needed when it only held six decorative buttons, and its
+   content no longer fits one screen. It is `position: sticky`, so it also
+   scrolls on its own while pinned, and the button is docked to its bottom edge
+   rather than left at the end of the content.
+   --------------------------------------------------------------------------- */
+
+/* Guarded by min-width on purpose. The 1180px breakpoint above collapses this
+   shell to a single column, and it sits earlier in the file at the same
+   specificity — an unconditional width here would win on source order and pin a
+   phone to two columns, leaving the main panel about 39px wide. */
+@media (min-width: 1181px) {
+  .app-shell:not(.home-shell) .downloads-shell {
+    grid-template-columns: 264px minmax(0, 1fr);
+  }
+
+  /* Only while the panel is sticky. Capped to the viewport it is pinned into,
+     because a panel that starts below the page heading and is allowed to grow
+     past 100vh would put its own last rows on screen only after a page scroll,
+     on top of the scroll the panel already needs for its content. Below the
+     breakpoint it is `position: static` and should just let the page scroll. */
+  .app-shell:not(.home-shell) .downloads-sidebar {
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+
+  /* The panel is the only scroll container here, so the dock pins to its bottom
+     edge rather than the viewport's, and returns to normal flow at the end of
+     the content — nothing can hide behind it permanently.
+     Guarded by the same min-width for the same reason: below it the sidebar
+     stops being a scroll container, and `bottom: 0` would resolve against the
+     page instead and float the button over the whole document. */
+  .app-shell:not(.home-shell) .downloads-submit-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+    /* Opaque from a third down, so content scrolling under the button fades out
+       instead of colliding with it; the tail matches the sidebar gradient's own
+       end colour (line 273) so the dock does not read as a separate bar.
+       Padding is measured, not chosen: the dock replaced a 2px/18px pair of
+       margins on the button, and anything taller than 8px/16px pushed the CSV
+       panel — whose content just fits its cap — into a pointless scrollbar. */
+    padding: 8px 18px 16px;
+    background: linear-gradient(
+      180deg,
+      rgba(80, 116, 144, 0) 0%,
+      rgba(82, 119, 148, 0.94) 34%,
+      rgba(82, 119, 148, 0.94) 100%
+    );
+  }
+
+  /* The dock owns the inset now, so the two things inside it give theirs up. */
+  .app-shell:not(.home-shell) .downloads-submit-dock .download-submit-pill,
+  .app-shell:not(.home-shell) .downloads-submit-dock .downloads-export-status {
+    margin: 0;
+  }
+}
+
+.app-shell:not(.home-shell) .downloads-sidebar {
+  gap: 12px;
+}
+
+.app-shell:not(.home-shell) .downloads-export-note {
+  margin: 0;
+  padding: 0 18px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Format radio. Each entry is two lines (key, then the human label), so the
+   shared `.downloads-format-item` box is re-laid out as a grid; the selected
+   one flips to the sidebar's gold so "which format is armed" is unmissable. */
+.app-shell:not(.home-shell) .downloads-format-item {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.app-shell:not(.home-shell) .downloads-format-item .downloads-format-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.app-shell:not(.home-shell) .downloads-format-item small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.app-shell:not(.home-shell) .downloads-format-item.is-selected {
+  border-color: rgba(237, 227, 175, 0.95);
+  background: rgba(237, 227, 175, 0.92);
+  color: var(--celestial-navy, #16233a);
+}
+
+.app-shell:not(.home-shell) .downloads-format-item.is-selected small {
+  color: rgba(22, 35, 58, 0.74);
+}
+
+.app-shell:not(.home-shell) .downloads-format-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(8, 26, 58, 0.24);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.app-shell:not(.home-shell) .downloads-format-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.app-shell:not(.home-shell) .downloads-format-note.is-error {
+  border-color: rgba(255, 168, 168, 0.45);
+  background: rgba(120, 26, 26, 0.34);
+  color: #ffe3e3;
+}
+
+/* The same note class doubles as the main panel's light-surface warning. */
+.app-shell:not(.home-shell) .downloads-main .downloads-format-note {
+  padding: 9px 12px;
+  border-color: rgba(180, 60, 60, 0.34);
+  background: rgba(180, 60, 60, 0.09);
+  color: #8a2222;
+  font-size: 12px;
+}
+
+/* "Will produce" — what `/download/preview` reports for the current setup. The
+   row count is the point of the block: it is what the database can actually
+   resolve, so it can be smaller than the queue. */
+.app-shell:not(.home-shell) .downloads-preview-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-summary strong {
+  color: #fdf6dc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-summary span {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.app-shell:not(.home-shell) .downloads-preview-file {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: rgba(8, 26, 58, 0.32);
+  color: rgba(255, 255, 255, 0.7);
+  font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+  font-size: 10.5px;
+  word-break: break-all;
+}
+
+/* Collapsed unless the format rewrote the header, in which case opening it is
+   the only way to see what actually gets written. */
+.app-shell:not(.home-shell) .downloads-preview-columns {
+  overflow: hidden;
+  border: 1px solid rgba(146, 166, 202, 0.2);
+  border-radius: 6px;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-columns > summary {
+  display: flex;
+  /* Not `center`: the label wraps to two lines at this width, and centring the
+     caret against the whole block drops it into the middle of the text. */
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 10px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-columns > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-columns > summary::before {
+  content: "▸";
+  /* Optically centred on the first line now that the box aligns to its top. */
+  margin-top: 2px;
+  color: rgba(237, 227, 175, 0.8);
+  transition: transform 0.15s ease;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-columns[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.app-shell:not(.home-shell) .downloads-preview-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 0 10px 9px;
+}
+
+.app-shell:not(.home-shell) .downloads-preview-chip {
+  padding: 2px 7px;
+  border: 1px solid rgba(146, 166, 202, 0.26);
+  border-radius: 999px;
+  background: rgba(146, 166, 202, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-option-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-shell:not(.home-shell) .downloads-column-count {
+  padding: 1px 8px;
+  border: 1px solid rgba(237, 227, 175, 0.42);
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.2);
+  color: #fdf6dc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.app-shell:not(.home-shell) .downloads-column-quick {
+  display: flex;
+  gap: 6px;
+}
+
+.app-shell:not(.home-shell) .downloads-column-quick button {
+  flex: 1 1 0;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px dashed rgba(237, 227, 175, 0.42);
+  border-radius: 6px;
+  background: transparent;
+  color: #f4f8ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-shell:not(.home-shell) .downloads-column-quick button:hover {
+  border-style: solid;
+  border-color: rgba(237, 227, 175, 0.8);
+  background: rgba(237, 227, 175, 0.16);
+}
+
+/* 32 fields in 5 collapsible groups. The list is capped so the whole panel fits
+   a 1000px viewport without scrolling — the panel is sticky, so anything past
+   its own height pushes the download button below the fold.
+   `grid-auto-rows: max-content` is load-bearing. This is a grid with a definite
+   max-height and one column, so the default `auto` rows get stretched to share
+   the container height — every group collapsed to ~63px and its own
+   `overflow: hidden` then hid all but the first checkbox. */
+.app-shell:not(.home-shell) .downloads-columns-list {
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group {
+  border: 1px solid rgba(237, 227, 175, 0.22);
+  border-radius: 6px;
+  background: rgba(8, 26, 58, 0.18);
+  overflow: hidden;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group > summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px 7px 22px;
+  cursor: pointer;
+  color: #fdf6dc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group > summary::before {
+  content: '▸';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(237, 227, 175, 0.85);
+  font-size: 9px;
+  transition: transform 0.15s ease;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group[open] > summary::before {
+  transform: translateY(-50%) rotate(90deg);
+}
+
+.app-shell:not(.home-shell) .downloads-field-group > summary span {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(237, 227, 175, 0.18);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.app-shell:not(.home-shell) .downloads-field-group > summary span.is-on {
+  background: rgba(237, 227, 175, 0.9);
+  color: var(--celestial-navy, #16233a);
+}
+
+.app-shell:not(.home-shell) .downloads-field-items {
+  display: grid;
+  gap: 1px;
+  padding: 2px 8px 8px;
+}
+
+.app-shell:not(.home-shell) .downloads-field-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.app-shell:not(.home-shell) .downloads-field-item:hover {
+  background: rgba(237, 227, 175, 0.14);
+}
+
+.app-shell:not(.home-shell) .downloads-field-item.is-on {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.app-shell:not(.home-shell) .downloads-field-item input {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #ede3af;
+}
+
+/* Post-download read-out of what the writer actually produced. */
+.app-shell:not(.home-shell) .downloads-export-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 18px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.app-shell:not(.home-shell) .downloads-export-status svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.app-shell:not(.home-shell) .downloads-export-status.is-done {
+  border-color: rgba(150, 226, 180, 0.42);
+  background: rgba(38, 92, 60, 0.32);
+  color: #dcffe9;
+}
+
+.app-shell:not(.home-shell) .downloads-export-status.is-error {
+  border-color: rgba(255, 168, 168, 0.45);
+  background: rgba(120, 26, 26, 0.34);
+  color: #ffe3e3;
+}
+
+/* The file's name and link sit under the sentence rather than beside it: a file
+   name is one long unbreakable token, and as a flex sibling it squeezes the
+   sentence into a narrow column instead. */
+.app-shell:not(.home-shell) .downloads-export-status > span {
+  display: block;
+  min-width: 0;
+}
+
+.app-shell:not(.home-shell) .downloads-export-file {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #fdf6dc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-export-file:hover {
+  color: #ffffff;
+}
+
+/* A plain route exports with the database's own enzymes for each step, which is
+   not the same promise as a per-step pick — so it gets a muted badge, not the
+   gold one that marks 已选酶. */
+.app-shell:not(.home-shell) .downloads-pw-route-badge.is-auto {
+  background: rgba(146, 166, 202, 0.22);
+  border-color: rgba(16, 43, 85, 0.22);
+  color: var(--celestial-muted, #68758a);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Downloading table — home-style top bar
+
+   The page keeps the queue and the export setup as a document, so the bar is
+   sticky rather than the overlay the map/search/detail pages use. That means
+   undoing three things `.home-map-page` imposes on its stage, which nothing
+   else on this page wants: the viewport lock on <body>/<#root>, the fixed
+   `100vh`, and the hidden overflow that would clip a long queue.
+   --------------------------------------------------------------------------- */
+
+.home-map-page.downloads-atlas-page {
+  position: relative;
+  /* Sticky, not absolute: there is no full-height stage for the bar to sit on
+     top of, and the queue below it can be any length. */
+  height: auto;
+  min-height: 100vh;
+  /* `clip`, not `hidden` or `auto`: either of those would make this element a
+     scroll container, and a sticky child would then stick to *its* scrollport
+     — which never scrolls — instead of to the window. */
+  overflow: visible;
+  overflow-x: clip;
+}
+
+body:has(.downloads-atlas-page),
+#root:has(.downloads-atlas-page) {
+  height: auto;
+  overflow: visible;
+}
+
+/* The shell has to stop being a scroll container as well. Its shared
+   `overflow-x: hidden` coerces `overflow-y` to `auto`, which makes the shell the
+   sticky bar's scrollport — and the shell is exactly as tall as its content, so
+   that scrollport never scrolls and the bar scrolls away with the page. The
+   page's own `overflow-x: clip` covers what the shell was clipping. */
+.app-shell:not(.home-shell):has(.downloads-atlas-page) {
+  overflow: visible;
+}
+
+.downloads-atlas-page .graph-top-nav {
+  position: sticky;
+  left: auto;
+  right: auto;
+  top: 0;
+  /* Centre slot holds the queue pill *plus* the search box, and the right slot
+     three nav items and the user chip. Both sides therefore have to size to
+     their content: a fixed maximum on the centre column (860px, tried) leaves
+     the three-column total wider than the bar, and the search box then paints
+     over "Data Browser". */
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+/* The sidebar's panel header carries the one queue-wide action. Compact and
+   translucent so it reads as part of the header rather than a second primary
+   button next to the format list. */
+/* The header now holds a title and a button in a 264px panel, which wrapped
+   "Export setup" onto two lines. The title keeps its line; the button is the
+   one that gives way. */
+.app-shell:not(.home-shell) .downloads-page .downloads-sidebar .panel-header h2 {
+  white-space: nowrap;
+}
+
+.app-shell:not(.home-shell) .downloads-clear-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell:not(.home-shell) .downloads-clear-button:hover:not(:disabled) {
+  border-color: rgba(237, 227, 175, 0.8);
+  background: rgba(237, 227, 175, 0.2);
+}
+
+.app-shell:not(.home-shell) .downloads-clear-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.downloads-topnav-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.downloads-search-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The pill is this page, so it is a label, not a control: no hover, no pointer,
+   and a gold edge that says "you are here" instead of "click me". */
+.downloads-atlas-page .download-list-button.is-current {
+  border-color: rgba(237, 227, 175, 0.55);
+  background: rgba(237, 227, 175, 0.14);
+  color: var(--graph-gold, #ede3af);
+  cursor: default;
+}
+
+/* The export panel is sticky, and this page has a 58px bar pinned above it, so
+   both halves of the shared rule need adjusting — and only while the panel is
+   actually sticky, which is where the shared rule guards its own cap. */
+@media (min-width: 1181px) {
+  .app-shell:not(.home-shell) .downloads-atlas-page .downloads-sidebar {
+    /* `top: 18px` would slide the panel's own header under the bar. */
+    top: 76px;
+    /* The shared cap reserves 40px for a bar this page does not have the same
+       way: 76px down plus 960px of panel puts its docked download button 36px
+       below the fold, which is the one control that must not be there. */
+    max-height: calc(100vh - 96px);
+  }
+}
+
+@media (max-width: 1120px) {
+  /* app.css hides `.graph-primary-nav` here and drops to two columns, but this
+     page's three-column rule is more specific, so it has to opt out by hand. */
+  .downloads-atlas-page .graph-top-nav {
+    grid-template-columns: minmax(130px, 190px) minmax(0, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 860px) {
+  /* Same collapse as the search table: brand on one row, the pill and the
+     search box stacked on the next, and the bar free to grow taller. */
+  .downloads-atlas-page .graph-top-nav {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 8px;
+    height: auto;
+    padding: 8px 12px;
+  }
+
+  .downloads-topnav-slot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Two classes deep on purpose: the shared `.app-shell:not(.home-shell)
+     .content-wrap` padding rule is more specific than this page's own class. */
+  .app-shell:not(.home-shell) .downloads-atlas-page .content-wrap {
+    padding-top: 14px;
+  }
+}

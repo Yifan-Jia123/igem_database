@@ -36,7 +36,7 @@ export function HomePage({
   onToggleQueue: (entry: string | Entity) => void
   openRecord: (entity: Entity) => void
   isQueued: (id: string) => boolean
-  autoMapSearch?: { query: string; nonce: number } | null
+  autoMapSearch?: { query: string; mode: 'enzyme' | 'pathway'; nonce: number } | null
   onAutoMapSearchConsumed?: () => void
   /** Last completed BLAST run; lets the map render the hit enzymes as a scope subgraph. */
   blastSession?: BlastSession | null

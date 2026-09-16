@@ -10,7 +10,7 @@ from sqlalchemy.sql import text as sa_text
 from sqlalchemy.exc import ProgrammingError, OperationalError
 
 from app.models import Enzyme, Gene, Reaction, EnzymeReactionEdge
-from app.schemas.enzyme import EnzymeCard
+from app.schemas.enzyme import EnzymeCard, TableEnzymeCard
 from app.schemas.common import Pagination
 from app.utils.query_parser import parse_query, SearchClause, SearchCondition, detect_input_type
 from app.utils.compound_filters import EXCLUDED_COMMON_COMPOUND_IDS
@@ -165,6 +165,118 @@ async def search_entries(
         Pagination(page=page, page_size=page_size, total=total, total_pages=total_pages),
         graph_highlights,
     )
+
+
+def _ec_sort_key(ec: str) -> Tuple[int, ...]:
+    """Sort EC strings numerically (4.2.3.77 → (4, 2, 3, 77))."""
+    return tuple(int(part) for part in re.findall(r"\d+", ec))
+
+
+async def search_enzyme_table(
+    db: AsyncSession,
+    q: str,
+    input_type: Optional[str] = None,
+    limit: int = 500,
+) -> Tuple[List[TableEnzymeCard], int]:
+    """Search for enzymes and aggregate each enzyme's reaction EC numbers.
+
+    Used by the table-form search results page. Returns one ``TableEnzymeCard``
+    per matched enzyme (ordered by the same relevance scoring as
+    ``search_entries``) where ``ec_numbers``/``source_types`` cover every
+    reaction edge of that enzyme instead of a single representative edge.
+    """
+    if not input_type or input_type == "auto":
+        detected = detect_input_type(q)
+        if detected:
+            input_type = detected
+
+    clauses = parse_query(q)
+    if not clauses:
+        return [], 0
+
+    if len(clauses) == 1 and len(clauses[0].conditions) == 1:
+        cond = clauses[0].conditions[0]
+        enzyme_scores = await _search_single(cond, input_type, limit, 0, db)
+    else:
+        enzyme_scores = await _search_multi(clauses, input_type, limit, 0, db)
+
+    enzyme_ids = [es[0] for es in enzyme_scores]
+    if not enzyme_ids:
+        return [], 0
+
+    cards = await _aggregate_table_cards(db, enzyme_ids)
+    return cards, len(enzyme_ids)
+
+
+async def search_enzyme_table_by_ids(
+    db: AsyncSession,
+    enzyme_ids: List[str],
+) -> Tuple[List[TableEnzymeCard], int]:
+    """Aggregate table rows for an explicit enzyme-id list, order preserved.
+
+    Used to render BLAST hits through the same table-form result surface as
+    keyword search: pass the hit enzyme ids in E-value order and get one rich
+    ``TableEnzymeCard`` per id (duplicates in the input produce duplicate
+    rows, mirroring per-subject BLAST hits) with the same per-enzyme EC /
+    data-source / reaction-count aggregation as ``search_enzyme_table``.
+    """
+    ids = [eid for eid in enzyme_ids if eid]
+    if not ids:
+        return [], 0
+    cards = await _aggregate_table_cards(db, ids)
+    return cards, len(ids)
+
+
+async def _aggregate_table_cards(
+    db: AsyncSession,
+    enzyme_ids: List[str],
+) -> List[TableEnzymeCard]:
+    """Bulk-fetch enzymes/gene names/edges and aggregate one row per enzyme.
+
+    ``enzyme_ids`` keeps its caller-provided order (duplicates allowed); rows
+    whose enzyme no longer exists are skipped.
+    """
+    result = await db.execute(select(Enzyme).where(Enzyme.enzyme_id.in_(enzyme_ids)))
+    enzymes = {e.enzyme_id: e for e in result.scalars().all()}
+    gene_names = await _load_gene_names(db, enzyme_ids)
+
+    edge_result = await db.execute(
+        select(EnzymeReactionEdge, Reaction)
+        .join(Reaction, EnzymeReactionEdge.reaction_id == Reaction.reaction_id)
+        .where(EnzymeReactionEdge.enzyme_id.in_(enzyme_ids))
+    )
+
+    ec_by_enzyme: Dict[str, set] = {eid: set() for eid in enzyme_ids}
+    source_by_enzyme: Dict[str, set] = {eid: set() for eid in enzyme_ids}
+    reaction_by_enzyme: Dict[str, set] = {eid: set() for eid in enzyme_ids}
+    for row in edge_result.all():
+        edge, react = row
+        eid = edge.enzyme_id
+        if eid not in ec_by_enzyme:
+            continue
+        reaction_by_enzyme[eid].add(edge.reaction_id)
+        if react and react.ec_number:
+            ec_by_enzyme[eid].add(react.ec_number.strip())
+        if edge.source_type:
+            source_by_enzyme[eid].add(edge.source_type.value if hasattr(edge.source_type, "value") else str(edge.source_type))
+
+    cards: List[TableEnzymeCard] = []
+    for eid in enzyme_ids:
+        enz = enzymes.get(eid)
+        if not enz:
+            continue
+        cards.append(TableEnzymeCard(
+            enzyme_id=eid,
+            primary_name=enz.primary_name,
+            uniprot_id=enz.uniprot_id,
+            organism_name=enz.organism_name,
+            gene_name=gene_names.get(eid),
+            ec_numbers=sorted(ec_by_enzyme[eid], key=_ec_sort_key),
+            source_types=sorted(source_by_enzyme[eid]),
+            reaction_count=len(reaction_by_enzyme[eid]),
+        ))
+
+    return cards
 
 
 async def _search_single(

@@ -43,8 +43,9 @@ def load_allowed_compound_ids():
 def load_reactions():
     df = pd.read_csv(RHEA_FILE, sep="\t")
 
-    # Unique reactions
-    reactions = df[["Rhea ID", "EC Number", "Equation", "Direction"]].drop_duplicates(subset="Rhea ID")
+    # Unique reactions. A handful of Rhea ids carry more than one SMILES across
+    # their rows; keeping the first occurrence settles those deterministically.
+    reactions = df[["Rhea ID", "EC Number", "Equation", "Direction", "Reaction SMILES"]].drop_duplicates(subset="Rhea ID")
 
     reaction_df = pd.DataFrame()
     reaction_df["reaction_id"] = reactions["Rhea ID"]
@@ -52,6 +53,7 @@ def load_reactions():
     reaction_df["equation"] = reactions["Equation"]
     reaction_df["direction"] = reactions["Direction"].map(DIRECTION_MAP).fillna("unknown")
     reaction_df["ec_number"] = reactions["EC Number"]
+    reaction_df["smiles"] = reactions["Reaction SMILES"]
     reaction_df["rhea_url"] = reactions["Rhea ID"].apply(
         lambda x: f"https://www.rhea-db.org/rhea/{x.split(':')[-1]}"
     )
@@ -67,7 +69,7 @@ def load_reactions():
     reaction_df["review_status"] = "official"
 
     cols = ["reaction_id", "rhea_id", "equation", "direction", "ec_number",
-            "rhea_url", "source_type", "review_status"]
+            "smiles", "rhea_url", "source_type", "review_status"]
     reaction_df[cols].to_sql("reaction", engine, if_exists="append", index=False)
     print(f"  reaction: {len(reaction_df)} rows inserted")
 

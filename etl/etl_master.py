@@ -226,6 +226,14 @@ def load_gene_info():
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
 
+    # The accession file has no gene symbol, but the master file does — and it is
+    # keyed by the same UniProt entry, so the name is free here.
+    names_df = pd.read_csv(MASTER_FILE, sep="\t", dtype=str, usecols=["Entry", "Gene Names"])
+    gene_names = {
+        entry: _clean_value(value)
+        for entry, value in zip(names_df["Entry"], names_df["Gene Names"])
+    }
+
     rows = []
     for _, row in df.iterrows():
         entry = row["Entry"]
@@ -248,7 +256,7 @@ def load_gene_info():
         if any([genbank_id, ena_accession, protein_accession]):
             rows.append({
                 "enzyme_id": enzyme_id,
-                "gene_name": None,
+                "gene_name": gene_names.get(entry),
                 "genbank_id": genbank_id,
                 "ncbi_url": ncbi_url,
                 "ena_accession": ena_accession,

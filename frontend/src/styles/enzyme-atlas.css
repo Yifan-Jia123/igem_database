@@ -1,0 +1,697 @@
+/* Enzyme detail page: home-style top bar + a left module rail whose highlight is
+   two-way bound to the scrolling content.
+   Imported LAST from styles.css so these win over the shared detail-card rules
+   in app.css / inner-pages.css without editing them. */
+
+.enzyme-atlas-page {
+  /* `.home-map-page` already pins this to 100vh + overflow:hidden, which kills
+     document scrolling — `.enzyme-atlas-main` below is the real scroll box. */
+  position: relative;
+}
+
+.enzyme-atlas-stage {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* --- Top bar: same anatomy as home / search table, wider centre slot ------ */
+
+/* The centre slot holds the download button *plus* the search box, and the
+   right slot holds four nav items, so both sides need real room: `auto` on the
+   nav stops it overflowing leftwards over the search bar. */
+.enzyme-atlas-page .graph-top-nav {
+  grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) auto;
+  gap: 16px;
+}
+
+.enzyme-atlas-page .graph-primary-nav {
+  gap: 16px;
+}
+
+.enzyme-topnav-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The base bar caps its centre column at 460px, which was roomy for an input
+   and a submit but not for the mode toggle and the Map|Table toggle that now
+   share it — the placeholder was cut off mid-word. Same shape as the download
+   and search bars: the nav takes what it needs, the search bar takes the rest. */
+.enzyme-atlas-page .graph-top-nav {
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+.enzyme-search-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --- Body: module rail + the one element that scrolls -------------------- */
+
+.enzyme-atlas-body {
+  position: absolute;
+  top: 58px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  background: #f5f9fc;
+}
+
+.enzyme-module-rail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 14px 24px;
+  border-right: 1px solid var(--celestial-line, #c7d5e0);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.enzyme-module-rail-title {
+  padding: 0 10px 10px;
+  color: var(--celestial-muted, #607086);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.enzyme-module-rail nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.enzyme-module-rail button {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
+  background: transparent;
+  color: var(--celestial-muted, #607086);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.enzyme-module-rail button:hover {
+  background: rgba(237, 227, 175, 0.28);
+  color: var(--celestial-navy, #081a3a);
+}
+
+.enzyme-module-rail button.is-active {
+  border-left-color: #d3be63;
+  background: rgba(237, 227, 175, 0.4);
+  color: var(--celestial-navy, #081a3a);
+  font-weight: 800;
+}
+
+.enzyme-atlas-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.enzyme-atlas-main .enzyme-detail-page {
+  min-height: 0;
+  padding: 20px 24px 56px;
+}
+
+/* --- Legibility repair ----------------------------------------------------
+   app.css still carries a leftover dark-theme block for
+   `.app-shell:not(.home-shell)` that paints muted text near-white lavender
+   (rgba(240,234,248,.52)) and row rules rgba(255,255,255,.08). Those values
+   assume a dark page, but the enzyme page renders on the light celestial
+   background — so every field label (Library code, Species, Gene name, …) was
+   effectively invisible and the fact-row separators disappeared.
+   The shell prefix here is deliberate: it out-specifies the 3-class app.css
+   selector rather than relying on import order. This is a pre-existing bug
+   shared with the other inner pages; the fix is scoped to this page on purpose.
+   NOTE: inner-pages.css defines no `dt` rule at all, so app.css wins by default. */
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-facts dt,
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-copy-list span,
+.app-shell:not(.home-shell) .enzyme-atlas-page .reaction-meta-grid span,
+.app-shell:not(.home-shell) .enzyme-atlas-page .sequence-summary span,
+.app-shell:not(.home-shell) .enzyme-atlas-page .muted-copy,
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-atlas-hero p,
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-name-stack p,
+.app-shell:not(.home-shell) .enzyme-atlas-page .reaction-card-head p,
+.app-shell:not(.home-shell) .enzyme-atlas-page .reference-row p {
+  color: var(--celestial-muted, #607086);
+}
+
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-facts div,
+.app-shell:not(.home-shell) .enzyme-atlas-page .detail-copy-list div,
+.app-shell:not(.home-shell) .enzyme-atlas-page .reaction-meta-grid div,
+.app-shell:not(.home-shell) .enzyme-atlas-page .sequence-summary div {
+  border-top-color: var(--celestial-line-soft, #dce7ef);
+}
+
+/* --- Sequence viewer ------------------------------------------------------
+   `app.css` paints `.amino-sequence-view` near-black for the non-home shell
+   (app.css:6418) and its `.sequence-line code` near-white (app.css:6427) — but
+   the length ruler only ever had a light-theme colour (app.css:4878, which has
+   no dark counterpart at all). On the dark panel the residue numbers therefore
+   sat at roughly 1.3:1 contrast and the scale was unreadable. The enzyme page
+   renders on the light celestial background, so the panel goes back to light
+   and the ruler darkens to the page's muted ink. The shell prefix is again
+   deliberate: it out-specifies the 3-class app.css selector. */
+.app-shell:not(.home-shell) .enzyme-atlas-page .amino-sequence-view {
+  border-color: var(--celestial-line, #c7d5e0);
+  background: rgba(247, 250, 252, 0.9);
+}
+
+.app-shell:not(.home-shell) .enzyme-atlas-page .sequence-line code {
+  color: #243043;
+}
+
+/* `code` carries the UA default `font-family: monospace`, which beats
+   inheritance from `.amino-sequence-row` — on Chinese Windows that resolves to
+   the NSimSun bitmap face, barely legible at 13px. Name real Latin monospace
+   faces first (Consolas on Windows, Menlo on macOS). */
+.enzyme-atlas-page .sequence-line code {
+  font-family: Consolas, "Cascadia Mono", "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+}
+
+.enzyme-atlas-page .sequence-ruler,
+.enzyme-atlas-page .sequence-line > span {
+  color: var(--celestial-muted, #607086);
+}
+
+/* --- Modules -------------------------------------------------------------- */
+
+.enzyme-module {
+  /* Keep the heading clear of the container's top edge when jumped to. */
+  scroll-margin-top: 12px;
+}
+
+.enzyme-module + .enzyme-module {
+  margin-top: 24px;
+}
+
+.enzyme-module .section-title-row h3 {
+  margin: 0 0 10px;
+}
+
+.enzyme-subsection-row {
+  margin-top: 16px;
+}
+
+/* --- Sequence blocks (canonical + one per isoform) ------------------------ */
+
+.enzyme-sequence-block {
+  padding: 16px 18px;
+}
+
+.enzyme-sequence-block + .enzyme-sequence-block {
+  margin-top: 14px;
+}
+
+.enzyme-sequence-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.enzyme-sequence-head strong {
+  color: var(--celestial-navy, #081a3a);
+  font-size: 14px;
+}
+
+.enzyme-sequence-head .small-text-button {
+  margin-left: auto;
+}
+
+.enzyme-sequence-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(8, 26, 58, 0.07);
+  color: var(--celestial-ink, #101b2d);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* The canonical sequence's UniProt isoform id (usually "-1"). Outlined rather
+   than filled so it reads as an identifier, not another measurement. */
+.enzyme-sequence-badge.is-id {
+  border: 1px solid rgba(43, 93, 138, 0.3);
+  background: transparent;
+  color: #2b5d8a;
+}
+
+/* Isoform blocks read as a variant of the canonical block, not a peer card. */
+.enzyme-isoform-block {
+  border-left: 3px solid rgba(211, 190, 99, 0.72);
+  background: linear-gradient(180deg, rgba(250, 247, 233, 0.9), rgba(255, 255, 255, 0.94));
+}
+
+.enzyme-isoform-delta {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.enzyme-isoform-delta.is-down {
+  background: rgba(96, 112, 134, 0.14);
+  color: #46586f;
+}
+
+.enzyme-isoform-delta.is-up {
+  background: rgba(176, 122, 38, 0.16);
+  color: #8a5a12;
+}
+
+.enzyme-isoform-delta.is-same {
+  background: rgba(8, 26, 58, 0.06);
+  color: var(--celestial-muted, #607086);
+}
+
+/* --- Two-dimensional tables (GO terms + sequence cross-references) --------
+   Mirrors the download table idiom in inner-pages.css: solid pale header with
+   top-only radius, rows separated by a single 1px border, zebra striping.
+   The base grid is the three-column cross-reference table; the GO table is
+   narrower and overrides it via `.is-two-col` below. */
+
+.enzyme-xref-table {
+  border-radius: 6px;
+}
+
+.enzyme-xref-head,
+.enzyme-xref-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(120px, 0.5fr);
+  gap: 12px;
+  align-items: center;
+}
+
+/* The cross-reference cells stack an accession over its database links, so they
+   must align at the top; the single-line GO table stays vertically centred. */
+.enzyme-xref-table.is-seq-pairs .enzyme-xref-head,
+.enzyme-xref-table.is-seq-pairs .enzyme-xref-row {
+  align-items: start;
+}
+
+.enzyme-xref-head {
+  padding: 10px 12px;
+  border: 1px solid var(--celestial-line, #c7d5e0);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: #e8f1f6;
+  color: var(--celestial-ink, #101b2d);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.enzyme-xref-body {
+  border-radius: 0 0 6px 6px;
+}
+
+.enzyme-xref-row {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--celestial-line, #c7d5e0);
+  border-top: 0;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 12.5px;
+}
+
+.enzyme-xref-row:nth-child(2n) {
+  background: rgba(249, 252, 254, 0.92);
+}
+
+.enzyme-xref-row:hover {
+  border-color: rgba(211, 190, 99, 0.54);
+}
+
+.enzyme-xref-row:last-child {
+  border-radius: 0 0 6px 6px;
+}
+
+/* One sequence cross-reference cell: the accession, then its database links. */
+.enzyme-xref-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.enzyme-xref-acc {
+  color: var(--celestial-navy, #081a3a);
+  font-weight: 700;
+  font-family: Consolas, "Cascadia Mono", "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+/* Per-database links sit under the accession they belong to, kept quiet so the
+   accession stays the thing you read first. */
+.enzyme-xref-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.enzyme-xref-cell a,
+.enzyme-xref-acc a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2b5d8a;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.enzyme-xref-cell a:hover,
+.enzyme-xref-acc a:hover {
+  color: #8a5a12;
+}
+
+/* Molecule type / absent side — plain, secondary text. */
+.enzyme-xref-molecule,
+.enzyme-xref-none {
+  color: var(--celestial-muted, #607086);
+  overflow-wrap: anywhere;
+}
+
+/* Biological-process table is two columns wide, not four. */
+.enzyme-xref-table.is-two-col .enzyme-xref-head,
+.enzyme-xref-table.is-two-col .enzyme-xref-row {
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+}
+
+/* --- Reactions ------------------------------------------------------------ */
+
+/* Reaction SMILES run to hundreds of characters with no spaces to break on, so
+   they need to wrap mid-token and set in a monospace face to stay scannable. */
+.enzyme-atlas-page .reaction-meta-grid .is-smiles strong {
+  font-family: Consolas, "Cascadia Mono", "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Substrate/product chips link out to ChEBI. The arrow goes inside the chip and
+   is sized down to the 9px label, with the stroke thickened so a hairline glyph
+   still reads at that scale. */
+.enzyme-atlas-page .reaction-compounds a.tag.is-chebi {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.enzyme-atlas-page .reaction-compounds a.tag.is-chebi svg {
+  flex: none;
+  stroke-width: 2.75;
+}
+
+.enzyme-atlas-page .reaction-compounds a.tag.is-chebi:hover {
+  background: rgba(43, 93, 138, 0.18);
+  color: #2b5d8a;
+}
+
+.enzyme-atlas-page .reaction-compounds a.tag.is-chebi:focus-visible {
+  background: rgba(43, 93, 138, 0.18);
+  color: #2b5d8a;
+  outline: 2px solid #2b5d8a;
+  outline-offset: 1px;
+}
+
+/* The drawing comes from Rhea, so it needs the licence's attribution alongside
+   it. Same light-panel repair as the sequence viewer: app.css:5990 darkens this
+   panel for the non-home shell while its text rules assume a light one. */
+.app-shell:not(.home-shell) .enzyme-atlas-page .atom-map-wrap {
+  border-color: var(--celestial-line, #c7d5e0);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.enzyme-atlas-page .atom-map-wrap {
+  display: block;
+}
+
+/* Fixed box, not max-height: an enzyme can carry up to 28 reactions, so the
+   drawings have to stay lazy — but a lazy image that grows its box on arrival
+   shifts everything below it, and the rail jumps to a module by measuring that
+   module's offset. A late load would therefore drop the smooth scroll short of
+   its target. A constant height makes the load invisible to layout. */
+.enzyme-atlas-page .atom-map-wrap img {
+  height: 300px;
+  object-fit: contain;
+}
+
+.enzyme-atlas-page .atom-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--celestial-muted, #607086);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.enzyme-atlas-page .atom-map-head a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2b5d8a;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+}
+
+.enzyme-atlas-page .atom-map-head a:hover {
+  color: #8a5a12;
+}
+
+.enzyme-atlas-page .atom-map-credit {
+  margin: 10px 0 0;
+  color: var(--celestial-muted, #607086);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.enzyme-atlas-page .atom-map-credit a {
+  color: #2b5d8a;
+  font-weight: 600;
+}
+
+/* --- References ----------------------------------------------------------- */
+
+.enzyme-reference-row {
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.enzyme-reference-main {
+  min-width: 0;
+}
+
+/* `.reference-links` is an inline-flex with `flex-wrap: wrap`, and as a plain
+   flex item it would shrink below its content — so on rows with a long title the
+   DOI/PubMed pair wrapped onto two lines and the buttons ragged. Pin its width
+   and let the title column absorb the squeeze instead. */
+.enzyme-reference-row .reference-links {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.enzyme-reference-title {
+  display: block;
+  color: var(--celestial-navy, #081a3a);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+/* The title links to the article. It has to keep reading as a heading — the
+   `strong` it replaced was bold — so the affordance is the hover, not a link
+   colour. */
+.enzyme-reference-title.is-link {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.enzyme-reference-title.is-link:hover {
+  color: #2b5d8a;
+  text-decoration: underline;
+}
+
+.enzyme-reference-title.is-link:focus-visible {
+  outline: 2px solid #2b5d8a;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.enzyme-reference-title.is-link svg {
+  vertical-align: -1px;
+}
+
+.enzyme-reference-authors,
+.enzyme-reference-citation {
+  margin: 4px 0 0;
+  color: var(--celestial-muted, #607086);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.enzyme-reference-citation {
+  font-style: italic;
+}
+
+.enzyme-reference-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.enzyme-reference-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(8, 26, 58, 0.07);
+  color: var(--celestial-muted, #607086);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.enzyme-reference-tag.is-position {
+  background: rgba(237, 227, 175, 0.44);
+  color: #6b5a17;
+}
+
+.enzyme-reference-tag.is-review {
+  background: rgba(43, 93, 138, 0.12);
+  color: #2b5d8a;
+}
+
+/* --- Narrow screens ------------------------------------------------------- */
+
+@media (max-width: 1080px) {
+  .enzyme-atlas-page .graph-top-nav {
+    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) minmax(90px, 130px);
+    gap: 10px;
+  }
+
+  .enzyme-atlas-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  /* Rail collapses into a horizontally scrollable strip above the content. */
+  .enzyme-module-rail {
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--celestial-line, #c7d5e0);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .enzyme-module-rail-title {
+    display: none;
+  }
+
+  .enzyme-module-rail nav {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .enzyme-module-rail button {
+    width: auto;
+    white-space: nowrap;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .enzyme-module-rail button.is-active {
+    border-left-color: transparent;
+    border-bottom-color: #d3be63;
+  }
+}
+
+@media (max-width: 760px) {
+  .enzyme-atlas-main .enzyme-detail-page {
+    padding: 16px 14px 40px;
+  }
+
+  /* Drop the header row; each cell carries its own label instead. */
+  .enzyme-xref-head {
+    display: none;
+  }
+
+  .enzyme-xref-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--celestial-line, #c7d5e0);
+  }
+
+  .enzyme-xref-row:first-child {
+    border-top: 0;
+    border-radius: 6px 6px 0 0;
+  }
+
+  /* Each cell needs its own label once the header row is gone. These have to be
+     scoped by table variant: `.enzyme-xref-acc` means "GO ID" in the two-column
+     GO table but "Nucleotide sequence" in the pair table, so an unscoped rule
+     would mislabel one of them. */
+  .enzyme-xref-table.is-two-col .enzyme-xref-row .enzyme-xref-acc::before,
+  .enzyme-xref-table.is-two-col .enzyme-xref-row .enzyme-xref-term::before,
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-cell::before,
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-molecule::before {
+    color: var(--celestial-muted, #607086);
+    font-weight: 600;
+  }
+
+  .enzyme-xref-table.is-two-col .enzyme-xref-row .enzyme-xref-acc::before {
+    content: 'GO ID · ';
+  }
+
+  .enzyme-xref-table.is-two-col .enzyme-xref-row .enzyme-xref-term::before {
+    content: 'Biological process · ';
+  }
+
+  /* Lay the pair cells out inline so the label reads as a prefix of the
+     accession, with the database links on the line below. */
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-cell {
+    display: block;
+  }
+
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-cell:nth-child(1)::before {
+    content: 'Nucleotide · ';
+  }
+
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-cell:nth-child(2)::before {
+    content: 'Protein · ';
+  }
+
+  .enzyme-xref-table.is-seq-pairs .enzyme-xref-row .enzyme-xref-molecule::before {
+    content: 'Molecule type · ';
+  }
+
+  .enzyme-reference-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

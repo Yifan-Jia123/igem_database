@@ -1,4 +1,4 @@
-import { Beaker, Dna, FlaskConical } from 'lucide-react'
+import { Beaker, Dna, FlaskConical, Route } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Entity, EntityKind } from '../types'
 
@@ -23,13 +23,23 @@ export const kindLabels: Record<EntityKind, string> = {
   compound: 'Compound',
   enzyme: 'Enzyme',
   reaction: 'Reaction',
+  pathway: 'Pathway',
 }
 
 export const kindIcons: Record<EntityKind, LucideIcon> = {
   compound: Beaker,
   enzyme: Dna,
   reaction: FlaskConical,
+  pathway: Route,
 }
+
+/** What the Downloading-table pages can actually produce.
+ *
+ *  Both pages export enzymes — the enzyme page directly, the pathway page as a
+ *  per-step table bundle — so a compound or a bare reaction has nothing to
+ *  export and must not enter the queue. Compounds still show up in an exported
+ *  route's Markdown diagram; they are just not download records themselves. */
+export const isExportableKind = (kind: EntityKind) => kind === 'enzyme' || kind === 'pathway'
 
 export function looksLikeProteinSequence(value: string) {
   const compact = value
@@ -57,9 +67,26 @@ export function matchesFilters(entity: Entity | undefined, filters: FilterState,
     .includes(normalizedQuery)
 }
 
+/** The UniProt accession an enzyme entity carries as a field, if it has one.
+ *
+ * `entity.id` is our own database code (ENZ000569), which UniProt knows nothing
+ * about — linking to it built `uniprotkb/ENZ000569`, a record that never
+ * existed. Every enzyme entity (search rows, BLAST cards, the mock dataset)
+ * carries the accession as a field labelled "UniProt"; this is that value.
+ */
+export function enzymeAccession(entity: Entity) {
+  return entity.fields.find((field) => field.label === 'UniProt')?.value?.trim() || ''
+}
+
 export function getExternalRecordUrl(entity: Entity) {
-  if (entity.kind === 'enzyme') return `https://www.uniprot.org/uniprotkb/${entity.id.replace('ENZ:', '')}`
+  if (entity.kind === 'enzyme') {
+    const accession = enzymeAccession(entity)
+    // Without an accession there is no UniProt page to open — better to send
+    // the caller nowhere (openRecord returns on an empty url) than to a 404.
+    return accession ? `https://www.uniprot.org/uniprotkb/${accession}` : ''
+  }
   if (entity.kind === 'compound') return `https://www.ebi.ac.uk/chebi/searchId.do?chebiId=${entity.id}`
+  if (entity.kind === 'pathway') return ''
   return `https://www.rhea-db.org/reaction?id=${entity.id.replace('RHEA:', '')}`
 }
 

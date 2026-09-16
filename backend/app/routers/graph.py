@@ -3,10 +3,61 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 
 from app.deps import get_db
-from app.schemas.common import ApiResponse
-from app.services.graph_service import build_graph_payload, expand_edge_group
+from app.schemas.common import ApiResponse, CamelModel
+from app.services.graph_service import (
+    build_graph_payload,
+    build_graph_payload_for_enzymes,
+    expand_edge_group,
+    build_map_scope_payload,
+)
 
 router = APIRouter()
+
+
+class ByEnzymesRequest(CamelModel):
+    enzyme_ids: List[str] = []
+    source_types: Optional[List[str]] = None
+    review_statuses: Optional[List[str]] = None
+    limit_nodes: Optional[int] = 80
+
+
+class MapScopeRequest(CamelModel):
+    q: str
+    source_types: Optional[List[str]] = None
+    review_statuses: Optional[List[str]] = None
+    limit_reactions: int = 14
+    limit_nodes: int = 90
+
+
+@router.post("/graph/map-scope")
+async def map_scope(
+    body: MapScopeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await build_map_scope_payload(
+        db,
+        q=body.q,
+        source_types=body.source_types,
+        review_statuses=body.review_statuses,
+        limit_reactions=body.limit_reactions,
+        limit_nodes=body.limit_nodes,
+    )
+    return ApiResponse(data=result)
+
+
+@router.post("/graph/by-enzymes")
+async def get_graph_by_enzymes(
+    body: ByEnzymesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    payload = await build_graph_payload_for_enzymes(
+        db,
+        enzyme_ids=body.enzyme_ids,
+        source_types=body.source_types,
+        review_statuses=body.review_statuses,
+        limit_nodes=body.limit_nodes,
+    )
+    return ApiResponse(data=payload.model_dump(by_alias=True))
 
 
 @router.get("/graph")

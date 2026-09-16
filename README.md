@@ -28,24 +28,19 @@ python -m venv venv
 venv\Scripts\activate       # Windows
 # source venv/bin/activate  # macOS/Linux
 
-# 4. 创建后端本地配置（可选，文件已被 .gitignore 忽略）
-copy backend\.env.example backend\.env       # Windows
-# cp backend/.env.example backend/.env         # macOS/Linux
-# 然后编辑 backend/.env，填写本机 MySQL 密码等配置
-# ETL 使用下面的 IGEM_* 系统环境变量，不需要 etl/.env
-
-# 5. 安装 ETL 依赖并导入数据
+# 4. 安装 ETL 依赖并导入数据
 pip install -r etl/requirements.txt
 set IGEM_DB_PASSWORD=你的密码            # Windows
 # export IGEM_DB_PASSWORD=你的密码        # macOS/Linux
 python etl/etl_run.py
 
-# 6. 启动后端
+# 5. 启动后端
 pip install -r backend/requirements.txt
+set IGEM_DB_PASSWORD=你的密码
 cd backend
 uvicorn app.main:app --reload --port 8000
 
-# 7. 启动前端（另开一个终端）
+# 6. 启动前端（另开一个终端）
 cd frontend
 npm install
 npm run dev
@@ -81,9 +76,9 @@ bash start_igem.sh
 ```
 igem_database/
 ├── sql/schema.sql              # MySQL 建表脚本（核心表 + 原始数据索引表）
-├── for_*/                      # 原始 TSV 数据（UniProt、Rhea、ChEBI）
+├── database 1st data/          # 原始 TSV 数据（UniProt、Rhea、ChEBI）
 ├── etl/                        # ETL 脚本：TSV → MySQL
-│   ├── config.py               # 数据库连接和数据目录配置
+│   ├── config.py               # 数据库连接配置
 │   ├── etl_run.py              # 一键执行所有步骤
 │   └── etl_*.py                # 各表导入脚本
 ├── backend/                    # FastAPI 后端（Python）
@@ -97,7 +92,7 @@ igem_database/
 │   │   ├── services/           # 业务逻辑
 │   │   └── utils/              # 工具函数
 │   ├── requirements.txt
-│   └── .env.example             # 后端本地配置模板
+│   └── .env                    # 数据库密码（不提交到 git）
 ├── frontend/                   # React + Vite 前端
 │   ├── src/
 │   ├── package.json
@@ -118,13 +113,8 @@ igem_database/
 | `IGEM_DB_PASSWORD`  | *(必填)*      | MySQL 密码         |
 | `IGEM_DB_NAME`      | `igem_terpene`| 数据库名           |
 | `IGEM_BLAST_BIN`    | `blastp`      | BLAST 可执行文件路径 |
-| `IGEM_BLAST_DB`     | `blast_db/igem_enzymes` | BLAST 数据库路径 |
-| `IGEM_DATA_DIR`     | 项目根目录    | ETL 原始 TSV 数据目录 |
 
-`backend/.env.example` 是可选的后端本地配置模板；真实 `.env` 文件不会提交到 Git。
-ETL 不使用 `.env` 文件，运行前直接设置 `IGEM_*` 系统环境变量即可。
-ETL 的 `IGEM_DATA_DIR` 未设置时默认读取项目根目录下的 `for_*` 目录。
-后端的系统环境变量会覆盖 `backend/.env` 中的同名配置。
+运行 ETL 或后端前必须设置这些变量。后端可通过 `backend/.env` 文件配置。
 
 ---
 

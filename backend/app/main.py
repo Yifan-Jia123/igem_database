@@ -9,7 +9,7 @@ from app.routers import (
     enzymes,
     compounds,
     reactions,
-    homology,
+    blast,
     download,
     assets,
 )
@@ -37,7 +37,7 @@ app.include_router(structure_search.router, prefix=API_PREFIX, tags=["Structure 
 app.include_router(enzymes.router, prefix=API_PREFIX, tags=["Enzymes"])
 app.include_router(compounds.router, prefix=API_PREFIX, tags=["Compounds"])
 app.include_router(reactions.router, prefix=API_PREFIX, tags=["Reactions"])
-app.include_router(homology.router, prefix=API_PREFIX, tags=["Homology"])
+app.include_router(blast.router, prefix=API_PREFIX, tags=["Blast"])
 app.include_router(download.router, prefix=API_PREFIX, tags=["Download"])
 app.include_router(assets.router, prefix=API_PREFIX, tags=["Assets"])
 

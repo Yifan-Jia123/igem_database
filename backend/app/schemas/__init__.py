@@ -11,11 +11,11 @@ from app.schemas.search import (
 )
 from app.schemas.pathway import PathwayCard
 from app.schemas.download import (
-    DownloadItem, DownloadPreviewRequest, DownloadPreviewResponse,
-    DownloadCreateRequest, DownloadCreateResponse,
+    DownloadItem, DownloadPreviewRequest, DownloadCreateRequest,
+    PathwayStep, PathwayStepEnzyme,
 )
-from app.schemas.homology import (
-    HomologySearchRequest, HomologyResultItem, HomologyJobStatus,
+from app.schemas.blast import (
+    BlastSearchRequest, BlastHit, BlastPayload,
 )
 
 __all__ = [
@@ -27,7 +27,7 @@ __all__ = [
     "GraphPayload", "ReactionEdge", "EdgeGroup", "FocusPoint",
     "EntrySearchRequest", "EntrySearchResponse",
     "PathwaySearchRequest", "PathwaySearchResponse", "PathwayCard",
-    "DownloadItem", "DownloadPreviewRequest", "DownloadPreviewResponse",
-    "DownloadCreateRequest", "DownloadCreateResponse",
-    "HomologySearchRequest", "HomologyResultItem", "HomologyJobStatus",
+    "DownloadItem", "DownloadPreviewRequest", "DownloadCreateRequest",
+    "PathwayStep", "PathwayStepEnzyme",
+    "BlastSearchRequest", "BlastHit", "BlastPayload",
 ]

@@ -23,7 +23,7 @@ type CompoundCard = {
   description?: string | null
 }
 
-type EnzymeCard = {
+export type EnzymeCard = {
   edgeId: string
   enzymeId: string
   primaryName: string
@@ -74,20 +74,6 @@ type FilterOptionsPayload = {
   reviewStatuses?: string[]
 }
 
-type HomologyResultItem = {
-  enzymeId: string
-  eValue: number
-  identity?: number | null
-  card?: EnzymeCard | null
-}
-
-type HomologyPayload = {
-  jobId: string
-  status: string
-  progress?: number | null
-  results: HomologyResultItem[]
-}
-
 export type StructureSearchCompoundHit = {
   compoundId: string
   name: string
@@ -136,29 +122,6 @@ export type EntrySearchParams = {
   pageSize?: number
 }
 
-export type DownloadFormat = 'csv' | 'fasta' | 'tsv' | 'txt' | 'xlsx'
-
-export type DownloadQueueItem = {
-  entityType: string
-  entityId: string
-  displayLabel: string
-}
-
-export type DownloadPreviewData = {
-  columns: string[]
-  rowCount: number
-  estimatedFileName: string
-}
-
-type DownloadRequest = {
-  downloadType: string
-  items: DownloadQueueItem[]
-  fields: string[]
-  format: DownloadFormat
-  includeExternalLinks?: boolean
-  includeGraphImage?: boolean
-}
-
 export async function loadApiDataset(): Promise<ApiDataset> {
   const [metadata, graph] = await Promise.all([
     request<FilterOptionsPayload>('/metadata/filter-options'),
@@ -179,18 +142,6 @@ export async function searchApiEntries({ q, organismName, pageSize = 80 }: Entry
 
   const payload = await request<{ items: EnzymeCard[] }>(`/search/entries?${params.toString()}`)
   return payload.items.map((enzyme) => enzymeEntity(enzyme))
-}
-
-export async function searchHomologyEntries(sequence: string, maxResults = 50): Promise<Entity[]> {
-  const payload = await request<HomologyPayload>('/homology/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sequence, maxResults }),
-  })
-
-  return payload.results
-    .filter((result) => result.card)
-    .map((result) => homologyEntity(result))
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -357,15 +308,32 @@ function enzymeEntity(enzyme: EnzymeCard, source?: CompoundCard, target?: Compou
   }
 }
 
-function homologyEntity(result: HomologyResultItem): Entity {
-  const entity = enzymeEntity(result.card!)
-  entity.tags = ['Homology hit', ...entity.tags]
-  entity.fields = [
-    field('Identity', result.identity === null || result.identity === undefined ? null : `${result.identity}%`),
-    field('E-value', result.eValue.toExponential(2)),
-    ...entity.fields,
-  ].filter(Boolean) as Array<{ label: string; value: string }>
-  return entity
+/** The queue entry for an enzyme the detail page has already loaded.
+ *
+ * A queue entry has to carry its own `kind` and fields: `toggleQueue` resolves
+ * a bare id through the graph sample — 60 compound nodes, no enzymes — so the
+ * exportable-kind guard drops it before it ever reaches the table. The detail
+ * page holds the record already, so it hands the entry over whole.
+ */
+export function enzymeDetailQueueEntity(detail: EnzymeDetailData): Entity {
+  return {
+    id: detail.enzymeId,
+    kind: 'enzyme',
+    name: detail.primaryName,
+    subtitle: [detail.uniprotId || detail.databaseCode, detail.organismName].filter(Boolean).join(' · '),
+    description: detail.secondaryNames.length > 0
+      ? detail.secondaryNames.join('; ')
+      : 'Enzyme record from the terpene pathway database.',
+    tags: ['Enzyme'],
+    species: detail.organismName || undefined,
+    fields: [
+      field('UniProt', detail.uniprotId),
+      field('Organism', detail.organismName),
+      field('Gene name', detail.gene?.geneName),
+      field('EC number', detail.reactions.map((reaction) => reaction.ecNumber).filter(Boolean)[0]),
+    ].filter(Boolean) as Array<{ label: string; value: string }>,
+    related: [],
+  }
 }
 
 function reactionEntity(edge: ReactionEdge, source?: CompoundCard, target?: CompoundCard, enzyme?: EnzymeCard | null): Entity {
@@ -523,6 +491,15 @@ export type HomeGraphEdge = {
   card?: HomeGraphEnzymeCard | null
 }
 
+export type HomeGraphEdgeGroupItem = {
+  edgeId: string
+  enzymeId: string
+  label?: string | null
+  organismName?: string | null
+  sourceType?: string | null
+  reviewStatus?: string | null
+}
+
 export type HomeGraphEdgeGroup = {
   edgeGroupId: string
   sourceCompoundId: string
@@ -530,12 +507,18 @@ export type HomeGraphEdgeGroup = {
   label: string
   count: number
   edgeIds: string[]
+  items?: HomeGraphEdgeGroupItem[] | null
 }
 
 export type HomeGraphData = {
   nodes: HomeGraphCompound[]
   edges: HomeGraphEdge[]
   edgeGroups: HomeGraphEdgeGroup[]
+}
+
+export type HomeEnzymeHit = {
+  items: HomeGraphEnzymeCard[]
+  total: number
 }
 
 export type EnzymeGeneDetail = {
@@ -629,15 +612,159 @@ export type HomeGraphRequest = {
   selectionMode?: 'global'
 }
 
+/** One compound-pair step of a pathway, tied to the map edge that realises it
+ *  (single ``edgeId`` or composite ``edgeGroupId``). Kept on the card as the
+ *  extension point for the upcoming pathway detail page. */
+export type HomePathwaySegment = {
+  sourceCompoundId: string
+  targetCompoundId: string
+  edgeId?: string | null
+  edgeGroupId?: string | null
+}
+
 export type HomePathwayCard = {
   pathwayId: string
   summary: string
   compoundIds: string[]
   edgeIds: string[]
   edgeGroupIds: string[]
+  segments: HomePathwaySegment[]
   stepCount: number
   score?: number | null
   graph?: HomeGraphData | null
+}
+
+export type CompoundSuggestion = {
+  compoundId: string
+  name: string
+  chebiId?: string | null
+}
+
+export type PathwaySearchResult = {
+  items: HomePathwayCard[]
+  total: number
+  graph: HomeGraphData
+}
+
+export type PathwaySearchParams = {
+  startCompoundId: string
+  endCompoundId: string
+  viaCompoundIds?: string[]
+  maxSteps?: number
+  limit?: number
+}
+
+export async function loadMetadataFilters(): Promise<FilterOptionsPayload> {
+  return request<FilterOptionsPayload>('/metadata/filter-options')
+}
+
+export type TableEnzymeRow = {
+  enzymeId: string
+  primaryName: string
+  uniprotId?: string | null
+  organismName?: string | null
+  geneName?: string | null
+  ecNumbers: string[]
+  sourceTypes: string[]
+  reactionCount: number
+}
+
+export type TableEnzymePayload = {
+  items: TableEnzymeRow[]
+  total: number
+}
+
+export async function searchTableEnzymes({
+  q,
+  limit = 600,
+}: {
+  q: string
+  limit?: number
+}): Promise<TableEnzymePayload> {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return request<TableEnzymePayload>(`/search/table?${params.toString()}`)
+}
+
+/** Rich aggregated rows for an explicit enzyme-id list (caller order preserved). */
+export async function searchTableEnzymesByIds(enzymeIds: string[]): Promise<TableEnzymePayload> {
+  return request<TableEnzymePayload>('/search/table/by-ids', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enzymeIds }),
+  })
+}
+
+export async function searchEnzymeHits({
+  q,
+  organismName,
+  pageSize = 80,
+}: EntrySearchParams): Promise<HomeEnzymeHit> {
+  const params = new URLSearchParams({
+    q,
+    view_mode: 'table',
+    page: '1',
+    page_size: String(pageSize),
+  })
+  if (organismName) params.set('organism_name', organismName)
+
+  const payload = await request<{ items: HomeGraphEnzymeCard[]; pagination?: { total?: number } }>(
+    `/search/entries?${params.toString()}`,
+  )
+  return {
+    items: payload.items,
+    total: payload.pagination?.total ?? payload.items.length,
+  }
+}
+
+export async function loadGraphForEnzymes(
+  enzymeIds: string[],
+  options: { limitNodes?: number; sourceTypes?: string[]; reviewStatuses?: string[] } = {},
+): Promise<HomeGraphData> {
+  return request<HomeGraphData>('/graph/by-enzymes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      enzymeIds,
+      limitNodes: options.limitNodes ?? 60,
+      sourceTypes: options.sourceTypes,
+      reviewStatuses: options.reviewStatuses,
+    }),
+  })
+}
+
+export type MapScopeResult = {
+  kind: 'compound' | 'enzyme' | 'none'
+  query: string
+  total: number
+  shown: number
+  anchorIds: string[]
+  anchorNames: string[]
+  anchorLabel?: string | null
+  reactionCount: number
+  enzymeIds: string[]
+  graph: HomeGraphData
+}
+
+export type MapScopeParams = {
+  q: string
+  limitReactions?: number
+  limitNodes?: number
+  sourceTypes?: string[]
+  reviewStatuses?: string[]
+}
+
+export async function mapScopeSearch(params: MapScopeParams): Promise<MapScopeResult> {
+  return request<MapScopeResult>('/graph/map-scope', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      q: params.q,
+      sourceTypes: params.sourceTypes,
+      reviewStatuses: params.reviewStatuses,
+      limitReactions: params.limitReactions ?? 14,
+      limitNodes: params.limitNodes ?? 90,
+    }),
+  })
 }
 
 export async function loadHomeGraph(options: HomeGraphRequest = {}): Promise<HomeGraphData> {
@@ -650,18 +777,28 @@ export async function loadHomeGraph(options: HomeGraphRequest = {}): Promise<Hom
   return request<HomeGraphData>(`/graph?${params.toString()}`)
 }
 
-export async function searchHomePathways(startCompoundId: string, endCompoundId: string, maxSteps = 6): Promise<HomePathwayCard[]> {
-  const payload = await request<{ items: HomePathwayCard[] }>('/search/pathways', {
+/** Pathway-mode search: distinct start → (…via…) → end compound chains plus the
+ *  union graph of every returned pathway (nodes + single edges + composite edge
+ *  groups), so the map can draw all results and highlight one at a time. */
+export async function runPathwaySearch(params: PathwaySearchParams): Promise<PathwaySearchResult> {
+  return request<PathwaySearchResult>('/search/pathways', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      startCompoundId,
-      endCompoundId,
-      maxSteps,
-      limit: 3,
+      startCompoundId: params.startCompoundId,
+      endCompoundId: params.endCompoundId,
+      viaCompoundIds: params.viaCompoundIds ?? [],
+      maxSteps: params.maxSteps ?? 6,
+      limit: params.limit ?? 40,
     }),
   })
-  return payload.items
+}
+
+/** Compound-dictionary autocomplete for the pathway composer (displayable
+ *  compounds only — never water/proton/diphosphate). */
+export async function suggestCompounds(q: string, limit = 12): Promise<CompoundSuggestion[]> {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return request<CompoundSuggestion[]>(`/compounds/suggest?${params.toString()}`)
 }
 
 export async function loadEnzymeDetail(enzymeId: string): Promise<EnzymeDetailData> {
@@ -673,52 +810,175 @@ export async function loadExpandedEdgeGroup(edgeGroupId: string): Promise<HomeGr
   return payload.edges
 }
 
-export async function createEnzymeDownload(enzymeId: string, label: string): Promise<{ fileUrl?: string | null; status: string }> {
-  return createDownloadFile({
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
+
+/** A hand-picked enzyme on one pathway step. */
+export type DownloadPathwayStep = {
+  step: number
+  sourceId: string
+  sourceName: string
+  targetId: string
+  targetName: string
+  enzymes: Array<{
+    enzymeId: string
+    name?: string
+    organismName?: string | null
+    uniprotId?: string | null
+  }>
+}
+
+/** One record to export. An enzyme item only needs `entityId`; a pathway item also
+ *  carries its ordered compound chain and any per-step enzyme choices, because
+ *  there is no server-side route cache to resolve a pathway id against. */
+export type DownloadItem = {
+  entityType: 'enzyme' | 'pathway'
+  entityId: string
+  displayLabel?: string
+  compoundIds?: string[]
+  compoundNames?: string[]
+  steps?: DownloadPathwayStep[]
+}
+
+export type DownloadFieldGroup = {
+  key: string
+  label: string
+  fields: Array<{ key: string; label: string }>
+}
+
+export type DownloadFieldCatalog = {
+  groups: DownloadFieldGroup[]
+  defaultFields: string[]
+  formats: Record<string, Array<{ key: string; label: string }>>
+}
+
+export type DownloadResult = {
+  fileUrl: string
+  status: string
+  stats: Record<string, number>
+  unknownFields: string[]
+}
+
+export type DownloadRequest = {
+  downloadType: 'enzyme' | 'pathway'
+  items: DownloadItem[]
+  fields: string[]
+  format: string
+  /** The pathway export bundles the enzyme page's table too, so a pathway
+   *  download also sends whatever enzymes the queue is holding. */
+  enzymeItems?: DownloadItem[]
+}
+
+/** The column universe, so the picker never mirrors the backend's FIELD_MAP. */
+export async function fetchDownloadFields(): Promise<DownloadFieldCatalog> {
+  return request<DownloadFieldCatalog>('/download/fields')
+}
+
+/** What the current setup would write, without writing it. */
+export type DownloadPreview = {
+  /** The real header row. Not necessarily the picked columns — FASTA force-adds
+   *  the fields it cannot do without. */
+  columns: string[]
+  /** Rows the database can actually resolve, so an id that no longer exists is
+   *  not counted. */
+  rowCount: number
+  estimatedFileName: string
+  unknownFields: string[]
+}
+
+/** POST a download request and return its `data`.
+ *
+ *  Written out rather than going through `request`, because the service refuses a
+ *  format the page may not ask for with a FastAPI `detail` string — and that
+ *  string is the only thing worth showing the user. */
+async function postDownload<T>(path: string, body: DownloadRequest): Promise<T> {
+  const response = await fetch(`${API_PREFIX}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.detail || payload?.error?.message || `Download failed (${response.status})`)
+  }
+  if (!payload?.success) {
+    throw new Error(payload?.error?.message || 'Download failed')
+  }
+  return payload.data as T
+}
+
+/** Build an export and return its URL. */
+export async function createDownload(body: DownloadRequest): Promise<DownloadResult> {
+  return postDownload<DownloadResult>('/download/files', body)
+}
+
+/** Count what the setup would write, so the page can say what a download is
+ *  about to produce. Takes the same body as `createDownload`, so what is
+ *  previewed and what is written are the same request. */
+export async function previewDownload(body: DownloadRequest): Promise<DownloadPreview> {
+  return postDownload<DownloadPreview>('/download/preview', body)
+}
+
+/** The enzyme detail page's single-record export. */
+export async function createEnzymeDownload(enzymeId: string, label: string): Promise<DownloadResult> {
+  return createDownload({
     downloadType: 'enzyme',
-    items: [
-      {
-        entityType: 'enzyme',
-        entityId: enzymeId,
-        displayLabel: label,
-      },
-    ],
+    items: [{ entityType: 'enzyme', entityId: enzymeId, displayLabel: label }],
     fields: [
-      'primaryName',
-      'databaseCode',
-      'uniprotId',
-      'organismName',
-      'ecNumber',
-      'reactionEquation',
-      'direction',
-      'smiles',
-      'geneName',
-      'genbankId',
-      'doi',
-      'pubmedId',
+      'databaseCode', 'primaryName', 'uniprotId', 'organismName',
+      'ecNumber', 'reactionEquation', 'direction', 'reactionSmiles',
+      'geneName', 'genbankId', 'doi', 'pubmedId',
     ],
     format: 'csv',
-    includeExternalLinks: true,
-    includeGraphImage: false,
-  })
-}
-
-export async function previewDownloadFile(requestBody: DownloadRequest): Promise<DownloadPreviewData> {
-  return request<DownloadPreviewData>('/download/preview', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  })
-}
-
-export async function createDownloadFile(requestBody: DownloadRequest): Promise<{ fileUrl?: string | null; status: string }> {
-  return request<{ fileUrl?: string | null; status: string }>('/download/files', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
   })
 }
 
 export async function searchStructureByInchikey(inchikey: string): Promise<StructureSearchResult> {
   return request<StructureSearchResult>(`/ketcher/search?${new URLSearchParams({ inchikey }).toString()}`)
+}
+
+export type BlastHit = {
+  enzymeId: string
+  isoformId?: string | null
+  subjectType: 'canonical' | 'isoform'
+  subjectLength: number
+  eValue: number
+  identity: number
+  queryCover: number
+  alignmentLength: number
+  bitscore: number
+  card?: EnzymeCard | null
+}
+
+export type BlastPayload = {
+  queryLength: number
+  searchedSubjects: number
+  threshold: number
+  hits: BlastHit[]
+}
+
+/** One completed BLAST run, held at App level so the shared table/map result
+ *  views can render it (with E-values) like a keyword search session. */
+export type BlastSession = {
+  id: number
+  payload: BlastPayload
+}
+
+export type BlastSearchParams = {
+  sequence: string
+  eValueThreshold?: number
+  maxResults?: number
+}
+
+export async function runBlastSearch(params: BlastSearchParams): Promise<BlastPayload> {
+  return request<BlastPayload>('/blast/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sequence: params.sequence,
+      eValueThreshold: params.eValueThreshold ?? 1e-5,
+      maxResults: params.maxResults ?? 100,
+    }),
+  })
 }

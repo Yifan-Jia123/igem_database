@@ -24,6 +24,7 @@ router = APIRouter()
 MEDIA_TYPES = {
     ".csv": "text/csv",
     ".tsv": "text/tab-separated-values",
+    ".txt": "text/plain; charset=utf-8",
     ".json": "application/json",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".fasta": "text/plain",

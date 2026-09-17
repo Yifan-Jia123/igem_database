@@ -4409,7 +4409,7 @@ body:has(.home-map-page) {
   width: 100%;
   padding: 8px;
   border-radius: 18px;
-  background: rgba(242, 240, 246, 0.94);
+  background: rgba(249, 247, 252, 0.98);
   color: #2c2341;
 }
 
@@ -4428,12 +4428,13 @@ body:has(.home-map-page) {
 }
 
 .dataset-select-menu button small {
-  color: rgba(44, 35, 65, 0.58);
+  color: rgba(44, 35, 65, 0.76);
   font-size: 11px;
 }
 
 .dataset-select-menu button.is-active {
-  background: rgba(110, 93, 145, 0.14);
+  background: rgba(110, 93, 145, 0.2);
+  box-shadow: inset 3px 0 0 #6e5d91;
 }
 
 .dataset-select-menu button:disabled {
@@ -6792,7 +6793,7 @@ body:has(.home-map-page) {
 }
 
 .graph-filter-sidebar .dataset-pill-button span {
-  color: rgba(248, 251, 255, 0.62);
+  color: rgba(248, 251, 255, 0.82);
   font-size: 11px;
 }
 
@@ -6816,6 +6817,41 @@ body:has(.home-map-page) {
 .graph-filter-sidebar .download-pill:hover {
   background: rgba(237, 227, 175, 0.12);
   color: #ffffff;
+}
+
+.graph-zoom-controls {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 10px 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(237, 227, 175, 0.18);
+}
+
+.graph-zoom-controls button {
+  min-height: 28px;
+  border: 1px solid rgba(248, 251, 255, 0.22);
+  border-radius: 5px;
+  background: rgba(8, 26, 58, 0.2);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.graph-zoom-controls button:hover {
+  background: rgba(237, 227, 175, 0.18);
+}
+
+.graph-zoom-controls span {
+  color: rgba(248, 251, 255, 0.86);
+  font-size: 11px;
+  text-align: center;
+}
+
+.graph-zoom-controls button:last-child {
+  grid-column: 1 / -1;
+  width: 100%;
+  font-size: 11px;
 }
 
 .graph-filter-sidebar .download-pill {
@@ -7052,6 +7088,24 @@ body:has(.home-map-page) {
   cursor: grab;
 }
 
+.home-map-page .home-map-svg.is-dragging .home-map-camera,
+.home-map-page .home-map-svg.is-dragging .home-map-node,
+.home-map-page .home-map-node.dragging,
+.home-map-page .home-map-node.dragging text,
+.home-map-page .home-map-node.dragging circle {
+  transition: none !important;
+}
+
+.home-map-page .home-map-svg.is-dragging .home-map-node circle,
+.home-map-page .home-map-node.dragging circle {
+  filter: none !important;
+}
+
+.home-map-page .home-map-svg.is-dragging,
+.home-map-page .home-map-node.dragging circle {
+  cursor: grabbing;
+}
+
 .home-map-page .home-map-node:hover circle:not(.selected-ring) {
   fill: #f4eab8;
   stroke: rgba(166, 104, 125, 0.72);
@@ -7275,12 +7329,36 @@ body:has(.home-map-page) {
 
 .home-map-page .enzyme-card {
   grid-template-columns: 38px minmax(0, 1fr) 112px;
+  align-items: start;
   gap: 12px;
   min-height: 104px;
   padding: 12px;
   border-radius: 6px;
   background: rgba(8, 26, 58, 0.92);
   color: #ffffff;
+}
+
+.home-map-page .enzyme-card .card-check {
+  align-self: start;
+  justify-self: center;
+  margin-top: 1px;
+}
+
+.home-map-page .enzyme-card-copy,
+.home-map-page .enzyme-card-meta {
+  min-width: 0;
+}
+
+.home-map-page .enzyme-card-copy h3,
+.home-map-page .enzyme-card-copy p,
+.home-map-page .enzyme-card-meta strong,
+.home-map-page .enzyme-card-meta small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.home-map-page .enzyme-card-meta {
+  align-content: start;
 }
 
 .home-map-page .enzyme-card.selected {
@@ -7442,6 +7520,19 @@ body:has(.home-map-page) {
     top: 690px;
     width: auto;
     max-height: 250px;
+  }
+
+  .home-map-page .enzyme-card {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .home-map-page .enzyme-card-meta {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .home-map-page .enzyme-card-meta button {
+    justify-self: start;
   }
 
   .home-map-page .map-footer-stats.home-map-stats {

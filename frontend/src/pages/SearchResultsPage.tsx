@@ -127,6 +127,10 @@ export type DisplayRow = TableEnzymeRow & {
   }
 }
 
+function displayRowKey(row: DisplayRow) {
+  return `${row.enzymeId}:${row.blastHit ? row.blastHit.rank : 'row'}`
+}
+
 function blastThresholdLabel(value: number): string {
   return value === 10 ? '10' : value.toExponential(0)
 }
@@ -218,6 +222,7 @@ export function SearchResultsPage({
   const [organismQuery, setOrganismQuery] = useState('')
   const [ecText, setEcText] = useState('')
   const [structureOpen, setStructureOpen] = useState(false)
+  const [selectedResultKey, setSelectedResultKey] = useState<string | null>(null)
 
   const blastMode = Boolean(blastSession)
   const blastPayload = blastSession?.payload ?? null
@@ -362,6 +367,14 @@ export function SearchResultsPage({
     })
   }, [baseRows, selectedSources, selectedOrganisms, ecFilter.prefixes])
 
+  useEffect(() => {
+    if (!selectedResultKey) return
+    const selectionVisible = filteredItems.some((row) => {
+      return displayRowKey(row as DisplayRow) === selectedResultKey
+    })
+    if (!selectionVisible) setSelectedResultKey(null)
+  }, [filteredItems, selectedResultKey])
+
   const resetFilters = () => {
     setSelectedSources([])
     setSelectedOrganisms([])
@@ -409,8 +422,15 @@ export function SearchResultsPage({
     const queued = isQueued(row.enzymeId)
     const ecs = presentEcNumbers(row)
     const hit = row.blastHit
+    const resultKey = displayRowKey(row)
+    const selected = selectedResultKey === resultKey
     return (
-      <article key={`${row.enzymeId}:${hit ? hit.rank : 'row'}`} className={`search-table-card ${hit ? 'has-blast-hit' : ''}`}>
+      <article
+        key={resultKey}
+        className={`search-table-card ${hit ? 'has-blast-hit' : ''} ${selected ? 'selected' : ''}`}
+        onClick={() => setSelectedResultKey(resultKey)}
+        aria-current={selected ? 'true' : undefined}
+      >
         <div className="search-table-card-head">
           <div className="search-table-card-titles">
             <h3>{row.primaryName}</h3>
@@ -528,11 +548,13 @@ export function SearchResultsPage({
         </header>
 
         <div className="search-table-body">
-          <aside className="search-table-filter" aria-label="Table result filters">
-            <div className="search-table-filter-title">Filters</div>
-
-            <div className="search-table-filter-group">
-              <div className="search-table-filter-label">Data source</div>
+          <section className="search-table-filter" aria-label="Table result filters">
+            <details className="search-table-filter-dropdown">
+              <summary>
+                <span>Data source</span>
+                <small>{selectedSources.length === 0 ? 'All' : `${selectedSources.length} selected`}</small>
+              </summary>
+              <div className="search-table-filter-popover">
               <div className="search-table-source-row">
                 {Object.entries(SOURCE_LABELS).map(([value, label]) => {
                   const active = selectedSources.includes(value)
@@ -550,10 +572,15 @@ export function SearchResultsPage({
                   )
                 })}
               </div>
-            </div>
+              </div>
+            </details>
 
-            <div className="search-table-filter-group">
-              <div className="search-table-filter-label">Organism</div>
+            <details className="search-table-filter-dropdown">
+              <summary>
+                <span>Organism</span>
+                <small>{selectedOrganisms.length === 0 ? 'All' : `${selectedOrganisms.length} selected`}</small>
+              </summary>
+              <div className="search-table-filter-popover">
               <div className="search-table-org-search">
                 <Search size={13} />
                 <input value={organismQuery} onChange={(event) => setOrganismQuery(event.target.value)} placeholder="Search organisms…" />
@@ -579,10 +606,15 @@ export function SearchResultsPage({
                   <div className="search-table-filter-empty">No organisms in the current results.</div>
                 )}
               </div>
-            </div>
+              </div>
+            </details>
 
-            <div className="search-table-filter-group search-table-ec-group">
-              <div className="search-table-filter-label">EC number</div>
+            <details className="search-table-filter-dropdown search-table-ec-group">
+              <summary>
+                <span>EC number</span>
+                <small>{ecFilter.prefixes.length === 0 ? 'Any' : ecFilter.prefixes.join(', ')}</small>
+              </summary>
+              <div className="search-table-filter-popover">
               <input
                 className={`search-table-ec-input ${ecFilter.invalid ? 'invalid' : ''}`}
                 value={ecText}
@@ -592,13 +624,14 @@ export function SearchResultsPage({
               />
               <p className="search-table-ec-hint">Enter one or more 4-part EC numbers. Fill digits left to right; empty trailing positions do not filter.</p>
               {ecFilter.invalid && <p className="search-table-ec-error">“{ecFilter.invalid}” is not a valid EC prefix (digits and dots only, up to 4 digits).</p>}
-            </div>
+              </div>
+            </details>
 
             <button className="search-table-reset" type="button" onClick={resetFilters} disabled={!anyFilterActive}>
               <X size={13} />
               Reset filters
             </button>
-          </aside>
+          </section>
 
           <div className="search-table-main">
             {blastMode ? (
@@ -632,11 +665,6 @@ export function SearchResultsPage({
                 <div className="search-table-summary">
                   <div className="search-table-summary-query">
                     <span>BLAST hits</span>
-                    {anyFilterActive && (
-                      <button type="button" onClick={resetFilters} title="Clear all filters">
-                        <X size={12} />
-                      </button>
-                    )}
                   </div>
                   <div className="search-table-result-count">
                     {blastLoading && blastRows === null ? (
@@ -694,11 +722,6 @@ export function SearchResultsPage({
                   <div className="search-table-summary-query">
                     <span>Results for</span>
                     <strong>“{activeQuery}”</strong>
-                    {anyFilterActive && (
-                      <button type="button" onClick={resetFilters} title="Clear all filters">
-                        <X size={12} />
-                      </button>
-                    )}
                   </div>
                   <div className="search-table-result-count">
                     {loading ? (

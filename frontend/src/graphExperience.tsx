@@ -140,6 +140,7 @@ type PanState = {
   startClientY: number
   originCamera: Point
   moved: boolean
+  startedOnBackground: boolean
 }
 
 type NodeDragState = {
@@ -285,6 +286,7 @@ export function CompoundGraphHome({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [positions, setPositions] = useState<Record<string, Point>>({})
   const [camera, setCamera] = useState<Point>({ x: 0, y: 0 })
+  const [zoomScale, setZoomScale] = useState(1)
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null)
   const [expandedEdges, setExpandedEdges] = useState<HomeGraphEdge[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
@@ -374,6 +376,7 @@ export function CompoundGraphHome({
   const [speciesMenuOpen, setSpeciesMenuOpen] = useState(false)
   const [speciesQuery, setSpeciesQuery] = useState('')
   const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
+  const [mapDragging, setMapDragging] = useState(false)
   const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<PanState | null>(null)
@@ -747,6 +750,7 @@ export function CompoundGraphHome({
       startClientY: event.clientY,
       originCamera: cameraRef.current,
       moved: false,
+      startedOnBackground: event.target instanceof SVGRectElement && event.target.classList.contains('home-map-pan-layer'),
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -762,7 +766,10 @@ export function CompoundGraphHome({
     const rect = svg.getBoundingClientRect()
     const deltaX = ((event.clientX - panState.startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH
     const deltaY = ((event.clientY - panState.startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT
-    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) panState.moved = true
+    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) {
+      if (!panState.moved) setMapDragging(true)
+      panState.moved = true
+    }
     const nextCamera = { x: panState.originCamera.x + deltaX, y: panState.originCamera.y + deltaY }
     cameraRef.current = nextCamera
     setCamera(nextCamera)
@@ -776,7 +783,9 @@ export function CompoundGraphHome({
     const panState = panRef.current
     if (!panState || panState.pointerId !== event.pointerId) return
     panRef.current = null
+    setMapDragging(false)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    if (!panState.moved && panState.startedOnBackground) clearPairSelection()
   }
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGCircleElement>, node: NodeCard, point: Point) => {
@@ -808,7 +817,7 @@ export function CompoundGraphHome({
     const dragState = nodeDragRef.current
     const svg = svgRef.current
     if (!dragState || dragState.pointerId !== pointerId || !svg) return false
-    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY)
+    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY, zoomScale)
     if (Math.abs(delta.x) > 0.35 || Math.abs(delta.y) > 0.35) dragState.moved = true
     const nextPoint = {
       x: dragState.originPoint.x + delta.x,
@@ -963,6 +972,14 @@ export function CompoundGraphHome({
     setSelectedLibraryItem(null)
     setSearchFeedback(null)
   }
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearPairSelection()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [])
 
   const toggleSpeciesFilter = (species: string) => {
     setActiveFilters((prev) => ({
@@ -1742,6 +1759,11 @@ export function CompoundGraphHome({
   }
 
   const homeMapStyle = { ['--home-label-scale' as string]: String(labelFontScale) } as CSSProperties
+  const adjustZoom = (next: number) => setZoomScale(Math.min(2.5, Math.max(0.6, next)))
+  const handleMapWheel = (event: React.WheelEvent<SVGSVGElement>) => {
+    event.preventDefault()
+    adjustZoom(zoomScale * (event.deltaY < 0 ? 1.12 : 0.89))
+  }
 
   return (
     <div className="home-map-page" style={homeMapStyle}>
@@ -1929,11 +1951,22 @@ export function CompoundGraphHome({
                 </div>
                 <div className="control-menu-actions">
                   <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
-                  <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
-                  <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
                 </div>
               </div>
             )}
+          </div>
+
+          <button className="graph-filter-link" type="button" onClick={clearPairSelection}>
+            Clear selection
+          </button>
+          <button className="graph-filter-link" type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>
+            Open search library
+          </button>
+          <div className="graph-zoom-controls" aria-label="Map zoom controls">
+            <button type="button" onClick={() => adjustZoom(zoomScale - 0.1)} aria-label="Zoom out">−</button>
+            <span>{Math.round(zoomScale * 100)}%</span>
+            <button type="button" onClick={() => adjustZoom(zoomScale + 0.1)} aria-label="Zoom in">+</button>
+            <button type="button" onClick={() => adjustZoom(1)} aria-label="Reset zoom">Reset</button>
           </div>
 
           <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
@@ -2064,7 +2097,7 @@ export function CompoundGraphHome({
         {!loading && !error && graph && (
           <svg
             ref={svgRef}
-            className="home-map-svg home-live-map"
+            className={`home-map-svg home-live-map ${mapDragging ? 'is-dragging' : ''}`}
             viewBox={`0 0 ${HOME_VIEWBOX_WIDTH} ${HOME_VIEWBOX_HEIGHT}`}
             role="img"
             aria-label="Draggable compound graph"
@@ -2072,6 +2105,7 @@ export function CompoundGraphHome({
             onPointerMove={handleMapPointerMove}
             onPointerUp={finishMapPan}
             onPointerCancel={finishMapPan}
+            onWheel={handleMapWheel}
           >
             <defs>
               <marker id="home-map-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
@@ -2086,7 +2120,7 @@ export function CompoundGraphHome({
             </defs>
             <rect className="home-map-pan-layer" x="0" y="0" width={HOME_VIEWBOX_WIDTH} height={HOME_VIEWBOX_HEIGHT} />
 
-            <g className="home-map-camera" transform={`translate(${camera.x} ${camera.y})`}>
+            <g className="home-map-camera" transform={`translate(${camera.x + HOME_VIEWBOX_WIDTH / 2} ${camera.y + HOME_VIEWBOX_HEIGHT / 2}) scale(${zoomScale}) translate(${-HOME_VIEWBOX_WIDTH / 2} ${-HOME_VIEWBOX_HEIGHT / 2})`}>
               <g className="home-map-edges live-map-edges">
                 {viewModel.pairs.map((pair) => {
                   const source = positions[pair.sourceId]
@@ -4234,11 +4268,12 @@ function edgePath(source: Point, target: Point, offset = 0) {
   const ny = dx / length
   return `M ${source.x} ${source.y} Q ${midX + nx * offset} ${midY + ny * offset} ${target.x} ${target.y}`
 }
-function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number) {
+function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number, scale = 1) {
   const rect = svg.getBoundingClientRect()
+  const safeScale = Math.max(scale, 0.001)
   return {
-    x: ((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
-    y: ((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
+    x: (((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH) / safeScale,
+    y: (((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT) / safeScale,
   }
 }
 function getNodeExpansionDirection(point: Point, camera: Point): ExpansionDirection | null {

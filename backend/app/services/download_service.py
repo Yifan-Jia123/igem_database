@@ -125,6 +125,7 @@ SUPPORTED_FORMATS: Dict[str, str] = {
     "xlsx":  "Excel workbook",
     "csv":   "CSV — comma separated",
     "tsv":   "TSV — tab separated",
+    "txt":   "TXT — labelled text records",
     "json":  "JSON array",
 }
 PATHWAY_FORMATS: Dict[str, str] = {"zip": "ZIP — folder tree + Markdown diagram"}
@@ -438,6 +439,15 @@ def _write_json(filepath: str, rows: List[dict], fields: List[str]):
         json.dump(payload, handle, ensure_ascii=False, indent=2)
 
 
+def _write_txt(filepath: str, rows: List[dict], fields: List[str]):
+    with open(filepath, "w", encoding="utf-8") as handle:
+        for row_index, row in enumerate(rows):
+            if row_index > 0:
+                handle.write("\n")
+            for field in fields:
+                handle.write(f"{FIELD_MAP[field]['label']}: {_clip(row.get(field, ''))}\n")
+
+
 def _write_xlsx(filepath: str, rows: List[dict], fields: List[str], sheet_title: str = "Export"):
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet(title=_safe_token(sheet_title, "Export", 31))
@@ -748,6 +758,8 @@ async def generate_file(
             _write_delimited(filepath, rows, accepted, ",")
         elif resolved_format == "tsv":
             _write_delimited(filepath, rows, accepted, "\t")
+        elif resolved_format == "txt":
+            _write_txt(filepath, rows, accepted)
         elif resolved_format == "json":
             _write_json(filepath, rows, accepted)
         elif resolved_format == "xlsx":

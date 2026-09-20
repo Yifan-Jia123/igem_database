@@ -1,6 +1,10 @@
 import csv
 import re
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from protein_name import split_recommended_name  # noqa: E402
 
 # 用法: python parse_names.py [原始TSV] [输出parsed.tsv]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else '../uniprotkb_terpene_AND_reviewed_true_2026_07_10.tsv'
@@ -13,18 +17,10 @@ with open(INPUT, 'r', encoding='utf-8') as f:
     for row in reader:
         raw = row.get('Protein names', '')
 
-        # ---- 1. 提取推荐名（优先在 (EC X.X.X.X) 前切分，避免立体化学前缀的括号被误切） ----
-        # 很多酶名以 (-)、(+) 、(R)、(4S)、(E,E) 等立体化学前缀开头，
-        # 如果用第一个 '(' 切分会把名字切碎。
-        # 改为优先切在 (EC number) 处；若没有 EC 则回退到原逻辑。
-        ec_split = re.split(r'\s*\(EC\s+\d+\.\d+\.\d+', raw, maxsplit=1)
-        if len(ec_split) > 1:
-            rec_name = ec_split[0].strip().rstrip(',')
-        else:
-            rec_name = re.split(r'\s*\(', raw, maxsplit=1)[0].strip().rstrip(',')
-
-        # 去除 UniProt 双功能酶标记 [Includes: ...]（里面是独立活性，不应混在推荐名里）
-        rec_name = re.sub(r'\s*\[Includes:.*', '', rec_name).strip().rstrip(',')
+        # ---- 1. 提取推荐名 ----
+        # 切分逻辑已抽到 protein_name.py, 与 build_rhea_summary / build_enzyme_merged 共用:
+        # 三处内联过各自的版本, 行为还不一致(只有这里去掉 [Includes:]), 改一处另两处不跟着变。
+        rec_name = split_recommended_name(raw)
 
         # ---- 2. 提取所有顶级括号内的内容（处理嵌套括号如 ((2E,6E)-farnesyl...) ----
         paren_items = []
@@ -73,9 +69,12 @@ with open(INPUT, 'r', encoding='utf-8') as f:
         rows.append(row)
 
 # 重新排序列
+# 'Source' 由 download_uniprot.py 写入 RAW 统一表, 这里透传下去 (extrasaction='ignore'
+# 意味着不列出来的列会被丢掉 —— 漏掉它会让下游所有脚本都拿不到来源)。
 new_fields = ['Entry', 'Recommended name', 'Alternative names', 'EC numbers',
               'Entry Name', 'Organism', 'Gene Names (primary)',
-              'Kinetics', 'Function [CC]', 'Rhea ID', 'Gene Ontology (biological process)']
+              'Kinetics', 'Function [CC]', 'Rhea ID', 'Gene Ontology (biological process)',
+              'Source']
 
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     writer = csv.DictWriter(f, fieldnames=new_fields, delimiter='\t', extrasaction='ignore')

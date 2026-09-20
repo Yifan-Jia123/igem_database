@@ -2049,3 +2049,105 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ---------------------------------------------------------------------------
+   合并抽屉（`.merged-enzyme-drawer`）：点合并卡 / 合并线后，逐条列出被折起来的酶。
+   复用 `.pw-enzyme-drawer` 的整套骨架与 `.pw-drawer-candidate*` 行样式（同一个视觉
+   语言），这里只补它多出来的三件东西：筛选栏、条数说明、「Show more」。
+   --------------------------------------------------------------------------- */
+.merged-enzyme-drawer {
+  width: min(460px, 94vw);
+}
+
+/* 筛选栏：钉在头部与列表之间。3,595 条的列表靠滚动看，筛选框必须始终可达。 */
+.merged-drawer-bar {
+  flex: 0 0 auto;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid rgba(8, 26, 58, 0.1);
+  background: #eef4fc;
+}
+
+.pw-drawer-candidates-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 30px;
+  border: 1px solid rgba(8, 26, 58, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: rgba(8, 26, 58, 0.5);
+}
+
+.pw-drawer-candidates-search:focus-within {
+  border-color: rgba(8, 26, 58, 0.42);
+}
+
+.pw-drawer-candidates-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--graph-navy, #081a3a);
+  font: 500 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.pw-drawer-candidates-search button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pw-drawer-candidates-search button:hover {
+  background: rgba(8, 26, 58, 0.08);
+}
+
+/* 合并抽屉的头部把来源与化合物对分行写：化合物对可能很长。 */
+.merged-enzyme-drawer .pw-drawer-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.merged-drawer-count {
+  margin: 8px 0 0;
+  color: rgba(8, 26, 58, 0.62);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* 「Show 100 more」：分批渲染的出口。数字写清楚，让用户知道还剩多少 ——
+   不这么写的话，看到 100 行会以为整组就只有 100 个酶。 */
+.merged-drawer-more {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 7px 16px;
+  border: 1px dashed rgba(8, 26, 58, 0.28);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--graph-navy, #081a3a);
+  font: 700 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.merged-drawer-more:hover {
+  background: rgba(8, 26, 58, 0.06);
+}
+
+.merged-drawer-more small {
+  color: rgba(8, 26, 58, 0.5);
+  font-weight: 600;
+}

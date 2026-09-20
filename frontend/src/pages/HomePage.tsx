@@ -14,6 +14,7 @@ export function HomePage({
   onOpenBlast,
   onOpenBlastTable,
   onToggleQueue,
+  onQueueMany,
   openRecord: _openRecord,
   isQueued,
   autoMapSearch,
@@ -22,6 +23,8 @@ export function HomePage({
   autoBlastScope,
   onAutoBlastScopeConsumed,
   onResetHome,
+  searchSet,
+  onSearchSetChange,
 }: {
   queueCount: number
   entityCount: number
@@ -34,6 +37,8 @@ export function HomePage({
   onOpenBlast: () => void
   onOpenBlastTable: () => void
   onToggleQueue: (entry: string | Entity) => void
+  /** 批量入队（合并抽屉的「Queue all」）。 */
+  onQueueMany: (entries: Entity[]) => void
   openRecord: (entity: Entity) => void
   isQueued: (id: string) => boolean
   autoMapSearch?: { query: string; mode: 'enzyme' | 'pathway'; nonce: number } | null
@@ -44,6 +49,9 @@ export function HomePage({
   onAutoBlastScopeConsumed?: () => void
   /** Brand click → reset any app-wide search state and head back to home. */
   onResetHome?: () => void
+  /** 搜索集（检索范围）。空数组 = 全部。 */
+  searchSet: string[]
+  onSearchSetChange: (next: string[]) => void
 }) {
   return (
     <CompoundGraphHome
@@ -53,6 +61,7 @@ export function HomePage({
       onOpenBlast={onOpenBlast}
       onOpenBlastTable={onOpenBlastTable}
       onToggleQueue={onToggleQueue}
+      onQueueMany={onQueueMany}
       isQueued={isQueued}
       queueCount={queueCount}
       autoMapSearch={autoMapSearch}
@@ -61,6 +70,8 @@ export function HomePage({
       autoBlastScope={autoBlastScope}
       onAutoBlastScopeConsumed={onAutoBlastScopeConsumed}
       onResetHome={onResetHome}
+      searchSet={searchSet}
+      onSearchSetChange={onSearchSetChange}
     />
   )
 }

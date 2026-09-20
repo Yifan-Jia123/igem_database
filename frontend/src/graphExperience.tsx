@@ -9,6 +9,7 @@ import {
   Dna,
   Download,
   ExternalLink,
+  Layers,
   Link2,
   Loader2,
   Network,
@@ -42,8 +43,10 @@ import {
   type HomeGraphEdgeGroupItem,
   type HomePathwayCard,
 } from './api'
+import { SearchSetControl } from './components/SearchSetControl'
 import { StructureSearchDrawer } from './components/StructureSearchDrawer'
 import { fileNameFromUrl, saveFile } from './lib/saveFile'
+import { sourceLabel, sourceOptionsFromUnits } from './lib/sourceLabels'
 import type { Entity, EntityKind, PathwayEnzymeChoice, PathwayQueueStep } from './types'
 
 const HOME_EXPANSION_LIMIT = 36
@@ -81,14 +84,6 @@ type HomeActiveFilters = {
   sourceTypes: string[]
 }
 
-const HOME_SOURCE_LABELS: Record<string, string> = {
-  swiss_prot: 'Swiss-Prot',
-  trembl: 'TrEMBL',
-  ai_literature: 'AI (literature)',
-  manual_literature: 'Manual (literature)',
-}
-
-const HOME_SOURCE_ORDER = ['swiss_prot', 'trembl', 'ai_literature', 'manual_literature']
 
 function formatScopeEValue(value: number): string {
   return value === 0 ? '0' : value.toExponential(2)
@@ -124,6 +119,17 @@ type ExpandedEdgeGroup = {
   edgeIds: string[]
   reactionIds: string[]
   representative: HomeGraphEdge
+  // ---- 合并单元专有（逐酶分组上不存在）----
+  // 两条渲染路径（SVG / 卡片栈）按同一批字段取数，所以让合并单元**结构上兼容**
+  // 比在每个消费点写分支类型省事得多。
+  /** true = 这一条是「某来源的全部酶」的汇总，不是单个酶。 */
+  merged?: boolean
+  /** 被汇总的来源（`HomeGraphEdge.sourceType`）。 */
+  sourceType?: string
+  /** 被汇总的酶数（= members.length）。 */
+  memberCount?: number
+  /** 被汇总的逐酶分组，抽屉逐条列出时用。 */
+  members?: ExpandedEdgeGroup[]
 }
 
 type ForceLayoutLink = {
@@ -140,6 +146,7 @@ type PanState = {
   startClientY: number
   originCamera: Point
   moved: boolean
+  startedOnBackground: boolean
 }
 
 type NodeDragState = {
@@ -200,9 +207,6 @@ function homePairPassingUnits(pair: PairEntry, groupItemMap: Map<string, HomeGra
   return pair.edges.filter((edge) => homeEdgePasses(edge, filters))
 }
 
-function homeSourceLabel(sourceType: string) {
-  return HOME_SOURCE_LABELS[sourceType] || sourceType
-}
 
 function homeUnitLabel(unit: HomeGraphEdgeGroupItem | HomeGraphEdge) {
   if ('card' in unit && unit.card?.primaryName) return unit.card.primaryName
@@ -260,6 +264,9 @@ export function CompoundGraphHome({
   autoBlastScope,
   onAutoBlastScopeConsumed,
   onResetHome,
+  searchSet,
+  onSearchSetChange,
+  onQueueMany,
 }: {
   onOpenSearch: (query?: string) => void
   onOpenDownloads: () => void
@@ -267,6 +274,8 @@ export function CompoundGraphHome({
   onOpenBlast: () => void
   onOpenBlastTable: () => void
   onToggleQueue: (entry: string | Entity) => void
+  /** 批量入队（合并抽屉的「Queue all」）。逐条调 `onToggleQueue` 是 O(n²)。 */
+  onQueueMany: (entries: Entity[]) => void
   isQueued: (id: string) => boolean
   queueCount: number
   /** When the table-results page hands back to the map, run this query's scope search on mount. */
@@ -278,6 +287,9 @@ export function CompoundGraphHome({
   onAutoBlastScopeConsumed?: () => void
   /** Starase Atlas brand → drop every active scope/search and head home. */
   onResetHome?: () => void
+  /** 搜索集（检索范围，`[]` = 全部）。图上的取数、联想、scope 检索、展开、通路都按它圈定。 */
+  searchSet: string[]
+  onSearchSetChange: (next: string[]) => void
 }) {
   const [graph, setGraph] = useState<HomeGraphData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -285,11 +297,15 @@ export function CompoundGraphHome({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [positions, setPositions] = useState<Record<string, Point>>({})
   const [camera, setCamera] = useState<Point>({ x: 0, y: 0 })
+  const [zoomScale, setZoomScale] = useState(1)
   const [selectedPairKey, setSelectedPairKey] = useState<string | null>(null)
   const [expandedEdges, setExpandedEdges] = useState<HomeGraphEdge[]>([])
   const [expandedLoading, setExpandedLoading] = useState(false)
   const [mapExpanding, setMapExpanding] = useState(false)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  /** 被点开的合并单元（点合并卡或合并线）—— 抽屉逐条列出它折起来的那些酶。
+   *  没有它，被合并的酶就变成「看不到也下载不了」，那是不能接受的。 */
+  const [mergedUnit, setMergedUnit] = useState<ExpandedEdgeGroup | null>(null)
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(new Set())
   const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<Set<string>>(new Set())
   const [highlightedEdgeGroupIds, setHighlightedEdgeGroupIds] = useState<Set<string>>(new Set())
@@ -371,9 +387,12 @@ export function CompoundGraphHome({
   const [structureOpen, setStructureOpen] = useState(false)
   const [activeFilters, setActiveFilters] = useState<HomeActiveFilters>({ species: [], sourceTypes: [] })
   const [speciesOptions, setSpeciesOptions] = useState<string[]>([])
+  /** 后端 sourceTypes 枚举; 拉不到就退回内置的 4 个值。 */
+  const [sourceTypesFromApi, setSourceTypesFromApi] = useState<string[]>([])
   const [speciesMenuOpen, setSpeciesMenuOpen] = useState(false)
   const [speciesQuery, setSpeciesQuery] = useState('')
   const [activeNodeDragId, setActiveNodeDragId] = useState<string | null>(null)
+  const [mapDragging, setMapDragging] = useState(false)
   const [panelPosition, setPanelPosition] = useState<Point | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const panRef = useRef<PanState | null>(null)
@@ -393,11 +412,14 @@ export function CompoundGraphHome({
   const autoSearchHandledRef = useRef<number | null>(null)
   const autoBlastHandledRef = useRef<number | null>(null)
 
+  // 搜索集变了要重新取图 —— 首页这张「全局浏览图」本身就是一次检索,
+  // 所以它也在搜索集的作用范围内（`selection_mode=global` 走的是同一条边查询）。
+  // `searchSet` 只在真的改动时换引用（App 里每次都是新数组），所以不会白重跑。
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    loadHomeGraph()
+    loadHomeGraph({ sourceTypes: searchSet })
       .then((payload) => {
         if (cancelled) return
         setGraph(payload)
@@ -418,17 +440,23 @@ export function CompoundGraphHome({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [searchSet])
 
   useEffect(() => {
     let cancelled = false
-    loadMetadataFilters()
+    // module=graph: 物种下拉必须与图上能出现的酶同域 (metadata.py 按 module 收窄),
+    // 否则会出现「选了一个物种、图却是空的」—— 96k 全量下物种有一万多个, 能进图的只是一部分。
+    loadMetadataFilters('graph')
       .then((payload) => {
         if (cancelled) return
         setSpeciesOptions((payload.organisms || []).slice())
+        setSourceTypesFromApi(payload.sourceTypes || [])
       })
       .catch(() => {
-        if (!cancelled) setSpeciesOptions([])
+        if (!cancelled) {
+          setSpeciesOptions([])
+          setSourceTypesFromApi([])
+        }
       })
     return () => {
       cancelled = true
@@ -521,10 +549,14 @@ export function CompoundGraphHome({
   )
   const speciesSelectOptions = useMemo(() => {
     const present = new Set<string>()
-    speciesOptions.forEach((species) => present.add(species))
+    // 搜索集生效时，物种下拉的取值域必须跟着收窄到「当前作用域真的画得出」的那些 ——
+    // 与来源 chips 同一条原则（见 sourceOptionsFromUnits）：下拉里出现一个「选了就空」
+    // 的物种，正是 metadata.py 按 module 收窄要防的那件事，只是换成按搜索集收窄。
+    // 搜索集为空（默认，全部）时维持原行为：API 的图域物种 ∪ 当前图上出现的。
+    if (searchSet.length === 0) speciesOptions.forEach((species) => present.add(species))
     groupItemMap.forEach((items) => items.forEach((item) => { if (item.organismName) present.add(item.organismName) }))
     return [...present].sort((a, b) => a.localeCompare(b))
-  }, [speciesOptions, groupItemMap])
+  }, [speciesOptions, groupItemMap, searchSet])
   const pairFilterMeta = useMemo(() => {
     const meta = new Map<string, { visible: boolean; passing: number; singleLabel: string | null }>()
     if (anyFilterActive) {
@@ -545,6 +577,12 @@ export function CompoundGraphHome({
     () => groupExpandedEdgesByEnzyme(pairEdges, selectedPair?.sourceId, selectedPair?.targetId),
     [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
   )
+  /**
+   * 渲染用的单元列表 —— 在**已有的逐酶分组之后**再加一层合并（见
+   * `mergeAutoAnnotatedUnits`）。只有 SVG 与卡片栈读它；`expandedEdgeGroups`
+   * 仍是逐酶的真值，`selectedExpandedGroup` / `selectedEdge` / 筛选 / 下载都不受影响。
+   */
+  const expandedRenderUnits = useMemo(() => mergeAutoAnnotatedUnits(expandedEdgeGroups), [expandedEdgeGroups])
   // Enzyme ids that count as "retrieved by the active search". BLAST scopes use
   // the hit map; keyword enzyme scopes use the ids that matched. Compound scopes
   // and the plain browse map have no retrieved set — expanded single edges keep
@@ -557,6 +595,29 @@ export function CompoundGraphHome({
   const selectedExpandedGroup = expandedEdgeGroups.find((group) => group.edgeIds.includes(selectedEdgeId || '')) || expandedEdgeGroups[0] || null
   const selectedPairTotal = selectedPair ? Math.max(selectedPair.count, selectedPair.edges.length) : 0
   const visibleEdgeCount = viewModel.pairs.reduce((sum, pair) => sum + Math.max(pair.count, pair.edges.length || 0), 0)
+
+  // 来源筛选的选项 = 当前图上**实际出现**的来源 (见 sourceOptionsFromUnits):
+  // 图只画有反应注释的酶, 选项里若出现图上没有的来源, 用户一选就是一张空图。
+  //
+  // ⚠️ 必须连 groupItemMap 一起收 —— 只收 pair.edges 是个几乎恒真的陷阱:
+  // buildHomePairs 给每个 edgeGroup 建 pair 时 `edges: []`(:3652), 只有顶层
+  // graph.edges 会被填。首页 payload 实测 157 组 / 36,452 条 items, 而 edges 只有
+  // 7 条 —— 于是 seen 只反映那 7 条边的来源。当前恰好奇偶性地两个来源都在里面
+  // (5 swiss_prot + 2 trembl), 所以看不出错; 一旦 edges 为 0(limit_nodes 小、
+  // 或加了筛选), present 为空 -> sourceOptionsFromUnits 回退成 API 全枚举,
+  // 选项里就会出现图上一个都没有的 ai_literature / manual_literature,
+  // 用户一选就是空图 —— 正是本函数注释要防的那件事。
+  // 物种选项(:523-528)收的就是 groupItemMap, 两者现在一致。
+  const sourceFilterOptions = useMemo(() => {
+    const seen = new Set<string>()
+    groupItemMap.forEach((items) => items.forEach((item) => { if (item.sourceType) seen.add(item.sourceType) }))
+    viewModel.pairs.forEach((pair) => {
+      pair.edges.forEach((edge) => {
+        if (edge.sourceType) seen.add(edge.sourceType)
+      })
+    })
+    return sourceOptionsFromUnits(sourceTypesFromApi, seen)
+  }, [viewModel, groupItemMap, sourceTypesFromApi])
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
   // ---- 连星 support data -------------------------------------------------
   // Every server-returned card begins at the session start compound and ends at
@@ -654,7 +715,7 @@ export function CompoundGraphHome({
     let cancelled = false
     setLibrarySearchLoading(true)
     const timer = window.setTimeout(() => {
-      searchApiEntries({ q: trimmedSearchValue, pageSize: 8 })
+      searchApiEntries({ q: trimmedSearchValue, pageSize: 8, sourceTypes: searchSet })
         .then((items) => {
           if (cancelled) return
           setLibrarySuggestions(
@@ -713,7 +774,7 @@ export function CompoundGraphHome({
     expansionKeysRef.current.add(expansionKey)
     setMapExpanding(true)
     try {
-      const payload = await loadHomeGraph({ centerCompoundId: nodeId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
+      const payload = await loadHomeGraph({ centerCompoundId: nodeId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT, sourceTypes: searchSet })
       const merged = mergeHomeGraph(graphRef.current, payload)
       const previousPositionCount = Object.keys(positionsRef.current).length
       const nextPositions = addExpansionPositions(positionsRef.current, payload, nodeId, direction)
@@ -735,7 +796,7 @@ export function CompoundGraphHome({
   const maybeExpandNodeAtViewportEdge = (nodeId: string) => {
     const point = positionsRef.current[nodeId]
     if (!point) return
-    const direction = getNodeExpansionDirection(point, cameraRef.current)
+    const direction = getNodeExpansionDirection(point, cameraRef.current, zoomScale)
     if (direction) void expandFromNodeAtEdge(nodeId, direction)
   }
 
@@ -747,6 +808,7 @@ export function CompoundGraphHome({
       startClientY: event.clientY,
       originCamera: cameraRef.current,
       moved: false,
+      startedOnBackground: event.target instanceof SVGRectElement && event.target.classList.contains('home-map-pan-layer'),
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -762,7 +824,10 @@ export function CompoundGraphHome({
     const rect = svg.getBoundingClientRect()
     const deltaX = ((event.clientX - panState.startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH
     const deltaY = ((event.clientY - panState.startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT
-    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) panState.moved = true
+    if (Math.abs(deltaX) > 0.8 || Math.abs(deltaY) > 0.8) {
+      if (!panState.moved) setMapDragging(true)
+      panState.moved = true
+    }
     const nextCamera = { x: panState.originCamera.x + deltaX, y: panState.originCamera.y + deltaY }
     cameraRef.current = nextCamera
     setCamera(nextCamera)
@@ -776,7 +841,9 @@ export function CompoundGraphHome({
     const panState = panRef.current
     if (!panState || panState.pointerId !== event.pointerId) return
     panRef.current = null
+    setMapDragging(false)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    if (!panState.moved && panState.startedOnBackground) clearPairSelection()
   }
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGCircleElement>, node: NodeCard, point: Point) => {
@@ -808,7 +875,7 @@ export function CompoundGraphHome({
     const dragState = nodeDragRef.current
     const svg = svgRef.current
     if (!dragState || dragState.pointerId !== pointerId || !svg) return false
-    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY)
+    const delta = svgPointerDelta(svg, dragState.startClientX, dragState.startClientY, clientX, clientY, zoomScale)
     if (Math.abs(delta.x) > 0.35 || Math.abs(delta.y) > 0.35) dragState.moved = true
     const nextPoint = {
       x: dragState.originPoint.x + delta.x,
@@ -820,7 +887,7 @@ export function CompoundGraphHome({
     }
     positionsRef.current = nextPositions
     setPositions(nextPositions)
-    const direction = getNodeExpansionDirection(nextPoint, cameraRef.current)
+    const direction = getNodeExpansionDirection(nextPoint, cameraRef.current, zoomScale)
     if (dragState.moved && direction) void expandFromNodeAtEdge(dragState.nodeId, direction)
     return true
   }
@@ -906,7 +973,7 @@ export function CompoundGraphHome({
     } else if (pair.edgeGroupId) {
       setExpandedLoading(true)
       try {
-        const edges = await loadExpandedEdgeGroup(pair.edgeGroupId)
+        const edges = await loadExpandedEdgeGroup(pair.edgeGroupId, searchSet)
         nextEdges = edges.length > 0 ? edges : pair.edges
       } finally {
         setExpandedLoading(false)
@@ -962,7 +1029,24 @@ export function CompoundGraphHome({
     setActivePathway(null)
     setSelectedLibraryItem(null)
     setSearchFeedback(null)
+    // 合并抽屉跟着它折起来的那条边组走：边组没了，抽屉也必须关掉。
+    setMergedUnit(null)
   }
+
+  /** 打开合并单元的抽屉（点合并卡或合并线）。 */
+  const openMergedUnit = (unit: ExpandedEdgeGroup) => {
+    // 合并线同时也是「该边组被选中」，与点单条边的观感一致。
+    setSelectedEdgeId(unit.representative.edgeId)
+    setMergedUnit(unit)
+  }
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearPairSelection()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [])
 
   const toggleSpeciesFilter = (species: string) => {
     setActiveFilters((prev) => ({
@@ -1183,7 +1267,7 @@ export function CompoundGraphHome({
         return
       }
 
-      const payload = await loadHomeGraph({ centerCompoundId: sourceId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT })
+      const payload = await loadHomeGraph({ centerCompoundId: sourceId, depth: 1, limitNodes: HOME_EXPANSION_LIMIT, sourceTypes: searchSet })
       const merged = mergeHomeGraph(graphRef.current, payload)
       const seedPoint = positionsRef.current[sourceId] || {
         x: 42 - cameraRef.current.x,
@@ -1309,7 +1393,7 @@ export function CompoundGraphHome({
     setNoResult(false)
     setNoResultMessage(null)
     try {
-      const scope = await mapScopeSearch({ q: query, limitNodes: 90 })
+      const scope = await mapScopeSearch({ q: query, limitNodes: 90, sourceTypes: searchSet })
       const kind = scope.kind
       const emptyGraph = scope.graph.nodes.length === 0 && scope.graph.edgeGroups.length === 0
       if (kind === 'none' || emptyGraph) {
@@ -1382,7 +1466,7 @@ export function CompoundGraphHome({
     try {
       const payload = session.payload
       const enzymeIds = payload.hits.map((hit) => hit.enzymeId)
-      const scopeGraph = await loadGraphForEnzymes(enzymeIds, { limitNodes: 90 })
+      const scopeGraph = await loadGraphForEnzymes(enzymeIds, { limitNodes: 90, sourceTypes: searchSet })
       const emptyGraph = scopeGraph.nodes.length === 0 && scopeGraph.edgeGroups.length === 0
       if (emptyGraph) {
         setBlastHitMap(new Map())
@@ -1621,7 +1705,7 @@ export function CompoundGraphHome({
     if (pickerGroupRequestedRef.current.has(groupId)) return
     pickerGroupRequestedRef.current.add(groupId)
     setPickerGroupLoading((prev) => (prev.includes(groupId) ? prev : [...prev, groupId]))
-    loadExpandedEdgeGroup(groupId)
+    loadExpandedEdgeGroup(groupId, searchSet)
       .then((edges) => {
         setPickerGroupEdges((prev) => (prev[groupId] ? prev : { ...prev, [groupId]: edges }))
       })
@@ -1675,6 +1759,7 @@ export function CompoundGraphHome({
         // Backend caps results at 40; ask for the full window so long routes
         // are not silently dropped from the returned card list.
         limit: 40,
+        sourceTypes: searchSet,
       })
       if (res.items.length === 0) {
         setNoResult(true)
@@ -1742,6 +1827,11 @@ export function CompoundGraphHome({
   }
 
   const homeMapStyle = { ['--home-label-scale' as string]: String(labelFontScale) } as CSSProperties
+  const adjustZoom = (next: number) => setZoomScale(Math.min(2.5, Math.max(0.6, next)))
+  const handleMapWheel = (event: React.WheelEvent<SVGSVGElement>) => {
+    event.preventDefault()
+    adjustZoom(zoomScale * (event.deltaY < 0 ? 1.12 : 0.89))
+  }
 
   return (
     <div className="home-map-page" style={homeMapStyle}>
@@ -1822,6 +1912,7 @@ export function CompoundGraphHome({
           </div>
 
           <nav className="graph-primary-nav" aria-label="Graph page navigation">
+            <SearchSetControl value={searchSet} onChange={onSearchSetChange} />
             <button type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>Data Browser</button>
             <button type="button" onClick={onOpenBlast}>BLAST</button>
             <button type="button" onClick={() => setStructureOpen(true)}>Structure search</button>
@@ -1888,11 +1979,11 @@ export function CompoundGraphHome({
           <div className="home-filter-group">
             <p className="home-filter-label">Data source</p>
             <div className="home-chip-row home-source-chips">
-              {HOME_SOURCE_ORDER.filter((key) => HOME_SOURCE_LABELS[key]).map((key) => {
+              {sourceFilterOptions.map((key) => {
                 const checked = activeFilters.sourceTypes.includes(key)
                 return (
-                  <button key={key} type="button" className={`home-chip ${checked ? 'on' : ''}`} onClick={() => toggleSourceFilter(key)} title={checked ? `Remove ${homeSourceLabel(key)}` : `Filter by ${homeSourceLabel(key)}`}>
-                    {homeSourceLabel(key)}
+                  <button key={key} type="button" className={`home-chip ${checked ? 'on' : ''}`} onClick={() => toggleSourceFilter(key)} title={checked ? `Remove ${sourceLabel(key)}` : `Filter by ${sourceLabel(key)}`}>
+                    {sourceLabel(key)}
                   </button>
                 )
               })}
@@ -1929,11 +2020,22 @@ export function CompoundGraphHome({
                 </div>
                 <div className="control-menu-actions">
                   <button type="button" onClick={() => { resetLayout(); setControlsOpen(false) }}>Reset layout</button>
-                  <button type="button" onClick={() => { clearPairSelection(); setControlsOpen(false) }}>Clear selection</button>
-                  <button type="button" onClick={() => { onOpenSearch(searchValue.trim() || undefined); setControlsOpen(false) }}>Open search library</button>
                 </div>
               </div>
             )}
+          </div>
+
+          <button className="graph-filter-link" type="button" onClick={clearPairSelection}>
+            Clear selection
+          </button>
+          <button className="graph-filter-link" type="button" onClick={() => onOpenSearch(searchValue.trim() || undefined)}>
+            Open search library
+          </button>
+          <div className="graph-zoom-controls" aria-label="Map zoom controls">
+            <button type="button" onClick={() => adjustZoom(zoomScale - 0.1)} aria-label="Zoom out">−</button>
+            <span>{Math.round(zoomScale * 100)}%</span>
+            <button type="button" onClick={() => adjustZoom(zoomScale + 0.1)} aria-label="Zoom in">+</button>
+            <button type="button" onClick={() => adjustZoom(1)} aria-label="Reset zoom">Reset</button>
           </div>
 
           <button className="floating-pill download-pill home-pill-button" type="button" onClick={onOpenDownloads}>
@@ -2064,7 +2166,7 @@ export function CompoundGraphHome({
         {!loading && !error && graph && (
           <svg
             ref={svgRef}
-            className="home-map-svg home-live-map"
+            className={`home-map-svg home-live-map ${mapDragging ? 'is-dragging' : ''}`}
             viewBox={`0 0 ${HOME_VIEWBOX_WIDTH} ${HOME_VIEWBOX_HEIGHT}`}
             role="img"
             aria-label="Draggable compound graph"
@@ -2072,6 +2174,7 @@ export function CompoundGraphHome({
             onPointerMove={handleMapPointerMove}
             onPointerUp={finishMapPan}
             onPointerCancel={finishMapPan}
+            onWheel={handleMapWheel}
           >
             <defs>
               <marker id="home-map-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
@@ -2086,7 +2189,7 @@ export function CompoundGraphHome({
             </defs>
             <rect className="home-map-pan-layer" x="0" y="0" width={HOME_VIEWBOX_WIDTH} height={HOME_VIEWBOX_HEIGHT} />
 
-            <g className="home-map-camera" transform={`translate(${camera.x} ${camera.y})`}>
+            <g className="home-map-camera" transform={`translate(${camera.x + HOME_VIEWBOX_WIDTH / 2} ${camera.y + HOME_VIEWBOX_HEIGHT / 2}) scale(${zoomScale}) translate(${-HOME_VIEWBOX_WIDTH / 2} ${-HOME_VIEWBOX_HEIGHT / 2})`}>
               <g className="home-map-edges live-map-edges">
                 {viewModel.pairs.map((pair) => {
                   const source = positions[pair.sourceId]
@@ -2096,7 +2199,7 @@ export function CompoundGraphHome({
                   if (pairMeta && !pairMeta.visible) return null
                   const pairGroupId = pair.edgeGroupId || pair.key
                   const isExpanded = selectedPairKey === pair.key && pairEdges.length > 0
-                  const expandedItems = expandedEdgeGroups
+                  const expandedItems = expandedRenderUnits
                   const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 5.2) : [0]
                   const displayCount = pairMeta ? pairMeta.passing : pair.count
                   // When a composite is filtered down to a single surviving enzyme, that enzyme's
@@ -2117,7 +2220,13 @@ export function CompoundGraphHome({
                   // each expanded line as retrieved (the searched enzymes) or not so
                   // the searched edges can be drawn clearly stronger.
                   const scopedRender = Boolean(scopeHitSet)
-                  const retrievedFlags = scopedRender ? expandedItems.map((group) => scopeHitSet!.has(group.enzymeId)) : null
+                  // 合并单元要用**全体成员**判命中：只查 `group.enzymeId`（= members[0]）
+                  // 会让「圈定的检索命中了组里第 2 个酶」的那条线被当成背景色。
+                  const retrievedFlags = scopedRender
+                    ? expandedItems.map((group) =>
+                        group.merged ? Boolean(group.members?.some((member) => scopeHitSet!.has(member.enzymeId))) : scopeHitSet!.has(group.enzymeId),
+                      )
+                    : null
                   const retrievedColorOf = retrievedFlags ? new Array<number>(expandedItems.length).fill(0) : null
                   if (retrievedFlags && retrievedColorOf) {
                     let run = 0
@@ -2148,6 +2257,8 @@ export function CompoundGraphHome({
                         const offset = offsets[index] ?? 0
                         const highlightedEdge = highlightedPair || edge.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
                         const pathwayEdge = Boolean(activePathway && activePathwayStepKeys?.has(pair.key))
+                        // 合并单元的 edgeIds 是全体成员的**并集**，所以展开后选中其中
+                        // 任何一个成员，这条汇总线都会高亮 —— 期望行为（它就是那些边的线）。
                         const selectedEdgeGroup = edge.edgeIds.includes(selectedEdgeId || '')
                         const retrieved = retrievedFlags ? retrievedFlags[index] : true
                         const isBackground = scopedRender && !retrieved
@@ -2155,15 +2266,28 @@ export function CompoundGraphHome({
                         // hues (rotated among the first four so neighbouring hits stay
                         // distinguishable); background isoenzymes collapse to the plain
                         // `scope-background` tone.
-                        const reactionColorClass = scopedRender
-                          ? (retrieved ? `reaction-color-${retrievedColorOf![index]}` : 'scope-background')
-                          : (expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`)
+                        //
+                        // 合并单元不参与 `reaction-color-N` 轮转：它代表的是「某个来源的
+                        // 一大批酶」，用来源色（`.merged-source-line.src-*`）才说得通，
+                        // 也给用户一个和 Swiss-Prot 单条线一眼可辨的区别。
+                        const reactionColorClass = edge.merged
+                          ? `merged-source-line src-${edge.sourceType}`
+                          : scopedRender
+                            ? (retrieved ? `reaction-color-${retrievedColorOf![index]}` : 'scope-background')
+                            : (expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`)
                         const edgeEmphasized = selectedEdgeGroup || highlightedEdge || pathwayEdge
-                        const expandedStroke = !scopedRender
-                          ? (edgeEmphasized ? 0.52 : 0.46) * edgeThickness
-                          : retrieved
-                            ? (edgeEmphasized ? 0.72 : 0.6) * edgeThickness
-                            : (edgeEmphasized ? 0.5 : 0.34) * edgeThickness
+                        const expandedStroke = edge.merged
+                          // 一条线代表 N 条边，加粗一档（与「检索命中」同档）。
+                          ? (edgeEmphasized ? 0.72 : 0.6) * edgeThickness
+                          : !scopedRender
+                            ? (edgeEmphasized ? 0.52 : 0.46) * edgeThickness
+                            : retrieved
+                              ? (edgeEmphasized ? 0.72 : 0.6) * edgeThickness
+                              : (edgeEmphasized ? 0.5 : 0.34) * edgeThickness
+                        const openUnit = () => {
+                          if (edge.merged) openMergedUnit(edge)
+                          else setSelectedEdgeId(edge.representative.edgeId)
+                        }
                         return (
                           <g key={edge.key} className={isBackground ? 'scope-miss-edge' : (scopedRender ? 'scope-hit-edge' : undefined)}>
                             <path
@@ -2173,9 +2297,9 @@ export function CompoundGraphHome({
                               markerStart={edge.directionMode === 'reverse' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               markerEnd={edge.directionMode === 'forward' || edge.directionMode === 'bidirectional' ? 'url(#home-map-arrow)' : undefined}
                               onPointerDown={(event) => event.stopPropagation()}
-                              onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }}
+                              onClick={(event) => { event.stopPropagation(); openUnit() }}
                             />
-                            <path d={edgePath(source, target, offset)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedEdgeId(edge.representative.edgeId) }} />
+                            <path d={edgePath(source, target, offset)} className="home-map-hit" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); openUnit() }} />
                             <text x={(source.x + target.x) / 2 + offset * 0.34} y={(source.y + target.y) / 2 + offset * 0.45 - 1.4} className="expanded-edge-label">{edge.label}</text>
                           </g>
                         )
@@ -2279,18 +2403,58 @@ export function CompoundGraphHome({
             <div className="stack-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>{compoundName(selectedPair.sourceId)} <ChevronRight size={14} /> {compoundName(selectedPair.targetId)}</strong>
-                <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes · ${pairEdges.length || selectedPairTotal} edge${(pairEdges.length || selectedPairTotal) === 1 ? '' : 's'}`}</span>
+                {/* 折叠后仍报**真实酶数**，后面补一段渲染数 —— 否则 3,595 变成 61，
+                    看起来像酶丢了。没有折叠时后半段不显示。 */}
+                <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes${expandedRenderUnits.length < expandedEdgeGroups.length ? ` · ${expandedRenderUnits.length} shown` : ''} · ${pairEdges.length || selectedPairTotal} edge${(pairEdges.length || selectedPairTotal) === 1 ? '' : 's'}`}</span>
               </div>
               <button className="stack-close-button" type="button" onClick={clearPairSelection} title="Close enzyme list">
                 <X size={18} />
               </button>
             </div>
-            {expandedEdgeGroups.map((group) => {
+            {expandedRenderUnits.map((group) => {
               const edge = group.representative
               const enzymeId = edge.card?.enzymeId || edge.enzymeId
               const blastHit = blastHitMap.get(enzymeId)
               const queued = isQueued(enzymeId)
               const queueEntity = homeEnzymeToEntity(edge, enzymeId, compoundName(edge.sourceCompoundId), compoundName(edge.targetCompoundId))
+              // 合并卡：一张卡代表「某来源的全部酶」。它不是「一堆同名酶」——
+              // 里面可能有几十个物种、几十个 EC，所以那两行报的是**计数**而不是第一个成员的值。
+              if (group.merged) {
+                const members = group.members ?? []
+                const organisms = new Set<string>()
+                const ecNumbers = new Set<string>()
+                members.forEach((member) => {
+                  const card = member.representative.card
+                  if (card?.organismName) organisms.add(card.organismName)
+                  if (card?.ecNumber) ecNumbers.add(card.ecNumber)
+                })
+                const singleMember = members.length === 1 ? members[0] : null
+                return (
+                  <article
+                    key={group.key}
+                    className={`enzyme-card enzyme-card-merged src-${group.sourceType} ${group.edgeIds.includes(selectedEdgeId || '') ? 'selected' : ''}`}
+                  >
+                    {/* 不是 Download 图标：一下载 3,595 条不是这里该暗示的动作。
+                        底部有写明数字的「Queue all」。 */}
+                    <button className="card-check" type="button" onClick={() => openMergedUnit(group)} title={`Show all ${members.length.toLocaleString()} entries`}>
+                      <Layers size={18} />
+                    </button>
+                    <button className="enzyme-card-copy" type="button" onClick={() => openMergedUnit(group)}>
+                      <h3>{singleMember ? (singleMember.representative.card?.primaryName || singleMember.label) : `${sourceLabel(group.sourceType || '')} entries`}</h3>
+                      <span className={`search-table-source-tag ${group.sourceType}`}>{sourceLabel(group.sourceType || '')}</span>
+                      <p>{organisms.size} organism{organisms.size === 1 ? '' : 's'}</p>
+                      <p>{group.reactionIds.length === 1 ? '1 reaction' : `${group.reactionIds.length} reactions`}</p>
+                      {singleMember && <p>{singleMember.representative.card?.organismName || 'Unknown organism'}</p>}
+                    </button>
+                    <div className="enzyme-card-meta">
+                      <strong>{group.label}</strong>
+                      <span>{ecNumbers.size === 0 ? 'EC n/a' : `${ecNumbers.size} EC`}</span>
+                      <small>{members.length.toLocaleString()} entries</small>
+                      <button type="button" onClick={() => openMergedUnit(group)}>Show all</button>
+                    </div>
+                  </article>
+                )
+              }
               return (
                 <article key={group.key} className={`enzyme-card ${group.edgeIds.includes(selectedEdgeId || '') ? 'selected' : ''}`}>
                   <button className="card-check" type="button" onClick={() => onToggleQueue(queueEntity)}>
@@ -2529,6 +2693,18 @@ export function CompoundGraphHome({
               closePicker()
               setSearchFeedback(`已加入下载表：${entity.name}`)
             }}
+          />
+        )}
+
+        {mergedUnit && (
+          <MergedEnzymeDrawer
+            unit={mergedUnit}
+            compoundLabel={compoundName}
+            onClose={() => setMergedUnit(null)}
+            onOpenEnzyme={onOpenEnzyme}
+            onToggleQueue={(entry) => onToggleQueue(entry)}
+            isQueued={isQueued}
+            onQueueMany={onQueueMany}
           />
         )}
       </section>
@@ -2822,7 +2998,7 @@ function normalizeSequence(raw: string | null | undefined): string {
   return (raw || '').replace(/\s+/g, '').toUpperCase()
 }
 
-export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, queueCount, onOpenDownloads, onOpenBlast, onOpenSearch, onOpenMap, onOpenPathwaySearch, onOpenMapScoped }: {
+export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, queueCount, onOpenDownloads, onOpenBlast, onOpenSearch, onOpenMap, onOpenPathwaySearch, onOpenMapScoped, searchSet, onSearchSetChange }: {
   enzymeId: string | null
   onBack: () => void
   onToggleQueue: (entry: string | Entity) => void
@@ -2834,6 +3010,10 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
   onOpenMap: (query: string) => void
   onOpenPathwaySearch: () => void
   onOpenMapScoped: (query: string) => void
+  /** 搜索集（检索范围，`[]` = 全部）。本页只是显示它 —— 从这里发起的检索
+   *  （搜索框 / Map / Pathway）都会带着它走。 */
+  searchSet: string[]
+  onSearchSetChange: (next: string[]) => void
 }) {
   const [detail, setDetail] = useState<EnzymeDetailData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -2950,6 +3130,8 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
           </button>
 
           <div className="enzyme-topnav-slot">
+            <SearchSetControl value={searchSet} onChange={onSearchSetChange} />
+
             <button className="download-list-button" type="button" onClick={onOpenDownloads} title="Open download list">
               <Download size={15} />
               <span>Downloading table</span>
@@ -3048,6 +3230,11 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     <div className="detail-card main-detail-card">
                       <div className="detail-card-topline">
                         <span className="detail-chip"><Link2 size={13} /> {detail.databaseCode}</span>
+                        {detail.sourceType && (
+                          <span className={`search-table-source-tag ${detail.sourceType}`} title="This enzyme's data source">
+                            {sourceLabel(detail.sourceType)}
+                          </span>
+                        )}
                         {detail.uniprotId && <a className="detail-link" href={detail.uniprotUrl || `https://www.uniprot.org/uniprotkb/${detail.uniprotId}`} target="_blank" rel="noreferrer">UniProt {detail.uniprotId} <ExternalLink size={12} /></a>}
                       </div>
                       <div className="detail-name-stack"><h2>{detail.primaryName}</h2><p>{detail.organismName || 'Unknown organism'}</p></div>
@@ -3056,6 +3243,8 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                         <div><dt>Library code</dt><dd>{detail.databaseCode}</dd></div>
                         <div><dt>Species</dt><dd>{detail.organismName || 'n/a'}</dd></div>
                         <div><dt>UniProt</dt><dd>{detail.uniprotId || 'n/a'}</dd></div>
+                        <div><dt>Data source</dt><dd>{detail.sourceType ? sourceLabel(detail.sourceType) : 'n/a'}</dd></div>
+                        <div><dt>Enzyme review</dt><dd>{detail.reviewStatus || 'n/a'}</dd></div>
                         <div><dt>Gene name</dt><dd>{detail.gene?.geneName || 'n/a'}</dd></div>
                         <div><dt>Length</dt><dd>{sequenceLength ? `${sequenceLength} aa` : 'n/a'}</dd></div>
                         <div><dt>Mass (Da)</dt><dd>{detail.mass ? Math.round(detail.mass).toLocaleString() : 'n/a'}</dd></div>
@@ -3077,8 +3266,15 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                             <div className="reaction-meta-grid">
                               <div><span>EC</span><strong>{reaction.ecNumber || 'n/a'}</strong></div>
                               <div className="is-smiles"><span>SMILES</span><strong>{reaction.smiles || 'n/a'}</strong></div>
-                              <div><span>Source type</span><strong>{reaction.sourceType}</strong></div>
-                              <div><span>Review</span><strong>{reaction.reviewStatus}</strong></div>
+                              {/* Deliberately NOT "Source type": a reaction is a shared
+                                  objective entity, so etl_reactions stamps every reaction row
+                                  swiss_prot/official regardless of which enzyme referenced it.
+                                  Labelling it plainly made a TrEMBL enzyme look Swiss-Prot —
+                                  the enzyme's own source is the "Data source" fact above. */}
+                              <div title="The reaction's own source. Reactions are shared between enzymes, so this is always Swiss-Prot even when the enzyme above is TrEMBL.">
+                                <span>Reaction source</span><strong>{reaction.sourceType}</strong>
+                              </div>
+                              <div><span>Reaction review</span><strong>{reaction.reviewStatus}</strong></div>
                             </div>
                             <div className="reaction-compounds">
                               <div><span>Substrates</span><div className="tag-row compact">{reaction.substrates.map((compound) => <CompoundTag key={compound.compoundId} compound={compound} />)}</div></div>
@@ -3873,6 +4069,80 @@ function canonicalCompoundPairKey(sourceId: string, targetId: string) {
   return [sourceId, targetId].sort().join('::')
 }
 
+/**
+ * 把每个边组里**自动注释来源**（非 Swiss-Prot）的逐酶分组折成一个汇总单元。
+ *
+ * 为什么必须折：实测最大一组 `RHEA:32299` 挂着 **3,595 个酶**（其中 3,5xx 是 TrEMBL），
+ * 而每个酶要渲染 1 张卡 + 2 条 `<path>` + 1 个 `<text>` —— 一次展开就是
+ * 3,595 卡 + 7,190 path + 3,595 label。更要命的是扇形偏移
+ * `((i - (n-1)/2) * 5.2, 见 SVG 侧的 offsets)`：n=3,595 时最外的线被推到
+ * **±9,342 单位**外，远超 viewbox —— 所以这种规模的展开不只是慢，它本身就不可读。
+ *
+ * Swiss-Prot 保持逐条：它们是人工审核的那批，数量本来就少（实测最大组里 60 条），
+ * 读得过来。其余来源**每个来源折一个**（不是只认 trembl）——这样以后
+ * `ai_literature` 真有批量数据时会自动同样折叠，不必再改这条规则。
+ *
+ * 合并后单元数 = 1 + 该组里不同非 Swiss-Prot 来源的个数 + Swiss-Prot 的酶数。
+ * 上面的例子里从 7,093 降到 61。
+ *
+ * ⚠️ 这一层是**纯渲染**的：数据层 `expandedEdgeGroups` 一行不改，仍是逐酶的真值，
+ * 详情面板 / 筛选 / 下载都还拿它。所以筛选语义完全没变 —— 筛选作用在 `pairEdges`
+ * 上、发生在合并之前，圈到 swiss_prot 时本来就一条 TrEMBL 边都没有，自然不产生合并卡。
+ */
+function mergeAutoAnnotatedUnits(groups: ExpandedEdgeGroup[]): ExpandedEdgeGroup[] {
+  if (groups.length === 0) return groups
+
+  const singles: ExpandedEdgeGroup[] = []
+  const buckets = new Map<string, ExpandedEdgeGroup[]>()
+  groups.forEach((group) => {
+    const sourceType = group.representative.sourceType
+    // 来源未知时按 Swiss-Prot 处理（逐条显示）—— 宁可多渲染，也不要因为一个
+    // 空值把不同来源的酶折进同一张卡里。
+    if (!sourceType || sourceType === 'swiss_prot') {
+      singles.push(group)
+      return
+    }
+    const bucket = buckets.get(sourceType)
+    if (bucket) bucket.push(group)
+    else buckets.set(sourceType, [group])
+  })
+
+  if (buckets.size === 0) return singles
+
+  const merged: ExpandedEdgeGroup[] = [...buckets.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([sourceType, members]) => {
+      const first = members[0]
+      const edges = members.flatMap((member) => member.edges)
+      const edgeIds = Array.from(new Set(members.flatMap((member) => member.edgeIds)))
+      const reactionIds = Array.from(new Set(members.flatMap((member) => member.reactionIds)))
+      return {
+        key: `merged::${sourceType}::${canonicalCompoundPairKey(first.sourceId, first.targetId)}`,
+        sourceId: first.sourceId,
+        targetId: first.targetId,
+        // 结构兼容用；合并分支不读它。
+        enzymeId: first.enzymeId,
+        // 成员只有 1 个时用**成员自己的 label**：用户选的是「只要有 TrEMBL 就合并」
+        // （不设阈值），所以 1 个 TrEMBL 的小组也会折叠 —— 那时把酶名换成
+        // 「TrEMBL ×1」等于白丢信息。外观仍是合并卡（带来源徽标）。
+        label: members.length > 1 ? `${sourceLabel(sourceType)} ×${members.length}` : first.label,
+        directionMode: directionModeForEdges(edges, first.sourceId, first.targetId),
+        edges,
+        edgeIds,
+        reactionIds,
+        representative: first.representative,
+        merged: true,
+        sourceType,
+        memberCount: members.length,
+        members,
+      }
+    })
+
+  // 顺序确定（不随扫描顺序漂移）：Swiss-Prot 逐条沿用 groupExpandedEdgesByEnzyme
+  // 已有的 label 序在前，合并单元按来源名字典序在后。
+  return [...singles, ...merged]
+}
+
 function directionModeForEdges(edges: HomeGraphEdge[], sourceId = edges[0]?.sourceCompoundId, targetId = edges[0]?.targetCompoundId): ExpandedEdgeGroup['directionMode'] {
   let hasForward = false
   let hasReverse = false
@@ -4234,15 +4504,24 @@ function edgePath(source: Point, target: Point, offset = 0) {
   const ny = dx / length
   return `M ${source.x} ${source.y} Q ${midX + nx * offset} ${midY + ny * offset} ${target.x} ${target.y}`
 }
-function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number) {
+function svgPointerDelta(svg: SVGSVGElement, startClientX: number, startClientY: number, clientX: number, clientY: number, scale = 1) {
   const rect = svg.getBoundingClientRect()
+  const safeScale = Math.max(scale, 0.001)
   return {
-    x: ((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH,
-    y: ((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT,
+    x: (((clientX - startClientX) / Math.max(rect.width, 1)) * HOME_VIEWBOX_WIDTH) / safeScale,
+    y: (((clientY - startClientY) / Math.max(rect.height, 1)) * HOME_VIEWBOX_HEIGHT) / safeScale,
   }
 }
-function getNodeExpansionDirection(point: Point, camera: Point): ExpansionDirection | null {
-  const viewportPoint = { x: point.x + camera.x, y: point.y + camera.y }
+function getNodeExpansionDirection(point: Point, camera: Point, scale = 1): ExpansionDirection | null {
+  // Keep in step with the camera transform in the SVG: the camera group is
+  // `translate(c + W/2, c + H/2) scale(z) translate(-W/2, -H/2)`, so a world
+  // point p lands at `z*p + c + (1-z)*W/2`. The plain `p + c` only holds at z=1
+  // and would misjudge the viewport edge as soon as the map is zoomed.
+  const safeScale = Math.max(scale, 0.001)
+  const viewportPoint = {
+    x: point.x * safeScale + camera.x + (1 - safeScale) * (HOME_VIEWBOX_WIDTH / 2),
+    y: point.y * safeScale + camera.y + (1 - safeScale) * (HOME_VIEWBOX_HEIGHT / 2),
+  }
   const margin = 14
   const distances: Array<{ direction: ExpansionDirection; distance: number }> = [
     { direction: 'left', distance: viewportPoint.x },
@@ -4587,6 +4866,172 @@ function PathwayEnzymePickerDrawer({
         </span>
         <button type="button" className="pw-drawer-add" disabled={!canAdd} onClick={handleAdd}>
           <Check size={15} /> 加入下载表
+        </button>
+      </footer>
+    </aside>
+  )
+}
+
+/** Page size for the merged-unit drawer. 3,595 rows of `.pw-drawer-candidate`
+ *  is a rerun of the very stutter this feature removes, so the list renders in
+ *  batches and offers a text filter to converge on one entry. */
+const MERGED_DRAWER_PAGE = 100
+
+/**
+ * 「某个来源的一整批酶」折成一张卡之后，这张卡点开的抽屉 —— 被合并的酶必须仍然
+ * 可达：能看、能挑、能进下载表。**不复用** `PathwayEnzymePickerDrawer`：那个绑死在
+ * 通路多步选择上（`steps` / 每步 `selection` / `handleAdd` 组装 Pathway Entity），
+ * 只借它的 CSS 类与行结构。
+ *
+ * 一行 = 一个酶。`unit.members` 已经由 `groupExpandedEdgesByEnzyme` 按 enzymeId
+ * 去重，所以天然一酶一行，不必再 dedupe；而且每行保留着 backing edge
+ * （`homeEnzymeToEntity` 要它才能进下载队列）。
+ */
+function MergedEnzymeDrawer({
+  unit,
+  compoundLabel,
+  onClose,
+  onOpenEnzyme,
+  onToggleQueue,
+  isQueued,
+  onQueueMany,
+}: {
+  unit: ExpandedEdgeGroup
+  compoundLabel: (compoundId: string) => string
+  onClose: () => void
+  onOpenEnzyme: (enzymeId: string) => void
+  onToggleQueue: (entry: Entity) => void
+  isQueued: (enzymeId: string) => boolean
+  /** 批量入队。逐条调 `onToggleQueue` 是 O(n²)（见 App 的 `queueEntities`）。 */
+  onQueueMany: (entries: Entity[]) => void
+}) {
+  const members = unit.members ?? []
+  const [filter, setFilter] = useState('')
+  const [visibleCount, setVisibleCount] = useState(MERGED_DRAWER_PAGE)
+
+  // 换一个合并单元就是换一份列表：筛选框与分批游标都要跟着重置。
+  useEffect(() => {
+    setFilter('')
+    setVisibleCount(MERGED_DRAWER_PAGE)
+  }, [unit.key])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  const rows = useMemo(() => {
+    const needle = filter.trim().toLowerCase()
+    if (!needle) return members
+    return members.filter((member) => {
+      const card = member.representative.card
+      return [member.label, card?.primaryName, card?.uniprotId, card?.databaseCode, card?.organismName, card?.enzymeId, member.enzymeId]
+        .some((value) => (value || '').toLowerCase().includes(needle))
+    })
+  }, [members, filter])
+
+  const visible = rows.slice(0, visibleCount)
+  const queuedCount = rows.reduce((count, member) => count + (isQueued(member.representative.card?.enzymeId || member.enzymeId) ? 1 : 0), 0)
+
+  const entityOf = (member: ExpandedEdgeGroup) => {
+    const edge = member.representative
+    const enzymeId = edge.card?.enzymeId || edge.enzymeId
+    return homeEnzymeToEntity(edge, enzymeId, compoundLabel(edge.sourceCompoundId), compoundLabel(edge.targetCompoundId))
+  }
+
+  const queueAll = () => {
+    // 标签里写明数字，不做静默批量。
+    onQueueMany(rows.map(entityOf))
+    onClose()
+  }
+
+  return (
+    <aside className="pw-enzyme-drawer merged-enzyme-drawer" role="dialog" aria-label={`All ${members.length} entries in this group`}>
+      <header className="pw-drawer-header">
+        <div>
+          <strong>{sourceLabel(unit.sourceType || '')} group</strong>
+          <span>{compoundLabel(unit.sourceId)} → {compoundLabel(unit.targetId)}</span>
+        </div>
+        <button type="button" className="pw-drawer-close" onClick={onClose} title="Close" aria-label="Close the entry list">
+          <X size={17} />
+        </button>
+      </header>
+
+      <div className="merged-drawer-bar">
+        <div className="pw-drawer-candidates-search">
+          <Search size={13} />
+          <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter by accession, name or organism…" />
+          {filter && (
+            <button type="button" onClick={() => setFilter('')} title="Clear filter">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <p className="merged-drawer-count">
+          {rows.length === members.length
+            ? `${members.length.toLocaleString()} entries`
+            : `${rows.length.toLocaleString()} of ${members.length.toLocaleString()} entries`}
+          {queuedCount > 0 ? ` · ${queuedCount.toLocaleString()} in the download list` : ''}
+        </p>
+      </div>
+
+      <div className="pw-drawer-body">
+        {visible.length === 0 ? (
+          <p className="pw-drawer-step-empty">Nothing matches “{filter}”.</p>
+        ) : (
+          <div className="pw-drawer-candidates">
+            {visible.map((member) => {
+              const edge = member.representative
+              const enzymeId = edge.card?.enzymeId || edge.enzymeId
+              const entryLabel = edge.card?.uniprotId || edge.card?.databaseCode || member.label || enzymeId
+              const organism = edge.card?.organismName
+              const checked = isQueued(enzymeId)
+              return (
+                <div key={member.key} className={`pw-drawer-candidate ${checked ? 'is-checked' : ''}`}>
+                  <label className="pw-drawer-candidate-main">
+                    <input type="checkbox" checked={checked} onChange={() => onToggleQueue(entityOf(member))} />
+                    <span className="pw-drawer-candidate-copy">
+                      <strong className="pw-drawer-candidate-entry">{entryLabel}</strong>
+                      {edge.card?.primaryName && edge.card.primaryName !== entryLabel ? (
+                        <em className="pw-drawer-candidate-name">{edge.card.primaryName}</em>
+                      ) : null}
+                      <span className="pw-drawer-candidate-sub">
+                        {organism ? <span className="pw-drawer-candidate-organism">{organism}</span> : null}
+                        <span className="pw-drawer-candidate-src">{sourceLabel(edge.sourceType)}</span>
+                      </span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="pw-drawer-candidate-open"
+                    onClick={() => onOpenEnzyme(enzymeId)}
+                    title={`Open ${entryLabel}`}
+                    aria-label={`Open ${entryLabel}`}
+                  >
+                    <ArrowUpRight size={13} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {visibleCount < rows.length && (
+          <button type="button" className="merged-drawer-more" onClick={() => setVisibleCount((count) => count + MERGED_DRAWER_PAGE)}>
+            Show {Math.min(MERGED_DRAWER_PAGE, rows.length - visibleCount)} more
+            <small>{(rows.length - visibleCount).toLocaleString()} left</small>
+          </button>
+        )}
+      </div>
+
+      <footer className="pw-drawer-footer">
+        <span className="pw-drawer-count">
+          {queuedCount.toLocaleString()} / {rows.length.toLocaleString()} in the download list
+        </span>
+        <button type="button" className="pw-drawer-add" onClick={queueAll} disabled={rows.length === 0}>
+          <Download size={15} /> Queue all {rows.length.toLocaleString()} entries
         </button>
       </footer>
     </aside>

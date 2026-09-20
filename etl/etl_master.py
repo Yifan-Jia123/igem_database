@@ -1,32 +1,42 @@
-"""ETL Step 5: Update enzyme (sequence) + load gene + evidence from child tables."""
+"""ETL Step 5: 酶序列回填 + 子表(gene / sequence_link / evidence / go / isoform)。
+
+## 按来源替换 (方案 Phase 2.1 C 类)
+
+这 5 张子表都**有 `enzyme_id` 外键、但没有 `source_type` 列**。它们每个 enzyme_id
+都确定性地属于某一个来源, 所以照样能按来源替换 —— 判据是「有没有 enzyme_id 外键」,
+不是「有没有 source_type」。
+
+原实现在这里做了 **5 处无条件 `DELETE FROM <表>`(全表清空)**: 刷新 TrEMBL 会把
+SwissProt 的子表行一并清掉, 来源隔离直接失效。按来源的删除已集中到 etl_run.purge_source(),
+本模块只负责写入。
+
+## 建表语句的唯一出处 = sql/schema.sql
+
+原实现在本文件内嵌了 3 张表的 DDL, 与 `sql/schema.sql` 重复定义 ——
+改 schema 时漏改一处, 本地建表语句就和 schema.sql 漂移。改成从 schema.sql 里取。
+"""
+import os
+import sys
+
 import pandas as pd
-import re
 from sqlalchemy import create_engine, text
-from config import DATA_DIR, DB_URL
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import DB_URL  # noqa: E402
+from db_utils import schema_ddl  # noqa: E402
+from sources import (columns_of, indexed_groups, indexed_width, read_segmented,  # noqa: E402
+                     safe_usecols)
 
 engine = create_engine(DB_URL)
 
-MASTER_FILE = f"{DATA_DIR}/for_enzyme_detail/uniprotkb_master.tsv"
-REFERENCES_FILE = f"{DATA_DIR}/for_enzyme_detail/child_tables/uniprotkb_references.tsv"
-SEQ_LINKS_FILE = f"{DATA_DIR}/for_enzyme_detail/child_tables/uniprotkb_sequence_links.tsv"
-GO_FILE = f"{DATA_DIR}/for_enzyme_detail/child_tables/uniprotkb_go.tsv"
-ISOFORM_FILE = f"{DATA_DIR}/for_enzyme_detail/child_tables/uniprotkb_isoform_sequences.tsv"
+MASTER_FILE = 'for_enzyme_detail/uniprotkb_master.tsv'
+REFERENCES_FILE = 'for_enzyme_detail/child_tables/uniprotkb_references.tsv'
+SEQ_LINKS_FILE = 'for_enzyme_detail/child_tables/uniprotkb_sequence_links.tsv'
+GO_FILE = 'for_enzyme_detail/child_tables/uniprotkb_go.tsv'
+ISOFORM_FILE = 'for_enzyme_detail/child_tables/uniprotkb_isoform_sequences.tsv'
 
-SEQUENCE_LINK_TABLE_DDL = """
-CREATE TABLE IF NOT EXISTS gene_sequence_link (
-    sequence_link_id INT AUTO_INCREMENT PRIMARY KEY,
-    enzyme_id VARCHAR(20) NOT NULL,
-    link_category VARCHAR(80) NOT NULL,
-    accession VARCHAR(80) NOT NULL,
-    url VARCHAR(500),
-    related_accession VARCHAR(80),
-    related_url VARCHAR(500),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_gene_sequence_link_enzyme (enzyme_id),
-    CONSTRAINT fk_gene_sequence_link_enzyme
-        FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
-)
-"""
+# evidence 表没有 source_type, 但它的来源由 enzyme 决定 -> 审核状态跟着酶走。
+SOURCE_TO_REVIEW = {'swiss_prot': 'official', 'trembl': 'pending'}
 
 EVIDENCE_COLUMNS = {
     "title": "TEXT",
@@ -40,39 +50,11 @@ EVIDENCE_COLUMNS = {
     "url": "VARCHAR(500)",
 }
 
-GO_TABLE_DDL = """
-CREATE TABLE IF NOT EXISTS enzyme_go (
-    go_record_id INT AUTO_INCREMENT PRIMARY KEY,
-    enzyme_id VARCHAR(20) NOT NULL,
-    go_id VARCHAR(30),
-    go_term VARCHAR(500),
-    go_url VARCHAR(500),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_enzyme_go_enzyme (enzyme_id),
-    INDEX idx_enzyme_go_id (go_id),
-    CONSTRAINT fk_enzyme_go_enzyme
-        FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
-)
-"""
 
-ISOFORM_TABLE_DDL = """
-CREATE TABLE IF NOT EXISTS enzyme_isoform (
-    isoform_record_id INT AUTO_INCREMENT PRIMARY KEY,
-    enzyme_id VARCHAR(20) NOT NULL,
-    isoform_id VARCHAR(80),
-    isoform_length INT,
-    isoform_mass VARCHAR(80),
-    canonical_sequence TEXT,
-    canonical_length INT,
-    canonical_mass VARCHAR(80),
-    sequence TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_enzyme_isoform_enzyme (enzyme_id),
-    INDEX idx_enzyme_isoform_id (isoform_id),
-    CONSTRAINT fk_enzyme_isoform_enzyme
-        FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
-)
-"""
+def _enzyme_source_map():
+    """enzyme_id -> source_type。子表地址靠它判来源; 审核状态也跟着来源走。"""
+    df = pd.read_sql("SELECT enzyme_id, source_type FROM enzyme", engine)
+    return {str(r.enzyme_id): str(r.source_type) for r in df.itertuples()}
 
 
 def _clean_value(value):
@@ -102,16 +84,6 @@ def _first_clean(row, columns):
     return None
 
 
-def _indexed_groups(columns, stem):
-    numbers = []
-    pattern = re.compile(rf"^{re.escape(stem)}_(\d+)$")
-    for col in columns:
-        match = pattern.match(col)
-        if match:
-            numbers.append(int(match.group(1)))
-    return range(1, max(numbers, default=0) + 1)
-
-
 def _collect_indexed_links(row, id_prefix, link_prefix, max_index, category):
     links = []
     for i in range(1, max_index + 1):
@@ -130,7 +102,7 @@ def _collect_indexed_links(row, id_prefix, link_prefix, max_index, category):
 
 def _ensure_sequence_link_table():
     with engine.connect() as conn:
-        conn.execute(text(SEQUENCE_LINK_TABLE_DDL))
+        conn.execute(text(schema_ddl('gene_sequence_link')))
         conn.execute(text("ALTER TABLE gene_sequence_link MODIFY COLUMN link_category VARCHAR(80) NOT NULL"))
         conn.commit()
 
@@ -157,9 +129,23 @@ def _ensure_table(ddl):
         conn.commit()
 
 
-def update_enzyme_from_master():
-    """Extract sequence, length, mass from the wide master.tsv."""
-    df = pd.read_csv(MASTER_FILE, sep="\t", dtype=str)
+def update_enzyme_from_master(only=None):
+    """把 master 宽表里的序列 / 长度 / 质量回填到 enzyme 表。
+
+    原实现逐行发一条 UPDATE, 语句还随行变化(不同行更新的列不同)—— 96k 行就是 96k 条语句。
+    改成一条统一语句 + executemany, 并用 COALESCE 让「本次没有值」不覆盖已有值。
+    """
+    # 只读真正用得到的列: master 是**宽度动态**的宽表(实测 SP 141 列 / TrEMBL 473 列,
+    # 全量 96k 行时列数还可能再涨), 而本步只用 Entry + 序列/长度/质量四列。
+    # 全列解析 96k × 473 的峰值是 GB 级, 而这里要的只是 5 列。
+    spec_cols = ["Entry", "Canonical Sequence", "Sequence Length", "Canonical Length", "Canonical Mass"]
+    have = columns_of(MASTER_FILE, only=only)
+    wanted = [c for c in spec_cols if all(c in names for names in have.values())]
+    if "Entry" not in wanted or "Canonical Sequence" not in wanted:
+        # 缺「预期的序列列名」时要走下面的列名猜测(扫全部列找序列样式的列), 那就必须读全列。
+        wanted = None
+    df = read_segmented(MASTER_FILE, only=only, dtype=str,
+                        **({'usecols': wanted} if wanted else {}))
 
     # Use DB enzyme mapping
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
@@ -184,51 +170,56 @@ def update_enzyme_from_master():
         print("  enzyme update: sequence column not found, skipping")
         return
 
-    updated = 0
-    with engine.connect() as conn:
-        for _, row in df.iterrows():
-            entry = row["Entry"]
-            enzyme_id = entry_to_id.get(entry)
-            if not enzyme_id:
-                continue
+    params = []
+    for _, row in df.iterrows():
+        entry = row["Entry"]
+        enzyme_id = entry_to_id.get(entry)
+        if not enzyme_id:
+            continue
 
-            updates = {}
-            if pd.notna(row.get(seq_col)):
-                updates["sequence"] = str(row[seq_col])
-            if len_col and pd.notna(row.get(len_col)):
-                parsed_length = _clean_int(row.get(len_col))
-                if parsed_length is not None:
-                    updates["length"] = parsed_length
-            if mass_col and pd.notna(row.get(mass_col)):
-                try:
-                    updates["mass"] = float(str(row[mass_col]).replace(",", ""))
-                except (ValueError, TypeError):
-                    pass
+        seq = str(row[seq_col]) if pd.notna(row.get(seq_col)) else None
+        length = _clean_int(row.get(len_col)) if len_col else None
+        mass = None
+        if mass_col and pd.notna(row.get(mass_col)):
+            try:
+                mass = float(str(row[mass_col]).replace(",", ""))
+            except (ValueError, TypeError):
+                mass = None
 
-            if updates:
-                set_clause = ", ".join(f"{k} = :{k}" for k in updates)
-                params = {k: v for k, v in updates.items()}
-                params["enzyme_id"] = enzyme_id
-                conn.execute(
-                    text(f"UPDATE enzyme SET {set_clause} WHERE enzyme_id = :enzyme_id"),
-                    params
-                )
-                updated += 1
-        conn.commit()
+        if seq or length is not None or mass is not None:
+            params.append({"enzyme_id": enzyme_id, "sequence": seq,
+                           "length": length, "mass": mass})
 
-    print(f"  enzyme (sequence update): {updated} rows updated")
+    if not params:
+        print("  enzyme (sequence update): 没有可回填的行")
+        return
+
+    # COALESCE: 本次没值(NULL)就不动原值 —— 用 SET sequence = :sequence 会把缺列的行写空。
+    sql = text(
+        "UPDATE enzyme SET "
+        "sequence = COALESCE(:sequence, sequence), "
+        "length   = COALESCE(:length, length), "
+        "mass     = COALESCE(:mass, mass) "
+        "WHERE enzyme_id = :enzyme_id"
+    )
+    with engine.begin() as conn:
+        conn.execute(sql, params)
+
+    print(f"  enzyme (sequence update): {len(params)} 行 (批量, 缺值不覆盖)")
 
 
-def load_gene_info():
+def load_gene_info(only=None):
     """Load compact gene accession summary from sequence_links.tsv."""
-    df = pd.read_csv(SEQ_LINKS_FILE, sep="\t", dtype=str)
+    df = read_segmented(SEQ_LINKS_FILE, only=only, dtype=str)
 
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
 
     # The accession file has no gene symbol, but the master file does — and it is
     # keyed by the same UniProt entry, so the name is free here.
-    names_df = pd.read_csv(MASTER_FILE, sep="\t", dtype=str, usecols=["Entry", "Gene Names"])
+    cols = safe_usecols(MASTER_FILE, ["Entry", "Gene Names"], only=only)
+    names_df = read_segmented(MASTER_FILE, only=only, dtype=str,
+                              **({'usecols': cols} if cols else {}))
     gene_names = {
         entry: _clean_value(value)
         for entry, value in zip(names_df["Entry"], names_df["Gene Names"])
@@ -241,12 +232,16 @@ def load_gene_info():
         if not enzyme_id:
             continue
 
-        insdc_nuc_cols = [f"INSDC_Nuc_ID_{i}" for i in range(1, 25)]
-        insdc_genbank_cols = [f"INSDC_Nuc_GenBank_Link_{i}" for i in range(1, 25)]
-        insdc_prot_cols = [f"INSDC_Prot_ID_{i}" for i in range(1, 25)]
-        refseq_nuc_cols = [f"RefSeq_Nuc_ID_{i}" for i in range(1, 12)]
-        refseq_nuc_link_cols = [f"RefSeq_Nuc_Link_{i}" for i in range(1, 12)]
-        refseq_prot_cols = [f"RefSeq_Prot_ID_{i}" for i in range(1, 12)]
+        # 列宽按列头推导, 不写死 —— 原来这里是 range(1, 25) / range(1, 12),
+        # 而现表最后一列恰好各有 1 条真实数据(零余量), 更宽的条目会取不到 accession。
+        insdc_nuc_cols = [f"INSDC_Nuc_ID_{i}" for i in indexed_groups(df.columns, "INSDC_Nuc_ID")]
+        insdc_genbank_cols = [f"INSDC_Nuc_GenBank_Link_{i}"
+                              for i in indexed_groups(df.columns, "INSDC_Nuc_GenBank_Link")]
+        insdc_prot_cols = [f"INSDC_Prot_ID_{i}" for i in indexed_groups(df.columns, "INSDC_Prot_ID")]
+        refseq_nuc_cols = [f"RefSeq_Nuc_ID_{i}" for i in indexed_groups(df.columns, "RefSeq_Nuc_ID")]
+        refseq_nuc_link_cols = [f"RefSeq_Nuc_Link_{i}"
+                                for i in indexed_groups(df.columns, "RefSeq_Nuc_Link")]
+        refseq_prot_cols = [f"RefSeq_Prot_ID_{i}" for i in indexed_groups(df.columns, "RefSeq_Prot_ID")]
 
         ena_accession = _first_clean(row, insdc_nuc_cols)
         genbank_id = ena_accession or _first_clean(row, refseq_nuc_cols)
@@ -263,17 +258,16 @@ def load_gene_info():
                 "protein_accession": protein_accession,
             })
 
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM gene"))
-        conn.commit()
-
+    # 不再 DELETE FROM gene —— 那是全表清空, 会连另一个来源的行一起清掉。
+    # 按来源的删除已在 etl_run.purge_source() 做完, 这里只写。
     if not rows:
         print("  gene: no rows to insert")
         return
 
     gene_df = pd.DataFrame(rows).drop_duplicates()
     cols = ["enzyme_id", "gene_name", "genbank_id", "ncbi_url", "ena_accession", "protein_accession"]
-    gene_df[cols].to_sql("gene", engine, if_exists="append", index=False)
+    with engine.begin() as conn:
+        gene_df[cols].to_sql("gene", conn, if_exists="append", index=False)
     print(f"  gene: {len(gene_df)} rows inserted")
 
 
@@ -321,10 +315,10 @@ def _append_insdc_links(rows, enzyme_id, row, index):
         _append_sequence_link(rows, enzyme_id, f"INSDC protein{suffix}", prot_id, related_accession=nuc_id)
 
 
-def load_sequence_links():
+def load_sequence_links(only=None):
     """Load all external sequence accessions from sequence_links.tsv."""
     _ensure_sequence_link_table()
-    df = pd.read_csv(SEQ_LINKS_FILE, sep="\t", dtype=str)
+    df = read_segmented(SEQ_LINKS_FILE, only=only, dtype=str)
 
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
@@ -336,10 +330,12 @@ def load_sequence_links():
         if not enzyme_id:
             continue
 
-        for i in range(1, 25):
+        # 宽度按列头推导, 不写死。这里是**会产生行**的一处 —— 写死 24/11 时,
+        # 第 25 段 INSDC 链接会被静默丢掉(现表第 24 列恰好有 1 条真实数据, 零余量)。
+        for i in indexed_groups(df.columns, "INSDC_Nuc_ID"):
             _append_insdc_links(rows, enzyme_id, row, i)
 
-        for i in range(1, 12):
+        for i in indexed_groups(df.columns, "RefSeq_Prot_ID"):
             protein_accession = _clean_value(row.get(f"RefSeq_Prot_ID_{i}"))
             nucleotide_accession = _clean_value(row.get(f"RefSeq_Nuc_ID_{i}"))
             protein_url = _clean_value(row.get(f"RefSeq_Prot_Link_{i}"))
@@ -349,30 +345,28 @@ def load_sequence_links():
             _append_sequence_link(rows, enzyme_id, f"RefSeq protein{suffix}", protein_accession, protein_url, nucleotide_accession, nucleotide_url)
             _append_sequence_link(rows, enzyme_id, f"RefSeq nucleotide{suffix}", nucleotide_accession, nucleotide_url, protein_accession, protein_url)
 
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM gene_sequence_link"))
-        conn.commit()
-
     if not rows:
         print("  sequence links: no rows to insert")
         return
 
     link_df = pd.DataFrame(rows).drop_duplicates()
     cols = ["enzyme_id", "link_category", "accession", "url", "related_accession", "related_url"]
-    link_df[cols].to_sql("gene_sequence_link", engine, if_exists="append", index=False)
+    with engine.begin() as conn:
+        link_df[cols].to_sql("gene_sequence_link", conn, if_exists="append", index=False)
     print(f"  sequence links: {len(link_df)} rows inserted")
 
 
-def load_evidence():
+def load_evidence(only=None):
     """Load evidence from references.tsv."""
     _ensure_columns("evidence", EVIDENCE_COLUMNS)
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE evidence MODIFY COLUMN positions TEXT"))
         conn.commit()
-    df = pd.read_csv(REFERENCES_FILE, sep="\t", dtype=str)
+    df = read_segmented(REFERENCES_FILE, only=only, dtype=str)
 
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
+    source_by_enzyme = _enzyme_source_map()
 
     rows = []
     for _, row in df.iterrows():
@@ -381,7 +375,14 @@ def load_evidence():
         if not enzyme_id:
             continue
 
-        for i in _indexed_groups(df.columns, "PMID"):
+        # evidence 表没有 source_type, 审核状态跟着它那个酶的来源走 ——
+        # 原来无条件写 "official", TrEMBL 的证据也会被标成官方审核。
+        review = SOURCE_TO_REVIEW.get(source_by_enzyme.get(enzyme_id, ''))
+        if review is None:
+            raise ValueError(f'{enzyme_id} 的来源 {source_by_enzyme.get(enzyme_id)!r} 未知, '
+                             f'无法确定 evidence.review_status; 已登记 {SOURCE_TO_REVIEW}')
+
+        for i in indexed_groups(df.columns, "PMID"):
             evidence_row = {
                 "enzyme_id": enzyme_id,
                 "pubmed_id": _clean_value(row.get(f"PMID_{i}")),
@@ -396,17 +397,11 @@ def load_evidence():
                 "positions": _clean_value(row.get(f"Positions_{i}")),
                 "url": _clean_value(row.get(f"URL_{i}")),
                 "source_description": "UniProt reference",
-                "review_status": "official",
+                "review_status": review,
             }
             if not any(v for k, v in evidence_row.items() if k not in {"enzyme_id", "source_description", "review_status"}):
                 continue
-            rows.append({
-                **evidence_row,
-            })
-
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM evidence"))
-        conn.commit()
+            rows.append(evidence_row)
 
     if not rows:
         print("  evidence: no rows to insert")
@@ -418,14 +413,15 @@ def load_evidence():
         "pages", "publication_year", "reference_type", "positions", "url",
         "source_description", "review_status",
     ]
-    ev_df[cols].to_sql("evidence", engine, if_exists="append", index=False)
+    with engine.begin() as conn:
+        ev_df[cols].to_sql("evidence", conn, if_exists="append", index=False)
     print(f"  evidence: {len(ev_df)} rows inserted")
 
 
-def load_go_terms():
+def load_go_terms(only=None):
     """Load Gene Ontology annotations from uniprotkb_go.tsv."""
-    _ensure_table(GO_TABLE_DDL)
-    df = pd.read_csv(GO_FILE, sep="\t", dtype=str)
+    _ensure_table(schema_ddl('enzyme_go'))
+    df = read_segmented(GO_FILE, only=only, dtype=str)
 
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
@@ -446,24 +442,21 @@ def load_go_terms():
                 "go_url": go_url,
             })
 
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM enzyme_go"))
-        conn.commit()
-
     if not rows:
         print("  GO terms: no rows to insert")
         return
 
     go_df = pd.DataFrame(rows).drop_duplicates()
     cols = ["enzyme_id", "go_id", "go_term", "go_url"]
-    go_df[cols].to_sql("enzyme_go", engine, if_exists="append", index=False)
+    with engine.begin() as conn:
+        go_df[cols].to_sql("enzyme_go", conn, if_exists="append", index=False)
     print(f"  GO terms: {len(go_df)} rows inserted")
 
 
-def load_isoforms():
+def load_isoforms(only=None):
     """Load isoform sequences from uniprotkb_isoform_sequences.tsv."""
-    _ensure_table(ISOFORM_TABLE_DDL)
-    df = pd.read_csv(ISOFORM_FILE, sep="\t", dtype=str)
+    _ensure_table(schema_ddl('enzyme_isoform'))
+    df = read_segmented(ISOFORM_FILE, only=only, dtype=str)
 
     enzyme_map = pd.read_sql("SELECT enzyme_id, uniprot_id FROM enzyme", engine)
     entry_to_id = dict(zip(enzyme_map["uniprot_id"], enzyme_map["enzyme_id"]))
@@ -487,10 +480,6 @@ def load_isoforms():
             "sequence": _clean_value(row.get("Sequence")),
         })
 
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM enzyme_isoform"))
-        conn.commit()
-
     if not rows:
         print("  isoforms: no rows to insert")
         return
@@ -500,23 +489,19 @@ def load_isoforms():
         "enzyme_id", "isoform_id", "isoform_length", "isoform_mass",
         "canonical_sequence", "canonical_length", "canonical_mass", "sequence",
     ]
-    isoform_df[cols].to_sql("enzyme_isoform", engine, if_exists="append", index=False)
+    with engine.begin() as conn:
+        isoform_df[cols].to_sql("enzyme_isoform", conn, if_exists="append", index=False)
     print(f"  isoforms: {len(isoform_df)} rows inserted")
 
 
+def run(only=None):
+    update_enzyme_from_master(only=only)
+    load_gene_info(only=only)
+    load_sequence_links(only=only)
+    load_evidence(only=only)
+    load_go_terms(only=only)
+    load_isoforms(only=only)
+
+
 if __name__ == "__main__":
-    update_enzyme_from_master()
-    load_gene_info()
-    load_sequence_links()
-    load_evidence()
-    load_go_terms()
-    load_isoforms()
-
-
-def run():
-    update_enzyme_from_master()
-    load_gene_info()
-    load_sequence_links()
-    load_evidence()
-    load_go_terms()
-    load_isoforms()
+    run()

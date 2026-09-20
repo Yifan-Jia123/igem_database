@@ -1,15 +1,51 @@
-"""ETL Step 1: Load compound table."""
+"""ETL Step 1: 化合物表 —— B 类(全局字典, 无来源概念)。
+
+化合物是客观化学实体: 同一个 ChEBI ID 就是同一个化合物, 与它被哪个来源的酶引用无关。
+所以**不按来源分段、也不按来源删除**, 只做 upsert(只增 + 原地更新)。
+
+原实现的缺陷: 无查重直接 `append` -> 二次运行主键冲突, ETL 第 1 步就 `sys.exit(1)`。
+"""
+import os
+import sys
+
 import pandas as pd
 from sqlalchemy import create_engine, text
-from config import DATA_DIR, DB_URL
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import DB_URL  # noqa: E402
+from db_utils import upsert_dataframe  # noqa: E402
+from sources import read_merged  # noqa: E402
 
 engine = create_engine(DB_URL)
+
+COMPOUNDS_FILE = 'for_compound_card/uniprotkb_terpene_compounds.tsv'
+ALL_NODES_FILE = 'for_graph/all_nodes.tsv'
 
 EXCLUDED_COMMON_COMPOUND_IDS = {"CHEBI:15377", "CHEBI:15378", "CHEBI:33019"}
 
 COMPOUND_COLUMNS = {
     "inchi_key": "VARCHAR(100)",
 }
+
+
+def _fill_blank_name(out):
+    """name 为空的化合物用 compound_id 兜底。
+
+    compound.name 是 NOT NULL, 而 all_nodes 里会混进解析不出名字的条目 ——
+    全量 TrEMBL 实测有 4 个 POLYMER:* (Rhea 方程里的 ChEBI 聚合物实体,
+    PubChem/ChEBI 都查不到名字与 InChI Key)。空名会让**整条 upsert 事务**
+    因 (1048, "Column 'name' cannot be null") 回滚, 连非空的那些行一起丢。
+
+    兜底值取 compound_id 而不是空串: 前端 compound_filters.py 的既有约定是
+    `Compound.name != Compound.compound_id` 才 displayable, 所以 name=id 恰好
+    表达「这是个没有真名的实体」-> 不进图(画出来也会是个没标签的节点),
+    但仍然留在字典里, 不影响 reaction_compound 的外键。
+
+    空串与 None 都要认(两者都会在 COALESCE 里被当"没值"或被 MySQL 拒)。
+    """
+    blank = out["name"].isna() | (out["name"].astype(str).str.strip() == "")
+    out.loc[blank, "name"] = out.loc[blank, "compound_id"]
+    return out
 
 
 def _ensure_columns(table_name, columns):
@@ -30,63 +66,53 @@ def _ensure_columns(table_name, columns):
 
 def load_compounds():
     _ensure_columns("compound", COMPOUND_COLUMNS)
-    compounds_path = f"{DATA_DIR}/for_compound_card/uniprotkb_terpene_compounds.tsv"
-    df = pd.read_csv(compounds_path, sep="\t")
+    df = read_merged(COMPOUNDS_FILE)
     df = df[~df["ChEBI ID"].isin(EXCLUDED_COMMON_COMPOUND_IDS)]
 
-    df["compound_id"] = df["ChEBI ID"]
-    df["name"] = df["Name"]
-    df["chebi_id"] = df["ChEBI ID"]
-    df["smiles"] = df["SMILES"]
-    df["average_mass"] = pd.to_numeric(df["Molecular Mass"], errors="coerce")
-    df["chebi_url"] = df["ChEBI URL"]
-    df["inchi_key"] = None
-    df["structure_image_url"] = df["ChEBI ID"].apply(
+    out = pd.DataFrame()
+    out["compound_id"] = df["ChEBI ID"]
+    out["name"] = df["Name"]
+    out["chebi_id"] = df["ChEBI ID"]
+    out["smiles"] = df["SMILES"]
+    out["average_mass"] = pd.to_numeric(df["Molecular Mass"], errors="coerce")
+    out["chebi_url"] = df["ChEBI URL"]
+    out["inchi_key"] = None          # 由 supplement_from_all_nodes 填
+    out["structure_image_url"] = df["ChEBI ID"].apply(
         lambda x: f"https://www.ebi.ac.uk/chebi/displayImage.do?defaultImage=true&chebiId={x.split(':')[-1]}"
     )
+    _fill_blank_name(out)
 
     cols = ["compound_id", "name", "chebi_id", "smiles", "average_mass",
             "chebi_url", "inchi_key", "structure_image_url"]
-    df[cols].to_sql("compound", engine, if_exists="append", index=False)
-    print(f"  compound: {len(df)} rows inserted")
+    with engine.begin() as conn:
+        n = upsert_dataframe(conn, "compound", out[cols],
+                             update_cols=[c for c in cols if c != "compound_id"],
+                             preserve=("inchi_key",))
+    print(f"  compound: upsert {n} 行 (inchi_key 传 NULL 不覆盖已有值)")
 
 
 def supplement_from_all_nodes():
-    """Add any compounds from all_nodes.tsv that aren't already in the table."""
+    """all_nodes.tsv 里的化合物补进 compound 表, 并把 InChI Key 填上。"""
     _ensure_columns("compound", COMPOUND_COLUMNS)
-    all_nodes_path = f"{DATA_DIR}/for_graph/all_nodes.tsv"
-    df = pd.read_csv(all_nodes_path, sep="\t")
+    df = read_merged(ALL_NODES_FILE)
     df = df[~df["ChEBI ID"].isin(EXCLUDED_COMMON_COMPOUND_IDS)]
 
-    existing = pd.read_sql("SELECT compound_id FROM compound", engine)
-    existing_ids = set(existing["compound_id"])
-
     has_inchi_key = "InChI Key" in df.columns
-    update_rows = df[df["ChEBI ID"].isin(existing_ids) & df["InChI Key"].notna()] if has_inchi_key else df.iloc[0:0]
-    if len(update_rows) > 0:
-        with engine.connect() as conn:
-            for _, row in update_rows.iterrows():
-                inchi_key = str(row.get("InChI Key", "")).strip()
-                if inchi_key:
-                    conn.execute(
-                        text("UPDATE compound SET inchi_key = :inchi_key WHERE compound_id = :compound_id"),
-                        {"inchi_key": inchi_key, "compound_id": row["ChEBI ID"]},
-                    )
-            conn.commit()
+    out = pd.DataFrame()
+    out["compound_id"] = df["ChEBI ID"]
+    out["name"] = df["Name"]
+    out["chebi_id"] = df["ChEBI ID"]
+    out["inchi_key"] = df["InChI Key"].fillna("") if has_inchi_key else None
+    # 空串会让 COALESCE 认为「有值」而把已有 inchi_key 抹成空串 -> 先归一成 None。
+    if has_inchi_key:
+        out.loc[out["inchi_key"].astype(str).str.strip() == "", "inchi_key"] = None
+    _fill_blank_name(out)
 
-    new_rows = df[~df["ChEBI ID"].isin(existing_ids)]
-    if len(new_rows) == 0:
-        print(f"  (no new compounds from all_nodes.tsv)")
-        return
-
-    insert = pd.DataFrame({
-        "compound_id": new_rows["ChEBI ID"],
-        "name": new_rows["Name"],
-        "chebi_id": new_rows["ChEBI ID"],
-        "inchi_key": new_rows["InChI Key"] if has_inchi_key else None,
-    })
-    insert.to_sql("compound", engine, if_exists="append", index=False)
-    print(f"  compound (from all_nodes): {len(insert)} new rows")
+    with engine.begin() as conn:
+        n = upsert_dataframe(conn, "compound", out,
+                             update_cols=["name", "chebi_id", "inchi_key"],
+                             preserve=("name", "chebi_id", "inchi_key"))
+    print(f"  compound (from all_nodes): upsert {n} 行")
 
 
 if __name__ == "__main__":
@@ -94,6 +120,7 @@ if __name__ == "__main__":
     supplement_from_all_nodes()
 
 
-def run():
+def run(only=None):
+    """only 未使用 —— 化合物与来源无关(B 类)。保留参数是为了步骤签名一致。"""
     load_compounds()
     supplement_from_all_nodes()

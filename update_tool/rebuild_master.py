@@ -137,9 +137,38 @@ max_refseq = max((int(re.search(r'_(\d+)$', f).group(1)) for f in seq_fields_raw
 all_entries = sorted(set(list(go_by_entry.keys()) + list(ref_by_entry.keys()) +
                           list(rhea_by_entry.keys()) + list(seq_by_entry.keys())))
 
-seq_cols = [f for f in seq_fields_raw if f != 'Entry']
+# ---- Entry -> Source (来源分段归属) ----
+# 优先读原始统一表自带的 Source 列 (权威, 覆盖全部条目);
+# 旧版三导出没有该列时, 回退到子表自带的 Source —— references / sequence_links
+# 每个条目都有一行, 覆盖最全。
+def _read_source_col(path):
+    out = {}
+    try:
+        with open(path, 'r', encoding='utf-8') as fh:
+            reader = csv.DictReader(fh, delimiter='\t')
+            if not reader.fieldnames or 'Source' not in reader.fieldnames:
+                return out
+            for r in reader:
+                out[r['Entry']] = (r.get('Source') or '').strip()
+    except OSError:
+        return {}
+    return out
 
-# Build fields: Entry > Names > Rhea > Protein Seq > Nucleic Seq > GO > Refs
+
+source_by_entry = {}
+for _path in dict.fromkeys([RAW_0710, RAW_0712, RAW_0716]):
+    source_by_entry.update(_read_source_col(_path))
+if not source_by_entry:
+    for _e, _r in ref_by_entry.items():
+        source_by_entry[_e] = (_r.get('Source') or '').strip()
+    for _e, _r in seq_by_entry.items():
+        source_by_entry.setdefault(_e, (_r.get('Source') or '').strip())
+
+# 'Source' 必须从动态列里排除: 它已经单独成一列, 若同时被 ref_cols/seq_cols
+# 各自收一次, 输出会出现两个同名列, pandas 读回时被改写成 Source / Source.1。
+seq_cols = [f for f in seq_fields_raw if f not in ('Entry', 'Source')]
+
+# Build fields: Entry > Names > Rhea > Protein Seq > Nucleic Seq > GO > Refs > Source
 fields = ['Entry', 'UniProt Link', 'Recommended Name', 'Alternative Names', 'Gene Names']
 
 # Rhea
@@ -162,8 +191,11 @@ for i in range(1, max_go + 1):
     fields += [f'GO ID_{i}', f'GO Term_{i}', f'GO Link_{i}']
 
 # References
-ref_cols = [f for f in ref_fields_raw if f != 'Entry']
+ref_cols = [f for f in ref_fields_raw if f not in ('Entry', 'Source')]
 fields += ref_cols
+
+# Source (末列, 与各子表保持一致的位置)
+fields += ['Source']
 
 # Build rows
 rows = []
@@ -231,6 +263,8 @@ for entry in all_entries:
     ref_row = ref_by_entry.get(entry, {})
     for c in ref_cols:
         row[c] = ref_row.get(c, '')
+
+    row['Source'] = source_by_entry.get(entry, '')
 
     rows.append(row)
 

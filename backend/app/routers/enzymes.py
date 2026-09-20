@@ -38,6 +38,11 @@ async def get_enzyme_detail(
         "sequence": enz.sequence,
         "length": enz.length,
         "mass": float(enz.mass) if enz.mass is not None else None,
+        # 酶**自身**的来源/审核状态。与下面 reaction_items 里每一项的来源不是一回事:
+        # 反应是共享的客观实体, etl_reactions 把所有 reaction 行都记成 swiss_prot
+        # (见 schemas.EnzymeDetail 的说明)。取 .value 因为模型上是 ENUM。
+        "source_type": enz.source_type.value if enz.source_type else None,
+        "review_status": enz.review_status.value if enz.review_status else None,
     }
 
     # Gene
@@ -197,6 +202,8 @@ async def get_enzyme_detail(
         sequence=enzyme_values["sequence"],
         length=enzyme_values["length"],
         mass=enzyme_values["mass"],
+        source_type=enzyme_values["source_type"],
+        review_status=enzyme_values["review_status"],
         gene=gene_summary,
         sequence_links=sequence_links,
         go_terms=go_terms,

@@ -68,13 +68,14 @@ def normalize_ec(ec):
 
 
 print('Step 1: parsing Catalytic activity from 0712 raw TSV...')
-rows = []          # (entry, rhea_id, equation, direction, ec)
+rows = []          # (entry, rhea_id, equation, direction, ec, source)
 all_rhea = set()
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
         entry = row['Entry']
+        src = (row.get('Source') or '').strip()
         for rid, eq, direction, ec in parse_catalytic_activity(row.get('Catalytic activity', '')):
-            rows.append((entry, rid, eq, direction, ec))
+            rows.append((entry, rid, eq, direction, ec, src))
             all_rhea.add(rid)
 
 print(f'  Reactions parsed: {len(rows)}  (unique Rhea IDs: {len(all_rhea)})')
@@ -173,7 +174,7 @@ print(f'  Loaded {len(chebi_smiles)} ChEBI SMILES')
 print('Step 4: assembling ChEBI order + reaction SMILES...')
 smiles_hit = 0
 chebi_hit = 0
-for i, (entry, rid, equation, direction, ec) in enumerate(rows):
+for i, (entry, rid, equation, direction, ec, src) in enumerate(rows):
     left_c, right_c = get_sides(rid)
 
     # SMILES 底物/产物跟随 Direction 列
@@ -201,7 +202,7 @@ for i, (entry, rid, equation, direction, ec) in enumerate(rows):
 
     rid_num = rid.split(':')[1]
     rows[i] = (entry, rid, f'https://www.rhea-db.org/rhea/{rid_num}',
-               equation, direction, ec, rxn_smiles, chebi_order)
+               equation, direction, ec, rxn_smiles, chebi_order, src)
 
 print(f'  Rows with reaction SMILES: {smiles_hit}/{len(rows)}')
 print(f'  Rows with ChEBI order: {chebi_hit}/{len(rows)}')
@@ -212,8 +213,8 @@ print('\nStep 5: writing output...')
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
     w.writerow(['Entry', 'Rhea ID', 'Rhea Link', 'Equation', 'Direction',
-                'EC Number', 'Reaction SMILES', 'ChEBI IDs (equation order)'])
-    for entry, rid, link, eq, direction, ec, rxn, chebi in rows:
-        w.writerow([entry, rid, link, eq, direction, ec, rxn, chebi])
+                'EC Number', 'Reaction SMILES', 'ChEBI IDs (equation order)', 'Source'])
+    for entry, rid, link, eq, direction, ec, rxn, chebi, src in rows:
+        w.writerow([entry, rid, link, eq, direction, ec, rxn, chebi, src])
 
 print(f'Done! {len(rows)} rows -> {OUTPUT}')

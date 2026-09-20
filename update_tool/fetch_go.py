@@ -27,9 +27,13 @@ GO_COL = 'Gene Ontology (biological process)'
 
 # ---- collect entries and their BP GO terms from the raw TSV ----
 go_by_entry = {}
+# Entry -> Source。'Source' 由 download_uniprot.py 写在 RAW 统一表末列,
+# 这里跟着条目一起带下去, 否则下游无从判断这条 GO 属于哪个来源分段。
+source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
         e = row['Entry']
+        source_by_entry[e] = (row.get('Source') or '').strip()
         gos = []
         col = row.get(GO_COL, '') or ''
         for t in col.split(';'):
@@ -50,14 +54,17 @@ with open(INPUT, 'r', encoding='utf-8') as f:
 # ---- write: real GO rows + 每酶至少一行(无 GO 的酶补一行空占位, 与旧表结构一致) ----
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
-    w.writerow(['Entry', 'GO ID', 'GO Term', 'GO Link'])
+    w.writerow(['Entry', 'GO ID', 'GO Term', 'GO Link', 'Source'])
     for entry in go_by_entry:
         gos = go_by_entry[entry]
+        src = source_by_entry.get(entry, '')
         if gos:
             for g in gos:
-                w.writerow([entry, g['go_id'], g['term'], g['link']])
+                w.writerow([entry, g['go_id'], g['term'], g['link'], src])
         else:
-            w.writerow([entry, '', '', ''])  # 空占位: 无 BP GO 的酶(行序与原始表一致)
+            # 空占位: 无 BP GO 的酶(行序与原始表一致)。Source 仍要写, 否则空占位行
+            # 在按来源替换时无法归属, 会被另一个来源的刷新连带清掉。
+            w.writerow([entry, '', '', '', src])
 
 # ---- stats ----
 total_go = sum(len(v) for v in go_by_entry.values())

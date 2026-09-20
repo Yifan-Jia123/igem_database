@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUpRight, Check, Download, ExternalLink, FlaskConical, Loader2, ScanSearch, X } from 'lucide-react'
-import { loadEnzymeDetail, runBlastSearch } from '../api'
+import { loadBlastSubjects, loadEnzymeDetail, runBlastSearch } from '../api'
+import { sourceLabel } from '../lib/sourceLabels'
 import type { BlastHit, BlastPayload } from '../api'
 import type { Entity } from '../types'
 import '../styles/blast.css'
@@ -10,13 +11,16 @@ import '../styles/blast.css'
  * Slide-out BLAST drawer (mirrors the Structure-search drawer).
  *
  * Paste a protein/FASTA sequence and run a local NCBI BLAST+ search against the
- * enzyme library (996 canonical + 29 isoform variants). Each hit renders real
- * alignment metrics; hits open the enzyme detail page and can be added to the
- * download list. State survives close/reopen so a previous result is still
- * there when the drawer is opened again.
+ * enzyme library. The library is enzyme sequences plus the true isoform
+ * variants; its size is a function of the search set, so it is **asked for**
+ * (`loadBlastSubjects`) rather than written into the copy — a hardcoded count
+ * here goes stale the moment the search set changes, silently, while the search
+ * itself keeps using the right set. Each hit renders real alignment metrics;
+ * hits open the enzyme detail page and can be added to the download list. State
+ * survives close/reopen so a previous result is still there when the drawer is
+ * opened again.
  */
 
-const SOURCE_LABELS: Record<string, string> = { swiss_prot: 'Swiss-Prot', trembl: 'TrEMBL' }
 const MIN_AA = 15
 
 const THRESHOLDS: Array<{ label: string; value: number }> = [
@@ -75,6 +79,7 @@ export function BlastDrawer({
   isQueued,
   queueCount,
   onOpenResults,
+  searchSet,
 }: {
   open: boolean
   onClose: () => void
@@ -85,6 +90,8 @@ export function BlastDrawer({
   queueCount: number
   /** Open this run in the shared keyword-style result views (table form or map). */
   onOpenResults: (payload: BlastPayload, mode: 'table' | 'map') => void
+  /** 搜索集。BLAST 算搜索，所以它对 BLAST **真的**生效（后端按搜索集另建序列库）。 */
+  searchSet: string[]
 }) {
   const [draft, setDraft] = useState('')
   const [threshold, setThreshold] = useState(1e-5)
@@ -92,6 +99,31 @@ export function BlastDrawer({
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<BlastPayload | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
+  /** 当前搜索集下的真实主体条数。null = 还没问到 —— **不显示上一个搜索集的数**。 */
+  const [subjectCount, setSubjectCount] = useState<number | null>(null)
+
+  // 依赖用稳定串：searchSet 每次渲染都是新数组身份，直接进 deps 会每次重查。
+  const searchSetKey = useMemo(() => [...searchSet].sort().join(','), [searchSet])
+
+  // 主体条数**与选中的搜索集一一对应**，所以搜索集变了必须重新问；置回 null 是
+  // 有意的 —— 把上一个搜索集的数继续留在屏幕上，正是这次要修掉的那个 bug
+  // （数字一动不动，看起来像"搜索集没生效"，而实际搜索是对的，所以没人会去查）。
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setSubjectCount(null)
+    loadBlastSubjects(searchSet)
+      .then((count) => {
+        if (!cancelled) setSubjectCount(count)
+      })
+      // 问不到就不显示数字 —— 比显示一个不属于当前搜索集的数诚实。
+      .catch(() => {
+        if (!cancelled) setSubjectCount(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, searchSetKey])
 
   useEffect(() => {
     if (!open) return
@@ -133,7 +165,7 @@ export function BlastDrawer({
     setRunning(true)
     setError(null)
     try {
-      const result = await runBlastSearch({ sequence: seq, eValueThreshold: threshold, maxResults: 100 })
+      const result = await runBlastSearch({ sequence: seq, eValueThreshold: threshold, maxResults: 100, sourceTypes: searchSet })
       setPayload(result)
       setLoadedOnce(true)
     } catch (err) {
@@ -172,7 +204,11 @@ export function BlastDrawer({
               <strong>Paste a protein sequence</strong>
               <small>FASTA header optional · at least {MIN_AA} amino acids</small>
             </div>
-            <span className="blast-pool-chip">1,025 subjects</span>
+            {/* 搜索集变 → 这个数跟着变（后端与建库共用谓词，见 loadBlastSubjects）。
+                问不到时显示 "…"：宁可不说，也不说一个不属于当前搜索集的数。 */}
+            <span className="blast-pool-chip" title="Sequences BLAST will search in the current search set">
+              {subjectCount === null ? '…' : `${subjectCount.toLocaleString()} subjects`}
+            </span>
           </div>
 
           <textarea
@@ -233,7 +269,9 @@ export function BlastDrawer({
           {running && (
             <div className="blast-feedback">
               <Loader2 size={18} className="spin" />
-              Aligning against 1,025 enzyme subjects…
+              {subjectCount === null
+                ? 'Aligning against the enzyme subject library…'
+                : `Aligning against ${subjectCount.toLocaleString()} enzyme subjects…`}
             </div>
           )}
 
@@ -253,6 +291,16 @@ export function BlastDrawer({
                 </span>
                 <strong>{hitCount} hit{hitCount === 1 ? '' : 's'}</strong>
               </div>
+
+              {/* 搜索集把库改小了 → E-value 的统计语境跟着变。同一个序列在 1,535 条里
+                  会比在 95,899 条里"看起来更显著"，这不是 bug，但很容易被误读成
+                  「在全库里也这么显著」，所以必须写出来。 */}
+              {searchSet.length > 0 && (
+                <p className="blast-scope-note" role="note">
+                  Searched inside the <strong>{searchSet.map(sourceLabel).join(', ')}</strong> search set only —
+                  E-values look stronger on a smaller database. Switch the search set to <em>All sources</em> to compare.
+                </p>
+              )}
 
               <div className="blast-view-bar">
                 <div className="blast-view-copy">
@@ -310,8 +358,8 @@ export function BlastDrawer({
                         <span title="Bit score"><strong>{hit.bitscore.toFixed(1)}</strong> bitscore</span>
                       </div>
                       <div className="blast-hit-actions">
-                        {card?.sourceType && card.sourceType in SOURCE_LABELS && (
-                          <span className={`search-table-source-tag ${card.sourceType}`}>{SOURCE_LABELS[card.sourceType]}</span>
+                        {card?.sourceType && (
+                          <span className={`search-table-source-tag ${card.sourceType}`}>{sourceLabel(card.sourceType)}</span>
                         )}
                         <button
                           type="button"
@@ -336,8 +384,13 @@ export function BlastDrawer({
             <div className="blast-drawer-idle">
               <h3>Sequence search against the enzyme library</h3>
               <p>
-                Paste a protein and hit <strong>Run BLAST</strong>. The local NCBI BLASTp aligns it against every reviewed enzyme in the library
-                (996 canonical sequences plus 29 isoform variants), then lists the top hits by E-value.
+                Paste a protein and hit <strong>Run BLAST</strong>. The local NCBI BLASTp aligns it against{' '}
+                <strong>
+                  {subjectCount === null
+                    ? 'the enzyme sequences'
+                    : `${subjectCount.toLocaleString()} enzyme sequences`}
+                </strong>{' '}
+                in the current search set, then lists the top hits by E-value.
               </p>
               <button type="button" className="blast-example-inline" onClick={() => void loadExample()}>
                 <FlaskConical size={14} />

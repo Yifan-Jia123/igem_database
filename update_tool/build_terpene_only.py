@@ -73,7 +73,8 @@ with open(RHEA_INPUT, 'r', encoding='utf-8') as f:
             sub_segs, prod_segs = ls, rs
 
         rows.append((row['Entry'], row['Rhea ID'], out_dir,
-                     sub_chebi, prod_chebi, sub_segs, prod_segs))
+                     sub_chebi, prod_chebi, sub_segs, prod_segs,
+                     (row.get('Source') or '').strip()))
 
 print(f'  Reactions: {len(rows)}, unique compounds: {len(all_chebi)}')
 
@@ -140,13 +141,31 @@ def display_name(segments, rhea_name):
 # ---- Step 3: 组装输出 ----
 print('Step 3: writing output...')
 fields = ['Entry', 'Rhea ID', 'Direction', 'Substrate', 'Substrate ChEBI',
-          'Product', 'Product ChEBI']
+          'Product', 'Product ChEBI', 'Source']
+# 双侧 ChEBI 全空的行必须丢掉再写出。
+# 成因: Step 2 的 SPARQL 批次失败时该反应的 ChEBI 解析不出来, 于是 sub_chebi 和
+# prod_chebi 都是 '' —— 所有这类行会落进同一个 key ('', ''), 被下游 build_terpene_pairs
+# 归成**一行**, 然后在这一行的 Enzyme_1..N 里塞进成千上万个酶, 产出一条畸形记录。
+# 那既不是有效通路, 又会把下游的列宽撑爆。宁可少一行, 不可多一行垃圾。
+dropped_both, dropped_one = 0, 0
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
     w.writerow(fields)
-    for entry, rid, direction, sub_chebi, prod_chebi, sub_segs, prod_segs in rows:
+    for entry, rid, direction, sub_chebi, prod_chebi, sub_segs, prod_segs, src in rows:
+        if not sub_chebi and not prod_chebi:
+            dropped_both += 1
+            continue
+        if not sub_chebi or not prod_chebi:
+            # 单侧缺失仍写出(另一侧信息有效, 且 pairs 的键 (sub, prod) 与双侧齐全的行不同),
+            # 但计数报告出来 —— 数量异常增长说明 SPARQL 在掉批次。
+            dropped_one += 1
         w.writerow([entry, rid, direction,
                     display_name(sub_segs, name_map.get(sub_chebi, '')), sub_chebi,
-                    display_name(prod_segs, name_map.get(prod_chebi, '')), prod_chebi])
+                    display_name(prod_segs, name_map.get(prod_chebi, '')), prod_chebi,
+                    src])
 
-print(f'Done! {len(rows)} rows -> {OUTPUT}')
+print(f'Done! {len(rows) - dropped_both} rows -> {OUTPUT}')
+if dropped_both:
+    print(f'  丢弃双侧 ChEBI 全空的行: {dropped_both} (SPARQL 未解析出化合物的反应)')
+if dropped_one:
+    print(f'  单侧 ChEBI 缺失(仍写出): {dropped_one}')

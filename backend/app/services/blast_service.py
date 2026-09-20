@@ -1,11 +1,13 @@
 """Real NCBI BLAST+ search over the local enzyme library.
 
-Subjects = the canonical ``Enzyme.sequence`` of every enzyme that has one
-(996) plus the true isoform variants from ``EnzymeIsoform`` whose sequence
-differs from their canonical sequence (29). Each subject is written to a
-local FASTA whose defline is a plain integer index; a parallel ``list`` maps
-index -> (enzyme_id, isoform_id). ``makeblastdb`` formats the set once and the
-result is reused while the subject signature (ids + lengths) is unchanged.
+Subjects = the canonical ``Enzyme.sequence`` of every enzyme that has one,
+plus the true isoform variants from ``EnzymeIsoform`` whose sequence differs
+from their canonical sequence. (No count is quoted here on purpose: it is a
+function of the data and of the search set, and a number written into a
+docstring goes stale silently.) Each subject is written to a local FASTA whose
+defline is a plain integer index; a parallel ``list`` maps index ->
+(enzyme_id, isoform_id). ``makeblastdb`` formats the set once and the result is
+reused while the subject signature (scope + ids + lengths) is unchanged.
 
 NCBI binaries (blastp.exe / makeblastdb.exe) are expected in the directory
 pointed to by ``settings.blast_bin_dir`` (or on PATH). If they are missing a
@@ -23,9 +25,9 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -50,7 +52,8 @@ _OUTFMT_COLUMNS = (
 )
 
 _BUILD_LOCK = threading.Lock()
-# in-process cache: work_dir -> (signature, subjects, db prefix)
+# in-process cache: db prefix -> (signature, subjects, db prefix).
+# Keyed by prefix, not by work dir: one work dir now holds one DB per search set.
 _READY: Dict[str, tuple] = {}
 
 
@@ -136,8 +139,100 @@ def clean_query_sequence(raw: str) -> str:
 # --------------------------------------------------------------------------- #
 # Subject library
 # --------------------------------------------------------------------------- #
-async def _load_subjects(db: AsyncSession) -> List[BlastSubject]:
-    enzymes = (await db.execute(select(Enzyme).where(Enzyme.sequence.is_not(None)))).scalars().all()
+def _scope_key(source_types: Optional[List[str]]) -> str:
+    """搜索集的稳定名字, 用来给**每个搜索集**分出独立的库文件与签名。
+
+    排序后再拼 —— 用户勾选的先后顺序不该产生第二个库。
+    """
+    if not source_types:
+        return "all"
+    return "src=" + ",".join(sorted(set(source_types)))
+
+
+def _scope_paths(work: Path, scope_key: str) -> Tuple[Path, Path, Path]:
+    """一个搜索集对应的 (fasta, db 前缀, 签名文件)。
+
+    ``all`` 沿用历史文件名, 这样**已经建好的全量库(约 98MB)会被直接复用**,
+    而不是因为改了这个函数就白重建一次。
+    """
+    if scope_key == "all":
+        return work / "igem_subjects.fa", work / "igem_enzymes", work / "igem.sig"
+    stem = hashlib.sha1(scope_key.encode("utf-8")).hexdigest()[:10]
+    return (
+        work / f"igem_subjects.{stem}.fa",
+        work / f"igem_enzymes.{stem}",
+        work / f"igem.{stem}.sig",
+    )
+
+
+def _enzyme_subject_query(source_types: Optional[List[str]]):
+    """主体库的「酶」那一半。**建库与报数共用这一个构造器。**
+
+    各写一份的代价是零 —— 两边都能跑通、都不抛异常 —— 而它买到的是一个
+    不报错的谎话: 抽屉右上角说「1,025 subjects」, 实际建库用的是别的集合。
+    所以这里的谓词只能有一处。
+    """
+    query = select(Enzyme).where(Enzyme.sequence.is_not(None))
+    if source_types:
+        query = query.where(Enzyme.source_type.in_(source_types))
+    return query
+
+
+def _isoform_subject_query(source_types: Optional[List[str]]):
+    """主体库的「异构体」那一半。与 ``_enzyme_subject_query`` 同样共用。
+
+    异体蛋白自己没有 source_type 列, 所以按来源圈定时必须 join ``Enzyme``。
+    「与 canonical 序列不同才算一条真主体」这个条件也在里面 —— 它是主体库语义的一部分,
+    不属于调用方, 所以留在构造器里而不是留给 `count_subjects` 自己记得加。
+    """
+    query = select(EnzymeIsoform).where(
+        EnzymeIsoform.sequence.is_not(None),
+        or_(
+            EnzymeIsoform.canonical_sequence.is_(None),
+            EnzymeIsoform.sequence != EnzymeIsoform.canonical_sequence,
+        ),
+    )
+    if source_types:
+        query = query.join(
+            Enzyme, Enzyme.enzyme_id == EnzymeIsoform.enzyme_id
+        ).where(Enzyme.source_type.in_(source_types))
+    return query
+
+
+async def count_subjects(db: AsyncSession, source_types: Optional[List[str]] = None) -> int:
+    """当前搜索集下 BLAST 会拿多少条序列当主体 —— 与 ``_load_subjects`` 同一组谓词。
+
+    抽屉右上角要在**用户点 Run 之前**显示这个数, 而那时还没有任何 BLAST 响应
+    (``payload.searchedSubjects`` 要跑完才有)。之前那里写的是常量 1,025,
+    于是换了搜索集数字也不动 —— 显示的东西与实际搜的集合脱钩。
+
+    **不能**写成 ``len(await _load_subjects(...))``: 那是一次把全部序列整读进来的
+    加载(实测 34.9s / 95,869 条), 而抽屉每打开一次、每换一次搜索集都要问一次。
+    这里只数行, 谓词走 ``idx_enzyme_source_review``; 代价与命中数无关, 也不传输序列。
+
+    返回的是**真值** —— 与 ``_ensure_blast_db`` 写进 FASTA 的条数逐条相同
+    (同一组谓词, 见上面两个构造器的 docstring)。
+    """
+    total = 0
+    for subject_query in (_enzyme_subject_query(source_types), _isoform_subject_query(source_types)):
+        # 套一层派生表只是为了拿到「与建库完全同一条件的行数」; MySQL 8 会把
+        # 无聚合/无 LIMIT 的派生表 merge 掉, 所以真正执行的还是那条 WHERE 计数。
+        count_query = select(func.count()).select_from(subject_query.subquery())
+        total += int((await db.execute(count_query)).scalar() or 0)
+    return total
+
+
+async def _load_subjects(db: AsyncSession, source_types: Optional[List[str]] = None) -> List[BlastSubject]:
+    """Load the BLAST subject library, optionally narrowed to the search set.
+
+    过滤的是 ``Enzyme.source_type``(酶**自身**的来源), 不是边上的来源 ——
+    这里的主体就是酶, 与 BLAST 在全量酶上建库的语义一致。
+    异体蛋白自己不带 source_type 列, 所以 join ``Enzyme`` 后再过滤。
+
+    两个子查询由 ``_enzyme_subject_query`` / ``_isoform_subject_query`` 构造,
+    与 ``count_subjects`` **共用** —— 理由见那两个函数。
+    """
+    enzymes = (await db.execute(_enzyme_subject_query(source_types))).scalars().all()
     subjects: List[BlastSubject] = []
     for e in enzymes:
         seq = (e.sequence or "").strip()
@@ -150,17 +245,7 @@ async def _load_subjects(db: AsyncSession) -> List[BlastSubject]:
             )
         )
 
-    variants = (
-        await db.execute(
-            select(EnzymeIsoform).where(
-                EnzymeIsoform.sequence.is_not(None),
-                or_(
-                    EnzymeIsoform.canonical_sequence.is_(None),
-                    EnzymeIsoform.sequence != EnzymeIsoform.canonical_sequence,
-                ),
-            )
-        )
-    ).scalars().all()
+    variants = (await db.execute(_isoform_subject_query(source_types))).scalars().all()
     for iso in variants:
         seq = (iso.sequence or "").strip()
         subjects.append(
@@ -175,8 +260,19 @@ async def _load_subjects(db: AsyncSession) -> List[BlastSubject]:
     return subjects
 
 
-def _signature(subjects: List[BlastSubject]) -> str:
+def _signature(subjects: List[BlastSubject], scope_key: str) -> str:
+    """主体库的内容签名: **搜索集 + 主体集合**。
+
+    ⚠️ 搜索集必须进这个哈希。它原来只哈希 enzyme_id/isoform_id/length
+    (连序列内容都没有), 而调用方判断"库还是新的吗"用的就是这个签名 ——
+    于是圈定后的库与全量库只要主体 id 集合相同就算出同一个签名,
+    圈定的库会被当成"全量库已就绪"**直接复用**: 用户选了 Swiss-Prot, 实际在搜 TrEMBL,
+    且**不报任何错**。这正是本项目一路在防的那类静默给错答案。
+    (库里已有的 98MB 全量库仍会被复用 —— 它的 scope_key 就是 ``all``, 签名与改造前不同,
+    所以第一次会重建一次, 之后稳定。)
+    """
     digest = hashlib.sha1()
+    digest.update(f"scope={scope_key}\n".encode("utf-8"))
     for s in subjects:
         digest.update(f"{s.enzyme_id}\t{s.isoform_id or ''}\t{s.length}\n".encode("utf-8"))
     return digest.hexdigest()
@@ -212,30 +308,34 @@ async def _run_makeblastdb(fasta: Path, prefix: Path) -> None:
     await asyncio.to_thread(run)
 
 
-async def _ensure_blast_db(db: AsyncSession):
-    """Return (subjects, db_prefix); rebuild the formatted DB when out of date."""
-    work = _work_dir()
-    fasta = work / "igem_subjects.fa"
-    prefix = work / "igem_enzymes"
-    marker = work / "igem.sig"
+async def _ensure_blast_db(db: AsyncSession, source_types: Optional[List[str]] = None):
+    """Return (subjects, db_prefix); rebuild the formatted DB when out of date.
 
-    subjects = await _load_subjects(db)
-    signature = _signature(subjects)
+    每个搜索集一个独立的库文件 (见 ``_scope_paths``)。进程内缓存 ``_READY`` 按
+    **db 前缀**索引, 不能按 work 目录 —— 否则两个搜索集共用一条缓存记录, 谁后跑谁覆盖,
+    而签名校验又会因为跨集不匹配触发无谓重建。
+    """
+    work = _work_dir()
+    scope_key = _scope_key(source_types)
+    fasta, prefix, marker = _scope_paths(work, scope_key)
+
+    subjects = await _load_subjects(db, source_types)
+    signature = _signature(subjects, scope_key)
 
     with _BUILD_LOCK:
-        cached = _READY.get(str(work))
+        cached = _READY.get(str(prefix))
         if cached and cached[0] == signature:
             return cached[1], cached[2]
 
         current = marker.read_text(encoding="utf-8", errors="ignore").strip() if marker.exists() else ""
         if current == signature and _db_exists(prefix):
-            _READY[str(work)] = (signature, subjects, prefix)
+            _READY[str(prefix)] = (signature, subjects, prefix)
             return subjects, prefix
 
         _write_fasta(subjects, fasta)
         await _run_makeblastdb(fasta, prefix)
         marker.write_text(signature, encoding="utf-8")
-        _READY[str(work)] = (signature, subjects, prefix)
+        _READY[str(prefix)] = (signature, subjects, prefix)
         return subjects, prefix
 
 
@@ -369,7 +469,7 @@ async def run_blast_search(db: AsyncSession, request: BlastSearchRequest) -> Bla
     max_results = max(1, min(request.max_results or 100, 200))
 
     try:
-        subjects, prefix = await _ensure_blast_db(db)
+        subjects, prefix = await _ensure_blast_db(db, request.source_types)
     except BlastToolMissingError:
         raise
     except FileNotFoundError as exc:

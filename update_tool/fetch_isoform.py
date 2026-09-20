@@ -20,9 +20,13 @@ BACKOFF = [2, 5, 10, 20, 40]
 
 # ---- Step 1: collect entries ----
 entries = []
+# Entry -> Source, 与 entries 同序带下去 (写行时只有 entry 在手上)。
+source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
-        entries.append(row['Entry'])
+        e = row['Entry']
+        entries.append(e)
+        source_by_entry[e] = (row.get('Source') or '').strip()
 print(f'Total entries: {len(entries)}')
 
 # ---- Step 2: load cache ----
@@ -134,18 +138,20 @@ print(f'\nEntries with isoforms: {entries_with_iso}, total isoform rows: {total_
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
     w.writerow(['Entry', 'Isoform_ID', 'Isoform Length', 'Isoform Mass',
-                'Canonical Sequence', 'Canonical Length', 'Canonical Mass', 'Sequence'])
+                'Canonical Sequence', 'Canonical Length', 'Canonical Mass', 'Sequence',
+                'Source'])
     for entry in entries:
         info = iso_data.get(entry, {'canon': {'seq': '', 'length': '', 'mass': ''}, 'iso_ids': []})
         canon_seq = info['canon']['seq']
         canon_len = info['canon']['length']
         canon_mass = info['canon']['mass']
+        src = source_by_entry.get(entry, '')
         for iso_id in info.get('iso_ids', []):
             iso_seq = info.get('iso_seqs', {}).get(iso_id, '')
             iso_len = str(len(iso_seq)) if iso_seq else ''
             iso_mass = calc_mass(iso_seq)
             w.writerow([entry, iso_id, iso_len, iso_mass,
-                        canon_seq, canon_len, canon_mass, iso_seq])
+                        canon_seq, canon_len, canon_mass, iso_seq, src])
 
 print(f'Written: {entries_with_iso} entries, {total_iso} isoform rows -> {OUTPUT}')
 

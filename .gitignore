@@ -53,3 +53,34 @@ Thumbs.db
 # Generated download payloads and stray test logs
 /backend/app/downloads/
 /frontend/src/pw_e2e.log
+
+# ---------------------------------------------------------------------------
+# Pipeline artifacts — regenerate with update_tool/, do NOT commit.
+# ---------------------------------------------------------------------------
+# Raw download + segmented/merged outputs (update_tool/_src/, _merged/).
+# 全量 TrEMBL 下这几个目录合计 ~700MB, 提交进去会把仓库撑爆。
+/update_tool/_src/
+/update_tool/_merged/
+# 试点与沙箱工作区（用了 --root= 就是这几个名字）
+/update_tool/_pilot*/
+/update_tool/_sandbox*/
+/update_tool/_sbx*/
+/update_tool/_t/
+/update_tool/_deploy_backup/
+/update_tool/_*.md5
+/update_tool/_emoji_scan.txt
+# update_database.py 的落盘：分段表带来源后缀, 汇合表不带。
+# 只有 3 张汇合表（terpene_pairs / terpene_compounds / all_nodes）是仓库跟踪的,
+# 其余带后缀的全是流水线产物。注意上面的目录都在 update_tool/ 下。
+/for_*/*.swiss_prot.tsv
+/for_*/*.trembl.tsv
+/for_*/*/*.swiss_prot.tsv
+/for_*/*/*.trembl.tsv
+# download_uniprot.py --out= 的单来源产物落在仓库根目录
+/uniprotkb_terpene_parsed.*.tsv
+# 探针脚本的临时快照（阈值/基线 JSON），不是代码
+/_graph_*.json
+/_iso_*.json
+/_ab_*.json
+/_pool_*.json
+/st_*.json

@@ -3511,6 +3511,36 @@ body:has(.graph-home-page) {
   stroke-width: 0.38;
 }
 
+/* ---------------------------------------------------------------------------
+   合并线（`.merged-source-line`）：展开后一条线代表「某个来源的一整批边」。
+   虚线是它唯一的形态信号 —— 实线 = 具体一个酶，虚线 = 一批。
+   色相与卡片左边框、`.search-table-source-tag.*` 同源；但**比标签色亮一档**：
+   标签躺在白底上，这条线躺在深蓝地图上，直接用 #a36a08 会糊掉。
+   类名由 JSX 拼成 `merged-source-line src-<source>`，所以下面按来源分别给色。
+   --------------------------------------------------------------------------- */
+.expanded-edge.merged-source-line {
+  stroke-dasharray: 6 4;
+}
+
+.expanded-edge.merged-source-line.src-trembl {
+  stroke: #f0b64c;
+}
+
+.expanded-edge.merged-source-line.src-ai_literature {
+  stroke: #a894d6;
+}
+
+.expanded-edge.merged-source-line.src-manual_literature {
+  stroke: #5f9fd6;
+}
+
+/* 圈定的检索没命中这个合并单元里的任何成员时，整条线退成背景色 —— 与逐酶线
+   (`scope-background`) 同一处理。写在来源色之后，靠更高的选择器权重取胜。 */
+.expanded-edge.merged-source-line.scope-background {
+  stroke: rgba(198, 208, 226, 0.4);
+  stroke-dasharray: 3 5;
+}
+
 .home-edge-label,
 .expanded-edge-label {
   fill: rgba(255, 249, 242, 0.95);
@@ -4409,7 +4439,7 @@ body:has(.home-map-page) {
   width: 100%;
   padding: 8px;
   border-radius: 18px;
-  background: rgba(242, 240, 246, 0.94);
+  background: rgba(249, 247, 252, 0.98);
   color: #2c2341;
 }
 
@@ -4428,12 +4458,13 @@ body:has(.home-map-page) {
 }
 
 .dataset-select-menu button small {
-  color: rgba(44, 35, 65, 0.58);
+  color: rgba(44, 35, 65, 0.76);
   font-size: 11px;
 }
 
 .dataset-select-menu button.is-active {
-  background: rgba(110, 93, 145, 0.14);
+  background: rgba(110, 93, 145, 0.2);
+  box-shadow: inset 3px 0 0 #6e5d91;
 }
 
 .dataset-select-menu button:disabled {
@@ -6565,6 +6596,39 @@ body:has(.home-map-page) {
   color: #f8fbff;
 }
 
+/* Home header: the nav now carries the search-set control as well (search set +
+   Data Browser + BLAST + Structure search + team chip ≈ 750px), but the base
+   template still gives that column `minmax(300px, 1fr)` — less than its content
+   on every screen. `justify-self: end` plus `white-space: nowrap` means the
+   shortfall overflows *leftwards*, i.e. under the search box, which paints on
+   top of it (`.home-map-page .home-search-bar` is `z-index: 12`). That is why
+   the search-set control was hidden behind the search bar.
+   Fix is the one the other three headers already use (search-table-page /
+   enzyme-atlas / inner-pages): let the centre track shrink `minmax(0, 460px)`
+   and give the nav `auto`, so it gets exactly the width it needs and can never
+   slide out of its column. The 460px cap keeps the search box the same width it
+   has today on wide screens.
+   Scoped to min-width 1121px on purpose: a 2-class selector like this one beats
+   the 1-class `.graph-top-nav` rules in the `max-width: 1120px` and
+   `max-width: 760px` blocks no matter where it sits in this file, and those two
+   templates (2-column, then the single-column phone stack) are what narrow
+   viewports get. Written unscoped, this rule would silently cancel them. */
+@media (min-width: 1121px) {
+  .home-map-page .graph-top-nav {
+    grid-template-columns: minmax(150px, 210px) minmax(0, 460px) auto;
+    gap: 14px;
+  }
+}
+
+/* In the band where the nav is at its widest relative to the viewport, the
+   search box is the thing that gets squeezed. Tightening the nav's own gap buys
+   it ~40px without hiding any of the nav's items. */
+@media (min-width: 1121px) and (max-width: 1400px) {
+  .home-map-page .graph-primary-nav {
+    gap: 14px;
+  }
+}
+
 .home-map-page .atlas-brand {
   position: static;
   z-index: auto;
@@ -6792,7 +6856,7 @@ body:has(.home-map-page) {
 }
 
 .graph-filter-sidebar .dataset-pill-button span {
-  color: rgba(248, 251, 255, 0.62);
+  color: rgba(248, 251, 255, 0.82);
   font-size: 11px;
 }
 
@@ -6816,6 +6880,41 @@ body:has(.home-map-page) {
 .graph-filter-sidebar .download-pill:hover {
   background: rgba(237, 227, 175, 0.12);
   color: #ffffff;
+}
+
+.graph-zoom-controls {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 10px 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(237, 227, 175, 0.18);
+}
+
+.graph-zoom-controls button {
+  min-height: 28px;
+  border: 1px solid rgba(248, 251, 255, 0.22);
+  border-radius: 5px;
+  background: rgba(8, 26, 58, 0.2);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.graph-zoom-controls button:hover {
+  background: rgba(237, 227, 175, 0.18);
+}
+
+.graph-zoom-controls span {
+  color: rgba(248, 251, 255, 0.86);
+  font-size: 11px;
+  text-align: center;
+}
+
+.graph-zoom-controls button:last-child {
+  grid-column: 1 / -1;
+  width: 100%;
+  font-size: 11px;
 }
 
 .graph-filter-sidebar .download-pill {
@@ -7052,6 +7151,24 @@ body:has(.home-map-page) {
   cursor: grab;
 }
 
+.home-map-page .home-map-svg.is-dragging .home-map-camera,
+.home-map-page .home-map-svg.is-dragging .home-map-node,
+.home-map-page .home-map-node.dragging,
+.home-map-page .home-map-node.dragging text,
+.home-map-page .home-map-node.dragging circle {
+  transition: none !important;
+}
+
+.home-map-page .home-map-svg.is-dragging .home-map-node circle,
+.home-map-page .home-map-node.dragging circle {
+  filter: none !important;
+}
+
+.home-map-page .home-map-svg.is-dragging,
+.home-map-page .home-map-node.dragging circle {
+  cursor: grabbing;
+}
+
 .home-map-page .home-map-node:hover circle:not(.selected-ring) {
   fill: #f4eab8;
   stroke: rgba(166, 104, 125, 0.72);
@@ -7275,6 +7392,7 @@ body:has(.home-map-page) {
 
 .home-map-page .enzyme-card {
   grid-template-columns: 38px minmax(0, 1fr) 112px;
+  align-items: start;
   gap: 12px;
   min-height: 104px;
   padding: 12px;
@@ -7283,9 +7401,73 @@ body:has(.home-map-page) {
   color: #ffffff;
 }
 
+.home-map-page .enzyme-card .card-check {
+  align-self: start;
+  justify-self: center;
+  margin-top: 1px;
+}
+
+.home-map-page .enzyme-card-copy,
+.home-map-page .enzyme-card-meta {
+  min-width: 0;
+}
+
+.home-map-page .enzyme-card-copy h3,
+.home-map-page .enzyme-card-copy p,
+.home-map-page .enzyme-card-meta strong,
+.home-map-page .enzyme-card-meta small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.home-map-page .enzyme-card-meta {
+  align-content: start;
+}
+
 .home-map-page .enzyme-card.selected {
   background: rgba(16, 43, 85, 0.96);
   box-shadow: inset 3px 0 0 var(--graph-gold);
+}
+
+/* ---------------------------------------------------------------------------
+   合并卡（`.enzyme-card-merged`）：一张卡代表「某个来源的全部酶」。
+   它必须和逐条渲染的 Swiss-Prot 卡一眼可辨 —— 手段是左侧 3px 来源色边框
+   + 极淡的同色底；色相沿用 `table-results.css` 的 `.search-table-source-tag.*`
+   （两处是同一套来源配色，改一处就要改另一处）。底色是**往深里压**而不是提亮：
+   这张卡躺在深蓝的地图面板上。
+
+   来源色走 `border-left` 而不是 `box-shadow`，因为 `.enzyme-card.selected`
+   用 `box-shadow: inset 3px 0 0 var(--graph-gold)` 表达选中 —— 两者都要占左边那条
+   3px，写进同一个属性就会互相覆盖（合并卡一被选中就丢掉来源色）。所以选中改成
+   内描边，两条信号互不遮挡。
+   --------------------------------------------------------------------------- */
+.home-map-page .enzyme-card.enzyme-card-merged {
+  border-left: 3px solid rgba(255, 255, 255, 0.28);
+  background: rgba(13, 33, 68, 0.94);
+}
+
+.home-map-page .enzyme-card.enzyme-card-merged.src-trembl {
+  border-left-color: #d68910;
+  background: rgba(58, 41, 10, 0.55);
+}
+
+.home-map-page .enzyme-card.enzyme-card-merged.src-ai_literature {
+  border-left-color: #6e5d91;
+  background: rgba(38, 32, 52, 0.55);
+}
+
+.home-map-page .enzyme-card.enzyme-card-merged.src-manual_literature {
+  border-left-color: #246eaa;
+  background: rgba(14, 36, 58, 0.55);
+}
+
+.home-map-page .enzyme-card.enzyme-card-merged.selected {
+  background: rgba(16, 43, 85, 0.96);
+  outline: 2px solid var(--graph-gold);
+  outline-offset: -2px;
+  /* 基类 `.enzyme-card.selected` 的金色内阴影会和来源色左边框并排挤在左边 6px 里，
+     既乱又盖住来源色。选中信号已由 outline 承担，这里清掉。 */
+  box-shadow: none;
 }
 
 .home-map-page .enzyme-card h3 {
@@ -7442,6 +7624,19 @@ body:has(.home-map-page) {
     top: 690px;
     width: auto;
     max-height: 250px;
+  }
+
+  .home-map-page .enzyme-card {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .home-map-page .enzyme-card-meta {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .home-map-page .enzyme-card-meta button {
+    justify-self: start;
   }
 
   .home-map-page .map-footer-stats.home-map-stats {

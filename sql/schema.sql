@@ -204,6 +204,37 @@ CREATE TABLE IF NOT EXISTS search_index (
     INDEX idx_search_index_enzyme (enzyme_id),
     INDEX idx_search_index_field (field_name),
     INDEX idx_search_index_hash (field_value_hash),
+    -- 前缀段查询 (field_value LIKE 'abc%') 的唯一可用索引。没有它时该段是全表扫,
+    -- 全量库实测 6.6-7.1s 只为返回 2-192 行; 加上后 0.013-0.098s, 结果逐行相同。
+    -- 前缀长度 64 字符: 索引 49 B/行 (~177MB / 376 万行), 比 field_value 全长的
+    -- B-tree 代价低得多, 而对 LIKE 'x%' 的定位只需前 64 字符。
+    -- 注意 '%x%'(包含段) 无法用任何 B-tree, 仍是全表扫 —— 那是另一件事, 见 search_service。
+    INDEX idx_search_index_value_prefix (field_value(64)),
     CONSTRAINT fk_search_index_enzyme
         FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 编号持久化。生命周期与上面所有表相反: 本表只增不删,
+-- 永不参与任何 DELETE / TRUNCATE —— 它是「已有酶的编号永远不变」的唯一依据。
+--
+-- 刻意不加 FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id):
+-- 条目从新版本 UniProt 消失时, enzyme 行会被按来源替换删掉,
+-- 但映射行必须活下来, 否则该编号会被重新分配给别的条目。
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS enzyme_id_map (
+    uniprot_id VARCHAR(20) PRIMARY KEY,
+    enzyme_id VARCHAR(20) NOT NULL UNIQUE,
+    first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retired_at DATETIME NULL,          -- 条目从数据中消失时打标, 编号不回收
+    INDEX idx_enzyme_id_map_enzyme (enzyme_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- UniProt 条目合并时旧 accession 降为 secondary。靠这张表把编号接续过去,
+-- 避免同一个生物学实体因为改号而被当成新酶发一个新号。
+CREATE TABLE IF NOT EXISTS enzyme_alias_map (
+    secondary_accession VARCHAR(20) PRIMARY KEY,
+    enzyme_id VARCHAR(20) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_enzyme_alias_enzyme (enzyme_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

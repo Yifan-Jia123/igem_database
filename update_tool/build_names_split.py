@@ -53,13 +53,16 @@ with open(INPUT, 'r', encoding='utf-8') as f:
             'Recommended name': rec_full,
             'Alternative names': alt_full,
             'Gene Names': row.get('Gene Names (primary)', ''),
+            # Source 由 parse_names.py 从 RAW 透传下来 (上游若漏掉此列则取空)。
+            'Source': (row.get('Source') or '').strip(),
         })
 
 # 旧表按 Entry 升序排列
 rows.sort(key=lambda r: r['Entry'])
 
+# 'Source' 放末列。etl_enzymes 的酶表基础集合就取自本表, 来源归属必须在这里可用。
 fields = ['Entry', 'UniProt Link', 'Entry Name', 'Organism',
-          'Recommended name', 'Alternative names', 'Gene Names']
+          'Recommended name', 'Alternative names', 'Gene Names', 'Source']
 
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.DictWriter(f, delimiter='\t', fieldnames=fields)

@@ -85,9 +85,13 @@ async def get_graph(
 @router.get("/graph/edge-groups/{edge_group_id}/edges")
 async def expand_edge_group_endpoint(
     edge_group_id: str,
+    source_types: Optional[List[str]] = Query(None, description="搜索集：只在圈定的来源里展开"),
+    review_statuses: Optional[List[str]] = Query(None, description="审核状态筛选"),
     db: AsyncSession = Depends(get_db),
 ):
-    edges = await expand_edge_group(db, edge_group_id)
+    edges = await expand_edge_group(
+        db, edge_group_id, source_types=source_types, review_statuses=review_statuses
+    )
     return ApiResponse(data={
         "edgeGroupId": edge_group_id,
         "edges": [e.model_dump(by_alias=True) for e in edges],

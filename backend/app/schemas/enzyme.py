@@ -77,6 +77,19 @@ class IsoformSequence(CamelModel):
 
 
 class EnzymeDetail(CamelModel):
+    """One enzyme's full record.
+
+    NOTE `source_type` / `review_status` here describe **the enzyme** (from the
+    `enzyme` table). They are NOT the same thing as the `source_type` /
+    `review_status` on each `EnzymeReactionItem` below: a reaction is a shared
+    objective entity, so `etl_reactions` stamps every reaction row `swiss_prot` /
+    `official` regardless of which enzyme referenced it (see that module's
+    docstring). Before these two fields existed the detail page had no way to say
+    whether an enzyme was reviewed, and the only "source" on screen was the
+    reaction's -- which reads `swiss_prot` even for a TrEMBL enzyme. With 94,334
+    of 95,869 enzymes being TrEMBL, that is the common case, not the edge case.
+    """
+
     enzyme_id: str
     database_code: str
     primary_name: str
@@ -87,6 +100,8 @@ class EnzymeDetail(CamelModel):
     sequence: Optional[str] = None
     length: Optional[int] = None
     mass: Optional[float] = None
+    source_type: Optional[str] = None
+    review_status: Optional[str] = None
     gene: Optional[GeneSummary] = None
     sequence_links: List[SequenceLink] = []
     go_terms: List[GoTerm] = []

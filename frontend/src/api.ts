@@ -68,10 +68,14 @@ type GraphPayload = {
   edgeGroups: EdgeGroup[]
 }
 
-type FilterOptionsPayload = {
+export type FilterOptionsPayload = {
   organisms?: string[]
   sourceTypes?: string[]
   reviewStatuses?: string[]
+  /** 搜索集（search set）的候选项：**真的有行的**来源 + 各自条数。
+   *  与 `sourceTypes` 是两件事 —— 后者是枚举全集（含 0 行的值），
+   *  选择器只能列这里的值，否则用户选中一个空集合，还看不出是自己选的。 */
+  searchSets?: Array<{ value: string; count: number }>
 }
 
 export type StructureSearchCompoundHit = {
@@ -120,6 +124,8 @@ export type EntrySearchParams = {
   q: string
   organismName?: string
   pageSize?: number
+  /** 搜索集：只在圈定的来源里检索。空数组/缺省 = 全库。 */
+  sourceTypes?: string[]
 }
 
 export async function loadApiDataset(): Promise<ApiDataset> {
@@ -131,7 +137,17 @@ export async function loadApiDataset(): Promise<ApiDataset> {
   return adaptDataset(metadata, graph)
 }
 
-export async function searchApiEntries({ q, organismName, pageSize = 80 }: EntrySearchParams): Promise<Entity[]> {
+/** 把搜索集放进 query string。空数组 = 全库，所以一个参数也不发。 */
+function setSourceTypes(params: URLSearchParams, sourceTypes?: string[]) {
+  for (const value of sourceTypes ?? []) params.append('source_types', value)
+}
+
+/** Multi-valued query param. Empty array = no filter (the repo-wide convention). */
+function setList(params: URLSearchParams, name: string, values?: string[]) {
+  for (const value of values ?? []) params.append(name, value)
+}
+
+export async function searchApiEntries({ q, organismName, pageSize = 80, sourceTypes }: EntrySearchParams): Promise<Entity[]> {
   const params = new URLSearchParams({
     q,
     view_mode: 'table',
@@ -139,6 +155,7 @@ export async function searchApiEntries({ q, organismName, pageSize = 80 }: Entry
     page_size: String(pageSize),
   })
   if (organismName) params.set('organism_name', organismName)
+  setSourceTypes(params, sourceTypes)
 
   const payload = await request<{ items: EnzymeCard[] }>(`/search/entries?${params.toString()}`)
   return payload.items.map((enzyme) => enzymeEntity(enzyme))
@@ -596,6 +613,12 @@ export type EnzymeDetailData = {
   sequence?: string | null
   length?: number | null
   mass?: number | null
+  /** The enzyme's OWN source/review status. Distinct from the same-named fields
+   *  on each reaction below: reactions are shared objective entities, so every
+   *  reaction row is stamped `swiss_prot` / `official` no matter which enzyme
+   *  referenced it (see the backend's `EnzymeDetail` docstring). */
+  sourceType?: string | null
+  reviewStatus?: string | null
   gene?: EnzymeGeneDetail | null
   sequenceLinks: EnzymeSequenceLink[]
   goTerms: EnzymeGoTerm[]
@@ -610,6 +633,8 @@ export type HomeGraphRequest = {
   depth?: number
   limitNodes?: number
   selectionMode?: 'global'
+  /** 搜索集：只在圈定的来源里取图。 */
+  sourceTypes?: string[]
 }
 
 /** One compound-pair step of a pathway, tied to the map edge that realises it
@@ -652,10 +677,20 @@ export type PathwaySearchParams = {
   viaCompoundIds?: string[]
   maxSteps?: number
   limit?: number
+  /** 搜索集：只在圈定的来源里找通路。 */
+  sourceTypes?: string[]
 }
 
-export async function loadMetadataFilters(): Promise<FilterOptionsPayload> {
-  return request<FilterOptionsPayload>('/metadata/filter-options')
+/**
+ * Filter options. `module` selects the organism domain: the graph/home page only
+ * ever draws enzymes that carry a reaction annotation, so its organism list has
+ * to come from that same subset (`module=graph`, also the default) — otherwise
+ * the species dropdown offers a species whose map is empty. `table` (and the
+ * BLAST result table) is the full enzyme domain.
+ */
+export async function loadMetadataFilters(module?: 'graph' | 'table'): Promise<FilterOptionsPayload> {
+  const query = module ? `?module=${encodeURIComponent(module)}` : ''
+  return request<FilterOptionsPayload>(`/metadata/filter-options${query}`)
 }
 
 export type TableEnzymeRow = {
@@ -674,18 +709,50 @@ export type TableEnzymePayload = {
   total: number
 }
 
+/**
+ * Table-form enzyme search.
+ *
+ * ⚠️ `limit` 与后端 `routers/search.py` 的 `limit: int = Query(500, ge=1, le=2000)`
+ * 是**一对**，改一个必须改另一个 —— 前端要 3000 而 `le=2000` 只会换来一个看不懂的 422。
+ *
+ * 那三个 `filter*` 参数是**服务端**执行的显示筛选（编进取数 SQL），不是取回后再筛。
+ * 原因：`ORDER BY score DESC LIMIT n` 与「来源 / 物种 / EC」这三个维度毫不相关，
+ * 先截断再客户端筛，筛出来的是「分数前 n 名里恰好属于该来源的那几个」。
+ * 实测 `terpene synthase` 在 limit=600 下客户端筛完只剩 2 条 swiss_prot，
+ * 服务端圈定给的是 1,243 条。
+ */
 export async function searchTableEnzymes({
   q,
-  limit = 600,
+  limit = 2000,
+  sourceTypes,
+  filterSourceTypes,
+  filterOrganismNames,
+  filterEcPrefixes,
+  signal,
 }: {
   q: string
   limit?: number
+  /** 搜索集：只在圈定的来源里检索。与结果页自己的 "Data source" 显示筛选是两层。 */
+  sourceTypes?: string[]
+  /** 显示筛选：数据来源。与搜索集在 SQL 里 AND 叠加。 */
+  filterSourceTypes?: string[]
+  /** 显示筛选：物种（精确串相等）。没有物种的行用 `__unknown__` 哨兵表示。 */
+  filterOrganismNames?: string[]
+  /** 显示筛选：EC 前缀，形如 `4.2.3`。调用方负责只传解析合法的前缀。 */
+  filterEcPrefixes?: string[]
+  /** 一次检索可能十几秒，改词/改筛选时必须取消上一次，否则请求叠队。 */
+  signal?: AbortSignal
 }): Promise<TableEnzymePayload> {
   const params = new URLSearchParams({ q, limit: String(limit) })
-  return request<TableEnzymePayload>(`/search/table?${params.toString()}`)
+  setSourceTypes(params, sourceTypes)
+  setList(params, 'display_source_types', filterSourceTypes)
+  setList(params, 'display_organism_names', filterOrganismNames)
+  setList(params, 'display_ec_prefixes', filterEcPrefixes)
+  return request<TableEnzymePayload>(`/search/table?${params.toString()}`, { signal })
 }
 
-/** Rich aggregated rows for an explicit enzyme-id list (caller order preserved). */
+/** Rich aggregated rows for an explicit enzyme-id list (caller order preserved).
+ *  **不是**搜索（是按显式 id 取行），所以刻意不接受任何筛选参数。 */
 export async function searchTableEnzymesByIds(enzymeIds: string[]): Promise<TableEnzymePayload> {
   return request<TableEnzymePayload>('/search/table/by-ids', {
     method: 'POST',
@@ -698,6 +765,7 @@ export async function searchEnzymeHits({
   q,
   organismName,
   pageSize = 80,
+  sourceTypes,
 }: EntrySearchParams): Promise<HomeEnzymeHit> {
   const params = new URLSearchParams({
     q,
@@ -706,6 +774,7 @@ export async function searchEnzymeHits({
     page_size: String(pageSize),
   })
   if (organismName) params.set('organism_name', organismName)
+  setSourceTypes(params, sourceTypes)
 
   const payload = await request<{ items: HomeGraphEnzymeCard[]; pagination?: { total?: number } }>(
     `/search/entries?${params.toString()}`,
@@ -774,6 +843,7 @@ export async function loadHomeGraph(options: HomeGraphRequest = {}): Promise<Hom
   })
   if (options.centerCompoundId) params.set('center_compound_id', options.centerCompoundId)
   if (!options.centerCompoundId) params.set('selection_mode', options.selectionMode ?? 'global')
+  setSourceTypes(params, options.sourceTypes)
   return request<HomeGraphData>(`/graph?${params.toString()}`)
 }
 
@@ -790,6 +860,7 @@ export async function runPathwaySearch(params: PathwaySearchParams): Promise<Pat
       viaCompoundIds: params.viaCompoundIds ?? [],
       maxSteps: params.maxSteps ?? 6,
       limit: params.limit ?? 40,
+      sourceTypes: params.sourceTypes,
     }),
   })
 }
@@ -805,8 +876,15 @@ export async function loadEnzymeDetail(enzymeId: string): Promise<EnzymeDetailDa
   return request<EnzymeDetailData>(`/enzymes/${encodeURIComponent(enzymeId)}`)
 }
 
-export async function loadExpandedEdgeGroup(edgeGroupId: string): Promise<HomeGraphEdge[]> {
-  const payload = await request<{ edgeGroupId: string; edges: HomeGraphEdge[] }>(`/graph/edge-groups/${encodeURIComponent(edgeGroupId)}/edges`)
+/** 展开一个边组的全部酶。`sourceTypes` = 搜索集 —— 图上圈定了，展开时也必须圈定，
+ *  否则展开会把不属于搜索集的边又漏回来（服务端见 `expand_edge_group`）。 */
+export async function loadExpandedEdgeGroup(edgeGroupId: string, sourceTypes?: string[]): Promise<HomeGraphEdge[]> {
+  const params = new URLSearchParams()
+  setSourceTypes(params, sourceTypes)
+  const query = params.toString()
+  const payload = await request<{ edgeGroupId: string; edges: HomeGraphEdge[] }>(
+    `/graph/edge-groups/${encodeURIComponent(edgeGroupId)}/edges${query ? `?${query}` : ''}`,
+  )
   return payload.edges
 }
 
@@ -969,6 +1047,10 @@ export type BlastSearchParams = {
   sequence: string
   eValueThreshold?: number
   maxResults?: number
+  /** 搜索集：BLAST 算搜索，所以**真的**按它建序列库（每个搜索集一个库）。
+   *  库变小会改变 E-value 的统计语境（搜索空间小 → 同一个序列显得更显著），
+   *  这不是 bug，但界面上要提醒一句。 */
+  sourceTypes?: string[]
 }
 
 export async function runBlastSearch(params: BlastSearchParams): Promise<BlastPayload> {
@@ -979,6 +1061,26 @@ export async function runBlastSearch(params: BlastSearchParams): Promise<BlastPa
       sequence: params.sequence,
       eValueThreshold: params.eValueThreshold ?? 1e-5,
       maxResults: params.maxResults ?? 100,
+      sourceTypes: params.sourceTypes,
     }),
   })
+}
+
+/**
+ * 当前搜索集下 BLAST 会搜多少条主体序列 —— 抽屉右上角那个数字。
+ *
+ * 这是一个**独立接口**，不是从别处推到出来的，原因有三：
+ * - `payload.searchedSubjects` 要跑完一次才知道（首次含建库约 45s），
+ *   而抽屉在用户点 Run 之前就要显示它，且换搜索集后旧的那个数属于上一次运行；
+ * - `filter-options` 的 `searchSets` 只有**酶**数，真实主体还包含异构体，
+ *   前端拿它算出来的数会与实际建库的集合差一截 —— 而它看起来完全正常；
+ * - 后端那条与建库**共用同一组谓词**（`blast_service.count_subjects`），
+ *   所以这个数与实际搜的库不会漂开。
+ */
+export async function loadBlastSubjects(sourceTypes?: string[]): Promise<number> {
+  const params = new URLSearchParams()
+  setSourceTypes(params, sourceTypes)
+  const suffix = params.toString()
+  const payload = await request<{ subjects: number }>(`/blast/subjects${suffix ? `?${suffix}` : ''}`)
+  return payload.subjects
 }

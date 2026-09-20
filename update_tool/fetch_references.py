@@ -19,9 +19,13 @@ BATCH_SIZE = 50
 
 # ---- Step 1: collect all entries ----
 entries = []
+# Entry -> Source。entries 被排序过, 所以来源必须用字典按 Entry 取, 不能按下标对齐。
+source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
-        entries.append(row['Entry'])
+        e = row['Entry']
+        entries.append(e)
+        source_by_entry[e] = (row.get('Source') or '').strip()
 entries = sorted(entries)  # 旧表按 Entry 升序
 print(f'Total entries: {len(entries)}')
 
@@ -128,6 +132,8 @@ for n in range(1, max_refs + 1):
         f'Journal_{n}', f'Volume_{n}', f'Pages_{n}', f'Year_{n}',
         f'Type_{n}', f'Positions_{n}', f'URL_{n}',
     ]
+# 'Source' 追加在最末: 前面是宽度动态的引用列, 只能放尾部才能保证列名→列号映射稳定。
+fields += ['Source']
 
 # ---- Step 6: write ----
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
@@ -135,7 +141,7 @@ with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     writer.writeheader()
     for entry in entries:
         refs = all_refs.get(entry, [])
-        row = {'Entry': entry}
+        row = {'Entry': entry, 'Source': source_by_entry.get(entry, '')}
         for idx, ref in enumerate(refs):
             n = idx + 1
             row[f'PMID_{n}'] = ref['pmid']

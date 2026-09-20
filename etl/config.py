@@ -1,7 +1,9 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.dirname(BASE_DIR)
+# IGEM_DATA_DIR 用于沙箱: 让 ETL 读另一份 for_* (如 _sandbox/), 而不是真实数据目录。
+# 没有它就无法在动真库之前验证「幂等 / 编号不变」这些不变量。
+DATA_DIR = os.getenv("IGEM_DATA_DIR") or os.path.dirname(BASE_DIR)
 
 DB_CONFIG = {
     "host": os.getenv("IGEM_DB_HOST", "localhost"),

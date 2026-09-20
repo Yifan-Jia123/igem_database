@@ -8,6 +8,9 @@ class BlastSearchRequest(CamelModel):
     sequence: str
     e_value_threshold: float = 1e-5
     max_results: int = 100
+    # 搜索集: BLAST 算搜索, 所以**真的**按它建库 (见 blast_service._ensure_blast_db)。
+    # 空/缺省 = 全库。
+    source_types: Optional[List[str]] = None
 
 
 class BlastHit(CamelModel):

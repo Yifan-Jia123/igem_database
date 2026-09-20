@@ -1,10 +1,10 @@
 import re
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, NamedTuple, Set, Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.models import (
-    Compound, Enzyme, Gene, Reaction,
+    Compound, Direction, Enzyme, Gene, Reaction,
     ReactionCompound, EnzymeReactionEdge,
 )
 from app.schemas.graph import GraphPayload, ReactionEdge, EdgeGroup, EdgeGroupItem, FocusPoint
@@ -189,6 +189,16 @@ def _limit_graph_payload(
             items=kept_items,
         ))
 
+    # 顺序必须显式定死。客户端对 edgeGroups 是**按下标**取的
+    # (`api.ts: graph.edgeGroups.slice(0, 120)`, 而这里会返回 157 组),
+    # 所以「哪 120 组装进拼贴图」直接由数组顺序决定。而原来的顺序来自
+    # reaction_compound/edge 的扫描顺序 —— 随执行计划变, 改一条无关的查询
+    # 就会静默换掉拼贴图的成员。这里按与 pair_candidates 同一个优先级键排序
+    # (规模降序, 再按标签/端点), 于是它是确定的, 且被截断时留下的是最大的那些组。
+    limited_edge_groups.sort(
+        key=lambda g: (-g.count, g.label or "", g.source_compound_id, g.target_compound_id)
+    )
+
     return [card_map[compound_id] for compound_id in ordered_ids], limited_edges, limited_edge_groups
 
 
@@ -210,6 +220,36 @@ async def _pick_default_center(db: AsyncSession) -> Optional[Compound]:
     return result.scalar()
 
 
+class _EnzymeRef(NamedTuple):
+    """首页图只用到酶表的这 4 列 —— 用轻量引用代替 ORM 实体。
+
+    直接 `select(Enzyme)` 的代价远不止多读几列: 实体带 `sequence`(平均 ~1.3KB)
+    与 `secondary_names`, 且有 3 个 `lazy="selectin"` 关系(genes/edges/evidences),
+    每取一批酶就会再发一轮查询把整张边表重读一遍。实测全量库下取 20,543 条边:
+
+        整实体      5.883s  发出 70 条 SQL (23×gene + 23×enzyme_reaction_edge + 23×evidence)
+        列投影      0.482s  发出  1 条 SQL
+
+    `_edge_group_item` 与 `_make_enzyme_card` 只读这 4 个属性, 所以两者对
+    实体和本引用同样工作 —— 其它调用点(`build_graph_payload_for_enzymes` 等)
+    仍传真实体, 不受影响。
+    """
+
+    enzyme_id: str
+    primary_name: str
+    uniprot_id: Optional[str]
+    organism_name: Optional[str]
+
+
+class _ReactionRef(NamedTuple):
+    """同上, 反应侧只用到这 4 列 (`_make_enzyme_card` 读 ec_number/equation)。"""
+
+    reaction_id: str
+    ec_number: Optional[str]
+    equation: str
+    direction: Optional[Direction]
+
+
 async def _build_global_graph_payload(
     db: AsyncSession,
     limit_nodes: Optional[int],
@@ -221,7 +261,18 @@ async def _build_global_graph_payload(
         return GraphPayload()
 
     displayable_ids = {compound.compound_id for compound in compounds}
-    rc_query = select(ReactionCompound, Reaction).join(
+    # 列投影而不是 select(ReactionCompound, Reaction): 实体形式会连带触发
+    # Reaction 上两个 lazy="selectin" 关系(reaction_compounds / edges) —— 后者会把
+    # 整张边表再拉一遍。实测 1,553 行: 实体 1.139s/5 条 SQL -> 投影 0.041s/1 条。
+    # 反应侧的列名两表都有 reaction_id, 所以只取 Reaction 的那一份(join 相等)。
+    rc_query = select(
+        ReactionCompound.compound_id,
+        ReactionCompound.role,
+        Reaction.reaction_id,
+        Reaction.ec_number,
+        Reaction.equation,
+        Reaction.direction,
+    ).join(
         Reaction, ReactionCompound.reaction_id == Reaction.reaction_id
     ).where(ReactionCompound.compound_id.in_(displayable_ids))
 
@@ -233,15 +284,17 @@ async def _build_global_graph_payload(
     rc_result = await db.execute(rc_query)
     rc_reaction_pairs = rc_result.all()
 
-    reaction_map: Dict[str, Reaction] = {}
+    reaction_map: Dict[str, _ReactionRef] = {}
     rxn_compounds: Dict[str, Tuple[List[str], List[str]]] = {}
-    for rc, reaction in rc_reaction_pairs:
+    for rc in rc_reaction_pairs:
         if rc.compound_id not in displayable_ids:
             continue
-        reaction_map[reaction.reaction_id] = reaction
-        if reaction.reaction_id not in rxn_compounds:
-            rxn_compounds[reaction.reaction_id] = ([], [])
-        substrates, products = rxn_compounds[reaction.reaction_id]
+        reaction_map[rc.reaction_id] = _ReactionRef(
+            rc.reaction_id, rc.ec_number, rc.equation, rc.direction
+        )
+        if rc.reaction_id not in rxn_compounds:
+            rxn_compounds[rc.reaction_id] = ([], [])
+        substrates, products = rxn_compounds[rc.reaction_id]
         target_list = substrates if rc.role.value == "substrate" else products
         if rc.compound_id not in target_list:
             target_list.append(rc.compound_id)
@@ -255,7 +308,17 @@ async def _build_global_graph_payload(
         cards = [_compound_to_card(compound) for compound in compounds]
         return GraphPayload(nodes=cards[:limit_nodes] if limit_nodes else cards)
 
-    edge_query = select(EnzymeReactionEdge, Enzyme).join(
+    # 见 _EnzymeRef 的 docstring: 实体形式在本查询上要发 70 条 SQL。
+    edge_query = select(
+        EnzymeReactionEdge.edge_id,
+        EnzymeReactionEdge.enzyme_id,
+        EnzymeReactionEdge.reaction_id,
+        EnzymeReactionEdge.source_type,
+        EnzymeReactionEdge.review_status,
+        Enzyme.primary_name,
+        Enzyme.uniprot_id,
+        Enzyme.organism_name,
+    ).join(
         Enzyme, EnzymeReactionEdge.enzyme_id == Enzyme.enzyme_id
     ).where(EnzymeReactionEdge.reaction_id.in_(reaction_ids))
 
@@ -266,14 +329,14 @@ async def _build_global_graph_payload(
 
     edge_result = await db.execute(edge_query)
     edge_rows = edge_result.all()
-    gene_names = await _load_gene_names(db, {ere.enzyme_id for ere, _ in edge_rows})
+    gene_names = await _load_gene_names(db, {row.enzyme_id for row in edge_rows})
 
     edge_records: List[dict] = []
-    for ere, enz in edge_rows:
-        reaction = reaction_map.get(ere.reaction_id)
+    for row in edge_rows:
+        reaction = reaction_map.get(row.reaction_id)
         if not reaction:
             continue
-        substrates, products = rxn_compounds.get(ere.reaction_id, ([], []))
+        substrates, products = rxn_compounds.get(row.reaction_id, ([], []))
         direction = reaction.direction.value if reaction.direction else "unknown"
         pairs: List[Tuple[str, str]] = []
         if direction in DIRECTION_ALLOWS_SUBSTRATE_TO_PRODUCT:
@@ -281,18 +344,19 @@ async def _build_global_graph_payload(
         if direction in DIRECTION_ALLOWS_PRODUCT_TO_SUBSTRATE:
             pairs.extend((source_id, target_id) for source_id in products for target_id in substrates if source_id != target_id)
 
+        enz = _EnzymeRef(row.enzyme_id, row.primary_name, row.uniprot_id, row.organism_name)
         for source_id, target_id in pairs:
             edge_records.append({
                 "from_cpd": source_id,
                 "to_cpd": target_id,
-                "edge_id": ere.edge_id,
-                "enzyme_id": ere.enzyme_id,
+                "edge_id": row.edge_id,
+                "enzyme_id": row.enzyme_id,
                 "enzyme": enz,
                 "reaction_id": reaction.reaction_id,
                 "reaction": reaction,
                 "direction": direction,
-                "source_type": ere.source_type.value if ere.source_type else "swiss_prot",
-                "review_status": ere.review_status.value if ere.review_status else "official",
+                "source_type": row.source_type.value if row.source_type else "swiss_prot",
+                "review_status": row.review_status.value if row.review_status else "official",
             })
 
     cards = [_compound_to_card(compound) for compound in compounds]
@@ -819,8 +883,17 @@ def _make_enzyme_card(
 async def expand_edge_group(
     db: AsyncSession,
     edge_group_id: str,
+    source_types: Optional[List[str]] = None,
+    review_statuses: Optional[List[str]] = None,
 ) -> List[ReactionEdge]:
-    """Expand an edge group: return individual ReactionEdge cards from the edge IDs."""
+    """Expand an edge group: return individual ReactionEdge cards from the edge IDs.
+
+    ``source_types``/``review_statuses`` 是**搜索集**: 必须在这里也过滤, 否则
+    「图按搜索集圈定了、一展开又漏回全库」—— 页面上看到的边数会与展开出来的对不上。
+    这里用 ``EnzymeReactionEdge.source_type``, 与同文件其它圈定点(:280/:326/:406/
+    :617/:660/:1258)一致; 本函数只处理**有边的酶**, 而两列对有边的酶实测零处不一致
+    (见 ``search_service._aggregate_table_cards`` 的说明), 所以此处两者等价。
+    """
 
     parts = edge_group_id.split("_", 2)
     if len(parts) < 3 or parts[0] != "GROUP":
@@ -858,6 +931,10 @@ async def expand_edge_group(
     edge_query = select(EnzymeReactionEdge, Enzyme).join(
         Enzyme, EnzymeReactionEdge.enzyme_id == Enzyme.enzyme_id
     ).where(EnzymeReactionEdge.reaction_id.in_(reaction_ids))
+    if source_types:
+        edge_query = edge_query.where(EnzymeReactionEdge.source_type.in_(source_types))
+    if review_statuses:
+        edge_query = edge_query.where(EnzymeReactionEdge.review_status.in_(review_statuses))
 
     edge_result = await db.execute(edge_query)
     edge_rows = edge_result.all()
@@ -1373,6 +1450,15 @@ async def select_scope_enzymes(
         )
     except Exception:
         return [], 0
+    if not cards:
+        return [], 0
+
+    # 图的这一层只用**有反应注释**的酶 —— 没有反应边的酶在图上无处可画。
+    # 不能靠下游的 JOIN 兜住这一步: 无边酶在下面的 dedupe 里 (EC, 产物) 键都是 ("", ""),
+    # 会被折成 1 个代表白占一个 top_n 名额, 也让 ``candidate_count`` 虚高。
+    # 判定用 ``card.edge_id`` —— ``_fetch_cards`` 只在真有反应边时才填它。
+    # 注意这与 table/blast 的全量域不冲突: 那是另外两个表面, 分层可见性使然。
+    cards = [card for card in cards if card.edge_id]
     if not cards:
         return [], 0
 

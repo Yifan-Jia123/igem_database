@@ -19,9 +19,13 @@ BATCH_SIZE = 50
 
 # ---- Step 1: collect all entries ----
 entries = []
+# Entry -> Source。entries 被排序过, 所以来源必须用字典按 Entry 取, 不能按下标对齐。
+source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
-        entries.append(row['Entry'])
+        e = row['Entry']
+        entries.append(e)
+        source_by_entry[e] = (row.get('Source') or '').strip()
 entries = sorted(entries)  # 旧表按 Entry 升序
 
 print(f'Total entries: {len(entries)}')
@@ -139,6 +143,8 @@ for i in range(1, max_refseq + 1):
         f'RefSeq_Nuc_ID_{i}', f'RefSeq_Nuc_Link_{i}',
         f'RefSeq_Molecule_{i}',
     ]
+# 'Source' 追加在最末: 前面是宽度动态的交叉引用列, 只能放尾部才能保证列名→列号映射稳定。
+fields += ['Source']
 
 # Base URLs
 def _valid(v):
@@ -159,7 +165,7 @@ with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
 
     for entry in entries:
         data = all_data.get(entry, {'embl': [], 'refseq': []})
-        row = {'Entry': entry}
+        row = {'Entry': entry, 'Source': source_by_entry.get(entry, '')}
 
         for idx, ref in enumerate(data['embl']):
             n = idx + 1

@@ -55,6 +55,14 @@ function App() {
   const [blastSession, setBlastSession] = useState<BlastSession | null>(null)
   /** One-shot hand-off telling the home map to scope itself to the active BLAST session. */
   const [autoBlastScope, setAutoBlastScope] = useState<{ sessionId: number; nonce: number } | null>(null)
+  /**
+   * 搜索集（search set）：**检索范围**，不是显示筛选。空数组 = 全部 ——
+   * 沿用全仓库「空数组即不过滤」的约定（没有 `all` 哨兵值）。
+   *
+   * 刻意不给 localStorage：用户选的是「会话内跨页保持」，刷新浏览器回到「全部」。
+   * 它管的是取数，不管下载 —— 下载路径一行都不看这个值。
+   */
+  const [searchSet, setSearchSet] = useState<string[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -143,6 +151,38 @@ function App() {
       rememberQueuedEntity(entry)
     }
     setDownloadedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
+  }
+
+  /**
+   * 批量入队 —— 合并抽屉的「Queue all N entries」用。
+   *
+   * 不能循环调 `toggleQueue`：那里每次都要 `downloadedIds.includes(id)`（O(n)）
+   * 并展开整个 `queuedEntitiesById`（O(n)），3,595 条串行就是 O(n²) ≈ 1,300 万次
+   * 操作 —— 本身就成了新的卡顿源。这里一次 `setDownloadedIds` + 一次
+   * `setQueuedEntitiesById`。
+   *
+   * `isExportableKind` 那道闸门照旧（与 `toggleQueue` 同一判据）：
+   * 队列不许出现没有导出载荷的条目。
+   * 已经在队列里的条目保持原样（不重复、也不被移除）—— 「Queue all」是补充动作。
+   */
+  const queueEntities = (entries: Entity[]) => {
+    if (entries.length === 0) return
+    const incoming = new Map<string, Entity>()
+    entries.forEach((entry) => {
+      if (!isExportableKind(entry.kind)) return
+      if (getEntity(entry.id)) return // 数据集里有的，靠 id 就能解析出来，不必存整份
+      if (!incoming.has(entry.id)) incoming.set(entry.id, entry)
+    })
+    if (incoming.size === 0) return
+
+    setDownloadedIds((current) => [...current, ...[...incoming.keys()].filter((id) => !current.includes(id))])
+    setQueuedEntitiesById((current) => {
+      const next = { ...current }
+      incoming.forEach((entry, id) => {
+        if (!next[id]) next[id] = entry
+      })
+      return next
+    })
   }
 
   const clearQueue = () => {
@@ -370,6 +410,7 @@ function App() {
             onOpenBlast={openBlast}
             onOpenBlastTable={openBlastTable}
             onToggleQueue={toggleQueue}
+            onQueueMany={queueEntities}
             openRecord={openRecord}
             isQueued={(id) => queuedIds.has(id)}
             autoMapSearch={autoMapSearch}
@@ -378,6 +419,8 @@ function App() {
             autoBlastScope={autoBlastScope}
             onAutoBlastScopeConsumed={consumeBlastScope}
             onResetHome={resetHome}
+            searchSet={searchSet}
+            onSearchSetChange={setSearchSet}
           />
         )}
 
@@ -394,6 +437,8 @@ function App() {
             onOpenMapScoped={openMapSearch}
             onOpenMap={(nextQuery) => openMapSearch(nextQuery)}
             onOpenPathwaySearch={() => openMapSearch('', 'pathway')}
+            searchSet={searchSet}
+            onSearchSetChange={setSearchSet}
           />
         )}
 
@@ -413,6 +458,8 @@ function App() {
             onExitBlast={exitBlastSession}
             onOpenBlastMap={openBlastMap}
             onResetHome={resetHome}
+            searchSet={searchSet}
+            onSearchSetChange={setSearchSet}
           />
         )}
 
@@ -447,6 +494,8 @@ function App() {
         isQueued={(id) => queuedIds.has(id)}
         queueCount={queueCount}
         onOpenResults={enterBlastResults}
+        // BLAST 算搜索，所以搜索集对它**真的**生效（后端按搜索集另建序列库）。
+        searchSet={searchSet}
       />
     </div>
   )

@@ -112,7 +112,8 @@ igem_database/
 | `IGEM_DB_USER`      | `root`        | MySQL 用户名       |
 | `IGEM_DB_PASSWORD`  | *(必填)*      | MySQL 密码         |
 | `IGEM_DB_NAME`      | `igem_terpene`| 数据库名           |
-| `IGEM_BLAST_BIN`    | `blastp`      | BLAST 可执行文件路径 |
+| `IGEM_BLAST_BIN_DIR` | `blast_bin`   | BLAST+ 二进制目录（含 `blastp` 和 `makeblastdb`） |
+| `IGEM_BLAST_WORK_DIR` | `blast_work` | BLAST 数据库与缓存工作目录 |
 
 运行 ETL 或后端前必须设置这些变量。后端可通过 `backend/.env` 文件配置。
 

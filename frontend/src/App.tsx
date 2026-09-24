@@ -22,7 +22,8 @@ import { SearchResultsPage } from './pages/SearchResultsPage'
 import { getExternalRecordUrl, isExportableKind, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
-import { isBlastSession, isEntity, isNullableString, isRecord, isString, isStringArray, useCachedState } from './lib/browserCache'
+import { isBlastSession, isEntity, isRecord, isString, isStringArray, useCachedState } from './lib/browserCache'
+import { useAppRoute } from './lib/routes'
 
 let entities = mockEntities
 let filterOptions = mockFilterOptions
@@ -39,10 +40,12 @@ const navigation = [
 ] as const
 
 function App() {
-  const [view, setView] = useCachedState<View>('view', 'home', (value): value is View => isString(value) && ['home', 'search', 'structure', 'downloads', 'enzyme'].includes(value))
-  const [query, setQuery] = useCachedState('query', '', isString)
+  const [route, navigate] = useAppRoute()
+  const view = route.view
+  const [cachedQuery, setQuery] = useCachedState('query', '', isString)
+  const query = view === 'search' ? route.query ?? '' : cachedQuery
   const [searchKind, setSearchKind] = useCachedState<SearchKind>('searchKind', 'all', (value): value is SearchKind => isString(value) && ['all', 'compound', 'enzyme', 'reaction', 'pathway'].includes(value))
-  const [selectedId, setSelectedId] = useCachedState<string | null>('selectedId', 'CHEBI:15377', isNullableString)
+  const selectedId = route.enzymeId ?? null
   const [selectedSpecies, setSelectedSpecies] = useCachedState('species', filterOptions.species[0], isString)
   const [selectedClass, setSelectedClass] = useCachedState('compoundClass', filterOptions.classes[0], isString)
   const [selectedFamily, setSelectedFamily] = useCachedState('enzymeFamily', filterOptions.families[0], isString)
@@ -63,6 +66,12 @@ function App() {
    * 它管的是取数，不管下载 —— 下载路径一行都不看这个值。
    */
   const [searchSet, setSearchSet] = useCachedState<string[]>('searchSet', [], isStringArray)
+
+  useEffect(() => {
+    setSidebarOpen(false)
+    setBlastOpen(false)
+    if (route.view === 'search') setQuery(route.query ?? '')
+  }, [route, setQuery])
 
   useEffect(() => {
     let cancelled = false
@@ -197,9 +206,13 @@ function App() {
   }
 
 
-  const goTo = (nextView: View, id?: string) => {
-    setView(nextView)
-    if (id) setSelectedId(id)
+  const goTo = (nextView: View, id?: string, options?: { query?: string; blast?: boolean }) => {
+    navigate({
+      view: nextView === 'structure' ? 'home' : nextView,
+      enzymeId: nextView === 'enzyme' ? id : undefined,
+      query: nextView === 'search' ? options?.query ?? query : undefined,
+      blast: nextView === 'search' ? options?.blast ?? Boolean(blastSession) : undefined,
+    })
     setSidebarOpen(false)
   }
 
@@ -231,7 +244,7 @@ function App() {
       setAutoBlastScope({ sessionId: session.id, nonce: Date.now() })
       goTo('home')
     } else {
-      goTo('search')
+      goTo('search', undefined, { blast: true })
     }
   }
 
@@ -263,7 +276,7 @@ function App() {
     exitBlastSession()
     setQuery(nextQuery || '')
     setSearchKind(looksLikeProteinSequence(nextQuery || '') ? 'enzyme' : 'all')
-    goTo('search')
+    goTo('search', undefined, { query: nextQuery || '', blast: false })
   }
 
   /** Hand a query to the home map — the Map half of every page's Map|Table
@@ -397,13 +410,7 @@ function App() {
             nodeCount={visibleNodeCount}
             edgeCount={visibleEdgeCount}
             downloadedItems={downloadedItems}
-            onOpenSearch={(nextQuery) => {
-              const nextSearch = nextQuery || ''
-              exitBlastSession()
-              setQuery(nextSearch)
-              setSearchKind(looksLikeProteinSequence(nextSearch) ? 'enzyme' : 'all')
-              goTo('search')
-            }}
+            onOpenSearch={(nextQuery) => openLibrarySearch(nextQuery || '')}
             onOpenDownloads={() => goTo('downloads')}
             onOpenEnzyme={(id) => goTo('enzyme', id)}
             onOpenBlast={openBlast}
@@ -444,7 +451,7 @@ function App() {
         {view === 'search' && (
           <SearchResultsPage
             query={query}
-            setQuery={setQuery}
+            setQuery={openLibrarySearch}
             onOpenMap={(nextQuery) => openMapSearch(nextQuery)}
             onOpenPathwaySearch={() => openMapSearch('', 'pathway')}
             onOpenDownloads={() => goTo('downloads')}
@@ -453,8 +460,11 @@ function App() {
             onToggleQueue={toggleQueue}
             isQueued={(id) => queuedIds.has(id)}
             queueCount={queueCount}
-            blastSession={blastSession}
-            onExitBlast={exitBlastSession}
+            blastSession={route.blast ? blastSession : null}
+            onExitBlast={() => {
+              exitBlastSession()
+              navigate({ view: 'search', query }, true)
+            }}
             onOpenBlastMap={openBlastMap}
             onResetHome={resetHome}
             searchSet={searchSet}

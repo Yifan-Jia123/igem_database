@@ -22,6 +22,7 @@ import { SearchResultsPage } from './pages/SearchResultsPage'
 import { getExternalRecordUrl, isExportableKind, looksLikeProteinSequence, matchesFilters } from './lib/entities'
 import type { FilterState, SearchKind, View } from './lib/entities'
 import type { Entity } from './types'
+import { isBlastSession, isEntity, isNullableString, isRecord, isString, isStringArray, useCachedState } from './lib/browserCache'
 
 let entities = mockEntities
 let filterOptions = mockFilterOptions
@@ -38,31 +39,30 @@ const navigation = [
 ] as const
 
 function App() {
-  const [view, setView] = useState<View>('home')
-  const [query, setQuery] = useState('')
-  const [searchKind, setSearchKind] = useState<SearchKind>('all')
-  const [selectedId, setSelectedId] = useState<string | null>('CHEBI:15377')
-  const [selectedSpecies, setSelectedSpecies] = useState(filterOptions.species[0])
-  const [selectedClass, setSelectedClass] = useState(filterOptions.classes[0])
-  const [selectedFamily, setSelectedFamily] = useState(filterOptions.families[0])
+  const [view, setView] = useCachedState<View>('view', 'home', (value): value is View => isString(value) && ['home', 'search', 'structure', 'downloads', 'enzyme'].includes(value))
+  const [query, setQuery] = useCachedState('query', '', isString)
+  const [searchKind, setSearchKind] = useCachedState<SearchKind>('searchKind', 'all', (value): value is SearchKind => isString(value) && ['all', 'compound', 'enzyme', 'reaction', 'pathway'].includes(value))
+  const [selectedId, setSelectedId] = useCachedState<string | null>('selectedId', 'CHEBI:15377', isNullableString)
+  const [selectedSpecies, setSelectedSpecies] = useCachedState('species', filterOptions.species[0], isString)
+  const [selectedClass, setSelectedClass] = useCachedState('compoundClass', filterOptions.classes[0], isString)
+  const [selectedFamily, setSelectedFamily] = useCachedState('enzymeFamily', filterOptions.families[0], isString)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [downloadedIds, setDownloadedIds] = useState<string[]>([])
-  const [queuedEntitiesById, setQueuedEntitiesById] = useState<Record<string, Entity>>({})
+  const [downloadedIds, setDownloadedIds] = useCachedState<string[]>('downloadedIds', [], isStringArray)
+  const [queuedEntitiesById, setQueuedEntitiesById] = useCachedState<Record<string, Entity>>('queuedEntities', {}, (value): value is Record<string, Entity> => isRecord(value) && Object.entries(value).every(([id, entity]) => isEntity(entity) && entity.id === id))
   const [datasetRevision, setDatasetRevision] = useState(0)
   const [autoMapSearch, setAutoMapSearch] = useState<{ query: string; mode: 'enzyme' | 'pathway'; nonce: number } | null>(null)
   const [blastOpen, setBlastOpen] = useState(false)
   /** Last completed BLAST run, shown through the keyword-search table/map result views. */
-  const [blastSession, setBlastSession] = useState<BlastSession | null>(null)
+  const [blastSession, setBlastSession] = useCachedState<BlastSession | null>('blastSession', null, isBlastSession)
   /** One-shot hand-off telling the home map to scope itself to the active BLAST session. */
   const [autoBlastScope, setAutoBlastScope] = useState<{ sessionId: number; nonce: number } | null>(null)
   /**
    * 搜索集（search set）：**检索范围**，不是显示筛选。空数组 = 全部 ——
    * 沿用全仓库「空数组即不过滤」的约定（没有 `all` 哨兵值）。
    *
-   * 刻意不给 localStorage：用户选的是「会话内跨页保持」，刷新浏览器回到「全部」。
    * 它管的是取数，不管下载 —— 下载路径一行都不看这个值。
    */
-  const [searchSet, setSearchSet] = useState<string[]>([])
+  const [searchSet, setSearchSet] = useCachedState<string[]>('searchSet', [], isStringArray)
 
   useEffect(() => {
     let cancelled = false
@@ -76,11 +76,9 @@ function App() {
         graphEdges = dataset.graphEdges
         graphNodes = dataset.graphNodes
 
-        setSelectedSpecies(dataset.filterOptions.species[0] || mockFilterOptions.species[0])
-        setSelectedClass(dataset.filterOptions.classes[0] || mockFilterOptions.classes[0])
-        setSelectedFamily(dataset.filterOptions.families[0] || mockFilterOptions.families[0])
-        setSelectedId((current) => (current && dataset.entities.some((entity) => entity.id === current) ? current : dataset.entities[0]?.id ?? null))
-        setDownloadedIds((current) => current.filter((id) => dataset.entities.some((entity) => entity.id === id)))
+        setSelectedSpecies((current) => dataset.filterOptions.species.includes(current) ? current : dataset.filterOptions.species[0] || mockFilterOptions.species[0])
+        setSelectedClass((current) => dataset.filterOptions.classes.includes(current) ? current : dataset.filterOptions.classes[0] || mockFilterOptions.classes[0])
+        setSelectedFamily((current) => dataset.filterOptions.families.includes(current) ? current : dataset.filterOptions.families[0] || mockFilterOptions.families[0])
         setDatasetRevision((revision) => revision + 1)
       })
       .catch((error) => {
@@ -116,8 +114,9 @@ function App() {
   const visibleEdgeCount = graphEdges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)).length
 
   const rememberQueuedEntity = (entry: QueueEntry) => {
-    if (typeof entry === 'string' || getEntity(entry.id)) return
-    setQueuedEntitiesById((current) => ({ ...current, [entry.id]: entry }))
+    const entity = typeof entry === 'string' ? getEntity(entry) : entry
+    if (!entity) return
+    setQueuedEntitiesById((current) => ({ ...current, [entity.id]: entity }))
   }
 
   const forgetQueuedEntity = (id: string) => {

@@ -684,7 +684,7 @@ give appropriate credit, link to the license, and indicate if changes were made.
 lines our upstream sources require are collected in [`NOTICE`](../../NOTICE), which doubles as
 the attribution statement for our own CC BY 4.0 material.
 
-If you use the database, cite us as described in §12.4.
+If you use the database, cite us as described in §12.5.
 
 ### 12.2 The solubility model
 
@@ -733,7 +733,55 @@ no copyright restricting use or redistribution. The database also does not store
 it stores accession numbers and builds outbound links from them (§4.2), so no sequence data is
 redistributed here in any case.
 
-### 12.4 How to cite us
+### 12.4 Bundled third-party software
+
+One third-party program ships inside this repository: the structure editor **Ketcher**.
+
+`frontend/public/ketcher_standalone/` is a **prebuilt Ketcher v3.18.0 standalone distribution**
+(EPAM Systems, **Apache License 2.0** — https://github.com/epam/ketcher). We ship the upstream build
+as we received it. **We changed nothing in it**: apart from the two licence files described below,
+every file still carries the timestamp it had when the archive was unpacked.
+
+Apache License 2.0 §4 attaches four obligations to redistributing the work. One of them is not
+triggered here; the other three are met by files that sit next to the bundle.
+
+| §4 | Requirement | How it is met |
+|---|---|---|
+| (a) | Give recipients a copy of the License | [`ketcher_standalone/LICENSE`](../../frontend/public/ketcher_standalone/LICENSE) — EPAM's own copy, appendix and all |
+| (b) | Mark modified files | **Not triggered** — we modified none |
+| (c) | Retain the work's copyright and attribution notices | The build's `*.LICENSE.txt` sidecars, kept in place — see below |
+| (d) | Pass on the notices in the work's `NOTICE` file | [`ketcher_standalone/NOTICE`](../../frontend/public/ketcher_standalone/NOTICE) |
+
+**Those files are not decoration, and the two sideways ones are easy to mistake for clutter.**
+
+The `NOTICE` file was **not** part of the build we received. We fetched it from the EPAM repository;
+it is byte-for-byte identical to the file at upstream tag `v3.18.0`, which is the version we ship.
+
+The five `*.LICENSE.txt` sidecars are load-bearing in a less obvious way. Each bundled JavaScript
+file ends with a webpack banner that points at one of them:
+
+```
+/*! For license information please see main.e47c48ad.js.LICENSE.txt */
+```
+
+That pointer exists *because* the sidecar exists; remove the sidecar and the pointer dangles. The
+sidecars are also **not a complete inventory**: core-js 3.36.0 (MIT) is bundled, but its author wrote
+no `/*!` block, so webpack had nothing to extract and only the licence URL survives inside the
+minified code. They record what the bundler found, not everything that is present.
+
+Finally, Ketcher's `NOTICE` lists **thirteen licence families** that its dependencies may fall under,
+including LGPL-2.1, the Mozilla Public License and the Academic Free License. Searching the whole
+116 MB bundle for those strings returns exactly one hit: the `NOTICE` file itself. Every bundled
+library whose attribution we can locate is permissive — Miew and Three.js, lodash, the React
+packages, object-assign, buffer, regenerator-runtime, url-search-params-polyfill, crc32.js and
+core-js. That thirteen-family list is inherited from a wider project rather than being an inventory
+of this build. The caveat is that a library shipping no notice at all would leave no trace, so this
+is evidence rather than proof.
+
+**Verified against upstream on 2026-10-05**: the version is read from the bundle's own `index.html`;
+`NOTICE` and `LICENSE` were compared against upstream tag `v3.18.0`.
+
+### 12.5 How to cite us
 
 If you use this database, please cite our project and the upstream sources in §13.
 
@@ -748,6 +796,7 @@ If you use this database, please cite our project and the upstream sources in §
 - NCBI BLAST+ — https://www.ncbi.nlm.nih.gov
 - ESM / ESMC — https://github.com/Biohub/esm
 - DeepSolNet — https://github.com/wangxinglong1990/DeepSolNet
+- Ketcher (bundled with the frontend) — https://github.com/epam/ketcher
 
 > **This section is not legal advice.** We are documenting what the upstream terms say, as we
 > understand them, as of the dates given. Read the licenses themselves before relying on any of it.

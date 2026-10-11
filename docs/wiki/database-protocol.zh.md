@@ -739,10 +739,18 @@ npm run build      # tsc -b && vite build → dist/
 **我们在 2026-10-01 直接对着上游源核对了当前条款**；若你要复用这条流水线，请自己再核一遍，
 不要相信搜索结果。
 
+**随仓库分发的第三方软件。** 前端的结构式编辑器 Ketcher（`frontend/public/ketcher_standalone/`）
+是一份预构建的 **v3.18.0** 发行包（EPAM Systems，**Apache License 2.0**）。我们原样分发，**一个字节
+没改**。Apache License 2.0 §4 要求再分发者随附许可全文、上游 NOTICE 与原有的版权声明，所以我们把
+EPAM 自己的 `LICENSE` 和 `NOTICE` 都放在它旁边（两份都与上游 `v3.18.0` 标签逐字节相同），并保留了
+构建自带的 `*.LICENSE.txt` sidecar —— 那几份 sidecar 不能删，每个打包后的 JS 文件末尾都有一句
+指向它的横幅。详见 `docs/wiki/database-protocol.md` §12.4 与 [`NOTICE`](../../NOTICE)。
+
 **引用：** UniProt（https://www.uniprot.org）、Rhea（https://www.rhea-db.org）、
 ChEBI（https://www.ebi.ac.uk/chebi）、DDBJ（https://www.ddbj.nig.ac.jp）、
 NCBI BLAST+（https://www.ncbi.nlm.nih.gov）、ESM / ESMC（https://github.com/Biohub/esm）、
-DeepSolNet（https://github.com/wangxinglong1990/DeepSolNet）。
+DeepSolNet（https://github.com/wangxinglong1990/DeepSolNet）、
+Ketcher（随前端分发，https://github.com/epam/ketcher）。
 
 > **本节不构成法律意见。** 我们只是把上游条款在我们理解范围内的内容、按上述日期记录下来。
 > 在依赖其中任何一条之前，请自行阅读许可原文。

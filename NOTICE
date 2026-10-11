@@ -54,23 +54,32 @@ there is no copyright restricting use or redistribution.
 ## Bundled third-party software
 
 ### Ketcher
-`frontend/public/ketcher_standalone/` is a prebuilt Ketcher distribution (EPAM
-Systems, Apache License 2.0 — https://github.com/epam/ketcher), used for structure
-drawing and structure search.
+`frontend/public/ketcher_standalone/` is a prebuilt Ketcher **v3.18.0** distribution
+(EPAM Systems, Apache License 2.0 — https://github.com/epam/ketcher), used for
+structure drawing and structure search. We ship it as received and modified nothing.
 
-Two kinds of notice travel with it, and they cover different things:
+Three kinds of licence file travel with it, and they cover different things:
 
+- **Ketcher's Apache License 2.0 text** — `ketcher_standalone/LICENSE` is EPAM's own
+  copy, appendix and all. §4(a) requires a redistributor to give recipients a copy of
+  the License.
 - **Ketcher's own NOTICE** — reproduced verbatim at
-  `frontend/public/ketcher_standalone/NOTICE`. Apache License 2.0 §4(d) requires a
-  redistributor to pass on the attribution notices of the upstream work. That file
-  was **not** included in the prebuilt bundle we received; we fetched it from the
-  EPAM repository and put it next to the copy we ship.
+  `frontend/public/ketcher_standalone/NOTICE`. §4(d) requires a redistributor to pass
+  on the attribution notices of the upstream work. That file was **not** included in
+  the prebuilt bundle we received; we fetched it from the EPAM repository and put it
+  next to the copy we ship.
 - **The bundled libraries** — the build's `*.LICENSE.txt` sidecars, kept alongside
   it, list the licences of the libraries webpack pulled in (lodash, React, Three.js,
   Miew, object-assign, buffer, crc32.js, regenerator-runtime,
   url-search-params-polyfill). These are *not* Ketcher's own licence text; Ketcher
   itself is covered by the repository's root [`LICENSE`](LICENSE), which is Apache
   License 2.0 — the same licence EPAM distributes it under.
+
+Both Ketcher files were compared against upstream tag `v3.18.0` on 2026-10-05 and are
+byte-for-byte identical to it. Keep the sidecars: each bundled JavaScript file ends
+with a banner pointing at one of them, so deleting one leaves a dangling reference —
+and they are not an exhaustive inventory of what is bundled. Details in
+`docs/wiki/database-protocol.md` §12.4.
 
 ## Not redistributed
 

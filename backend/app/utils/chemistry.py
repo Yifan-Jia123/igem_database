@@ -1,35 +1,44 @@
-"""SMILES → InChIKey 的服务端转换 (RDKit)。
+"""Server-side SMILES -> InChIKey conversion (RDKit).
 
-RDKit 在这里**模块级导入**是有意的: 缺这个包时 import 本模块就失败, 而 main.py 挂载路由时会
-import 到它, 于是 uvicorn 直接起不来。这是想要的失败方式 —— backend/requirements.txt 是安装
-契约, 漏装应该在启动那几秒暴露, 而不是等第一个调用方提交 SMILES 时才变成那个端点的 500。
-所以这里不放 try/except ImportError 的兜底。
+RDKit is **imported at module level** here on purpose: if the package is missing,
+importing this module fails, and main.py imports it when mounting routes, so
+uvicorn won't even start. That's the desired failure mode -- backend/
+requirements.txt is the install contract, and a missing install should surface in
+those first seconds of startup, not become a 500 on that endpoint when the first
+caller submits a SMILES. So there is no try/except ImportError fallback here.
 
-口径与 update_tool/build_all_nodes.py 对齐: 同一个 rdkit, 同样关掉 RDLogger。
-注意 compound.inchi_key_derived 那一列也是 RDKit 算的 —— 查询时算出的键要能匹配上它,
-就得与当初产出它的 rdkit 同源。换版本的注意事项见 update_tool/requirements.txt。
+Aligned with update_tool/build_all_nodes.py: same rdkit, RDLogger disabled the
+same way. Note the compound.inchi_key_derived column is also computed by RDKit --
+a key computed at query time must be able to match it, so it has to share the
+same rdkit that produced it. Version-change caveats are in
+update_tool/requirements.txt.
 """
 from typing import Optional
 
 from rdkit import Chem, RDLogger
 
-# RDKit 会把解析/InChI 诊断打到 stderr。关掉它不算"静默降级": 失败仍然通过返回值传出去
-# (None 与 ""), 由调用方转成 API 错误码。先例见 update_tool/build_all_nodes.py。
+# RDKit prints parse/InChI diagnostics to stderr. Suppressing it is not "silent
+# degradation": failures still propagate through the return value (None vs ""),
+# which the caller turns into an API error code. Precedent in
+# update_tool/build_all_nodes.py.
 RDLogger.DisableLog('rdApp.*')
 
 
 def smiles_to_inchikey(smiles: str) -> Optional[str]:
-    """把 SMILES 转成标准 InChIKey。
+    """Convert SMILES to a standard InChIKey.
 
-    三种返回值, 调用方必须区分:
+    Three return values, which the caller must distinguish:
 
-    - ``None`` —— RDKit 根本解析不了这个输入 (语法错误、乱码)。
-    - ``""``   —— 解析成功, 但算不出键。含 ``*`` 的 R 基 / Markush 通式走这一支:
-      它不是坏 SMILES, 它本来就不是一个分子, 换任何转换器都一样。
-    - 其余      —— 27 位 InChIKey (RDKit 返回的已经是大写)。
+    - ``None`` -- RDKit can't parse the input at all (syntax error, garbage).
+    - ``""``   -- parsed fine, but no key can be computed. R-groups / Markush
+      formulas containing ``*`` take this branch: it isn't a bad SMILES, it just
+      isn't a molecule, and any other converter behaves the same.
+    - otherwise -- the 27-char InChIKey (RDKit already returns it uppercase).
 
-    注意空串在 RDKit 眼里是"合法分子", 同样落到 ``""`` 那一支。所以判空必须由调用方
-    在**进这个函数之前**做, 否则 ``?smiles=`` 会被解释成"给了个通式"而不是"没给参数"。
+    Note an empty string is a "valid molecule" to RDKit and also lands in the
+    ``""`` branch. So the empty check must be done by the caller **before
+    entering this function**, otherwise ``?smiles=`` is read as "a generic
+    formula was given" rather than "no parameter given".
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:

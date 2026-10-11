@@ -231,8 +231,10 @@ async function runOne() {
   }
 }
 
-// SMILES 不走路径段: 它含 `/ \ # + @ [ ]`, 其中 `/` 即使编码成 %2F 也会在路由匹配前被解码、
-// 把路径切断。所以后端单开了一条无路径段的 GET, 这里用 URLSearchParams 编码查询串。
+// SMILES does not travel as a path segment: it contains `/ \ # + @ [ ]`, and `/` is
+// decoded before route matching even when percent-encoded as %2F, which cuts the path
+// in two. The backend therefore exposes a separate path-segment-free GET, and the query
+// string is encoded here with URLSearchParams.
 async function runSmiles() {
   const smiles = $('smi').value.trim();
   if (!smiles) return;

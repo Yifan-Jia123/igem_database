@@ -1,35 +1,43 @@
-"""TSV 单元格里的多值字段 -> 值列表。单一实现, 两个读取处共用。
+"""Multi-value field in a TSV cell -> list of values. One implementation, shared by
+both readers.
 
-## 契约
+## Contract
 
-[build_terpene_pairs.py:65](../update_tool/build_terpene_pairs.py#L65) 把同一个酶的
-多个 Rhea ID 拼进一个单元格:
+[build_terpene_pairs.py:65](../update_tool/build_terpene_pairs.py#L65) joins several
+Rhea IDs of the same enzyme into one cell:
 
     row[f'Rhea ID_{i}'] = '; '.join(sorted({r for r, _ in rxns}, key=rhea_key))
 
-所以 `Rhea ID_{i}` 是**多值单元格**, 不是一个 ID。读它的地方必须拆开, 否则:
+So `Rhea ID_{i}` is a **multi-value cell**, not one ID. Every reader must split it,
+otherwise:
 
-  - [etl_edges.py](etl_edges.py)        —— 拿整串查 reaction_map 必然 miss -> **静默丢边**
-  - [etl_search_index.py](etl_search_index.py) —— 拿整串当 entity_id, 索引里多出一条
-                                    永远匹配不上的假实体, 而该酶的真实反应一条都没进索引
+  - [etl_edges.py](etl_edges.py)        -- looking up the whole string in reaction_map
+                                    always misses -> **edges silently dropped**
+  - [etl_search_index.py](etl_search_index.py) -- the whole string is used as entity_id,
+                                    so the index gains a fake entity that can never
+                                    match, while none of the enzyme's real reactions
+                                    reach the index
 
-实测现表 `for_graph/uniprotkb_terpene_pairs.tsv`: **42 个**这样的单元格,
-涉及 8 行 / 36 个酶。
+Measured on the current table `for_graph/uniprotkb_terpene_pairs.tsv`: **42** such
+cells, spanning 8 rows / 36 enzymes.
 
-## 为什么放在这里
+## Why this lives here
 
-仓库里同类列已有的分隔符写法是不带空格的 `;`([etl_enzymes.py:39](etl_enzymes.py#L39)、
-[etl_reactions.py:25](etl_reactions.py#L25)), 而 pairs 表用的是 `'; '`。
-分隔符一旦改动, 两个读取处必须同时改 —— 写死在两处就会漂。放一处即可。
+The repo's existing separator spelling for this kind of column is `;` with no space
+([etl_enzymes.py:39](etl_enzymes.py#L39),
+[etl_reactions.py:25](etl_reactions.py#L25)), while the pairs table uses `'; '`. If the
+separator ever changes, both readers must change together -- hard-coding it in two
+places drifts. One copy is enough.
 """
 
 
 def split_multi_value(value):
-    """拆开 `'; '` 拼接的多值单元格。空值 / NaN 返回 []。
+    """Split a `'; '`-joined multi-value cell. Empty / NaN returns [].
 
-    调用方可以直接传 DataFrame 的原始取值: NaN 在这里一并挡掉
-    (它 `!=` 自身, 不需要 import pandas —— 'nan' 那样变成字符串就会
-    查表 miss, 而那正是本模块要消灭的静默丢失)。
+    Callers can pass DataFrame raw values directly: NaN is caught here along with
+    everything else (it is `!=` itself, so no pandas import is needed -- turning it
+    into a string like 'nan' would miss the lookup, which is exactly the silent loss
+    this module exists to eliminate).
     """
     if value is None:
         return []

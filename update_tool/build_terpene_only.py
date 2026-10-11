@@ -1,15 +1,15 @@
 """
-Generate uniprotkb_terpene_only.tsv (每个反应一行: 底物/产物各取首个主化合物).
+Generate uniprotkb_terpene_only.tsv (one row per reaction: substrate/product each take the first main compound).
 Format: Entry, Rhea ID, Direction, Substrate, Substrate ChEBI, Product, Product ChEBI
 
-构造逻辑 (与旧表 0 差异验证):
-  - 底物/产物 ChEBI : rhea child 的 'ChEBI IDs (equation order)' 列(方向感知 底物|产物),
-                      每侧取第一个非 CHEBI:33019(二磷酸) 的化合物
-  - 底物/产物名称   : 从 Equation 文本的方向感知侧取段, 按干净名(Rhea rhea:name)匹配对应段,
-                      保留方程中的计量前缀与区室后缀 (如 '3 isopentenyl diphosphate', 'abscisate(out)')
-                      right-to-left 时底物取自方程右侧、产物取自方程左侧
-  - Direction 列     : 旧表格式 —— 仅保留 'not specified', 其余留空
-行序 = rhea child 行序。
+Construction logic (verified 0 diff against the old table):
+  - substrate/product ChEBI : the rhea child's 'ChEBI IDs (equation order)' column (direction-aware substrate|product),
+                      take the first non-CHEBI:33019 (diphosphate) compound on each side
+  - substrate/product name : take segments from the direction-aware side of the Equation text, match the segment by clean name (Rhea rhea:name),
+                      keeping the stoichiometric prefix and compartment suffix (e.g. '3 isopentenyl diphosphate', 'abscisate(out)')
+                      for right-to-left, the substrate comes from the equation's right side and the product from the left
+  - Direction column : old-table format -- keep only 'not specified', the rest blank
+Row order = rhea child row order.
 """
 import csv
 import re
@@ -18,7 +18,7 @@ import time
 
 import requests
 
-# 用法: python build_terpene_only.py [rhea子表] [输出]
+# Usage: python build_terpene_only.py [rhea child] [output]
 RHEA_INPUT = sys.argv[1] if len(sys.argv) > 1 else '../for_enzyme_detail/child_tables/uniprotkb_rhea.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_terpene_only.tsv'
 
@@ -28,26 +28,26 @@ SPARQL_DELAY = 0.3
 MAX_ATTEMPTS = 8
 BACKOFF = [2, 5, 10, 20, 30, 30, 30, 30]
 
-# 辅因子排除: 二磷酸 (旧表观察到的唯一被跳过化合物)
+# Cofactor exclusion: diphosphate (the only compound observed skipped in the old table)
 EXCLUDE_COFACTOR = {'CHEBI:33019'}
 
 
 def clean_name(seg):
-    """方程段 -> 干净化合物名: 去计量前缀 '3 ', 去尾部区室 '(out)'。"""
+    """Equation segment -> clean compound name: strip the stoichiometric prefix '3 ', strip the trailing compartment '(out)'."""
     seg = re.sub(r'^\d+ ', '', seg)
     seg = re.sub(r'\([^()]*\)$', '', seg).strip()
     return seg
 
 
 def side_first(comps):
-    """取侧内第一个非辅因子化合物。"""
+    """Return the first non-cofactor compound on a side."""
     for c in comps:
         if c not in EXCLUDE_COFACTOR:
             return c
     return comps[0] if comps else ''
 
 
-# ---- Step 1: 解析 rhea child ----
+# ---- Step 1: parse rhea child ----
 print('Step 1: parsing rhea child...')
 rows = []          # (entry, rhea_id, direction, sub_chebi, prod_chebi, sub_segs, prod_segs)
 all_chebi = set()
@@ -63,7 +63,7 @@ with open(RHEA_INPUT, 'r', encoding='utf-8') as f:
         prod_chebi = side_first(prod_comps)
         all_chebi.update(c for c in (sub_chebi, prod_chebi) if c)
 
-        # 方程段: 方向感知对应侧 (right-to-left 时底物=方程右侧, 产物=方程左侧)
+        # Equation segment: the matching direction-aware side (right-to-left => substrate = equation right, product = equation left)
         eq_left, _, eq_right = row['Equation'].partition(' = ')
         ls = [s.strip() for s in eq_left.split(' + ')]
         rs = [s.strip() for s in eq_right.split(' + ')]
@@ -79,7 +79,7 @@ with open(RHEA_INPUT, 'r', encoding='utf-8') as f:
 print(f'  Reactions: {len(rows)}, unique compounds: {len(all_chebi)}')
 
 
-# ---- Step 2: Rhea SPARQL 取 rhea:name (Rhea 短名, 同 fetch_rhea.py) ----
+# ---- Step 2: Rhea SPARQL fetch of rhea:name (Rhea short name, same as fetch_rhea.py) ----
 def batch_query_names(ids):
     quoted = ', '.join(f'"{i}"' for i in ids)
     query = f'''
@@ -128,7 +128,7 @@ for m in list(missing)[:10]:
 
 
 def display_name(segments, rhea_name):
-    """在方程段中匹配干净名 ==/包含 Rhea 短名的段, 返回原样段(保留计量/区室)。"""
+    """Match an equation segment whose clean name ==/contains the Rhea short name; return the segment as-is (keeping stoichiometry/compartment)."""
     if not rhea_name:
         return ''
     for s in segments:
@@ -138,15 +138,16 @@ def display_name(segments, rhea_name):
     return ''
 
 
-# ---- Step 3: 组装输出 ----
+# ---- Step 3: assemble output ----
 print('Step 3: writing output...')
 fields = ['Entry', 'Rhea ID', 'Direction', 'Substrate', 'Substrate ChEBI',
           'Product', 'Product ChEBI', 'Source']
-# 双侧 ChEBI 全空的行必须丢掉再写出。
-# 成因: Step 2 的 SPARQL 批次失败时该反应的 ChEBI 解析不出来, 于是 sub_chebi 和
-# prod_chebi 都是 '' —— 所有这类行会落进同一个 key ('', ''), 被下游 build_terpene_pairs
-# 归成**一行**, 然后在这一行的 Enzyme_1..N 里塞进成千上万个酶, 产出一条畸形记录。
-# 那既不是有效通路, 又会把下游的列宽撑爆。宁可少一行, 不可多一行垃圾。
+# Rows with both ChEBI sides empty must be dropped before writing.
+# Cause: when a Step 2 SPARQL batch fails, that reaction's ChEBI cannot be resolved, so sub_chebi
+# and prod_chebi are both '' -- all such rows fall into the same key ('', ''), and downstream
+# build_terpene_pairs collapses them into **one row**, then stuffs tens of thousands of enzymes into
+# that row's Enzyme_1..N, producing one malformed record -- neither a valid pathway nor something
+# that fits the downstream column width. Better one row too few than one row of junk.
 dropped_both, dropped_one = 0, 0
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
@@ -156,8 +157,9 @@ with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
             dropped_both += 1
             continue
         if not sub_chebi or not prod_chebi:
-            # 单侧缺失仍写出(另一侧信息有效, 且 pairs 的键 (sub, prod) 与双侧齐全的行不同),
-            # 但计数报告出来 —— 数量异常增长说明 SPARQL 在掉批次。
+            # One-side-missing rows are still written (the other side's info is valid, and their
+            # pairs key (sub, prod) differs from fully-populated rows), but they are counted and
+            # reported -- abnormal growth means SPARQL is losing batches.
             dropped_one += 1
         w.writerow([entry, rid, direction,
                     display_name(sub_segs, name_map.get(sub_chebi, '')), sub_chebi,

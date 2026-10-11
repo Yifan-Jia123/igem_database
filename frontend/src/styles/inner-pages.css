@@ -1587,7 +1587,7 @@
 
 /* A plain route exports with the database's own enzymes for each step, which is
    not the same promise as a per-step pick — so it gets a muted badge, not the
-   gold one that marks 已选酶. */
+   gold one that marks the selected enzyme. */
 .app-shell:not(.home-shell) .downloads-pw-route-badge.is-auto {
   background: rgba(146, 166, 202, 0.22);
   border-color: rgba(16, 43, 85, 0.22);

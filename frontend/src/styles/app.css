@@ -22,15 +22,18 @@
   --paper-muted: #d9e7f1;
   --shadow: 0 22px 50px rgba(2, 8, 14, 0.35);
 
-  /* 图谱/首页头部两段的纵向尺寸。整页所有「绝对定位的纵坐标」都是这两段加起来推出来的,
-     以前是 58 + 84 这个和在十条规则里各写一遍裸数字(142 / 150 / 160),
-     改一次高度要同步改九处 —— 漏一处就错位。现在只改下面这两行。
-     ≤760px 断点有另一套尺寸,在本文件末尾的媒体查询里重定义同样这两个变量。 */
+  /* Vertical sizes of the graph/home header's two bands. Every "absolutely
+     positioned vertical coordinate" on the page is derived from the sum of these two;
+     it used to be 58 + 84 written as raw numbers (142 / 150 / 160) across ten rules,
+     so changing one height meant editing nine places -- miss one and it misaligns.
+     Now only the two lines below change. The ≤760px breakpoint has another set of
+     sizes and redefines these same two variables in the media query at the end of
+     this file. */
   --graph-nav-h: 58px;
   --graph-band-h: 62px;
-  /* 两段之和 = 地图区的上边界,也是所有浮层往下让位的基准线 */
+  /* The sum of the two bands = the map area's top edge, and the baseline every overlay yields down from */
   --graph-band-bottom: calc(var(--graph-nav-h) + var(--graph-band-h));
-  /* 左侧 Filters 栏比基准线再低 18px */
+  /* The left Filters column sits 18px below the baseline */
   --graph-band-gap: calc(var(--graph-band-bottom) + 18px);
 }
 
@@ -2669,9 +2672,10 @@ body:has(.graph-home-page) {
   display: grid;
   place-items: center;
   border: 1px solid rgba(146, 166, 202, 0.6);
-  /* 里面是真正的 logo（`/starase-atlas-logo.png`）。曾试过垫一层浅底（`#fff8f1`）
-     来提对比度，但配色上不如原来这层冷蓝薄雾好看，已按你的意思改回来。
-     `home-rework.css` 里的 `.atlas-logo-mark` 负责把图案内缩 3px，别贴着这圈描边。 */
+  /* Inside is the real logo (`/starase-atlas-logo.png`). A pale underlay (`#fff8f1`)
+     was tried once to raise contrast, but colour-wise it looked worse than this cool
+     blue mist, so it was reverted per your wish. `.atlas-logo-mark` in
+     `home-rework.css` insets the artwork by 3px so it does not hug this ring. */
   background: rgba(146, 166, 202, 0.18);
   color: #92a6ca;
 }
@@ -3526,11 +3530,13 @@ body:has(.graph-home-page) {
 }
 
 /* ---------------------------------------------------------------------------
-   合并线（`.merged-source-line`）：展开后一条线代表「某个来源的一整批边」。
-   虚线是它唯一的形态信号 —— 实线 = 具体一个酶，虚线 = 一批。
-   色相与卡片左边框、`.search-table-source-tag.*` 同源；但**比标签色亮一档**：
-   标签躺在白底上，这条线躺在深蓝地图上，直接用 #a36a08 会糊掉。
-   类名由 JSX 拼成 `merged-source-line src-<source>`，所以下面按来源分别给色。
+   Merged line (`.merged-source-line`): when expanded, one line stands for "a source's
+   entire batch of edges". The dash is its only shape signal -- solid = one specific
+   enzyme, dashed = a batch. Its hue comes from the same source as the card's left
+   border and `.search-table-source-tag.*`; but **one step brighter than the tag
+   colour**: the tag sits on white, this line sits on the navy map, where #a36a08
+   directly would smear. The class name is assembled by JSX as `merged-source-line
+   src-<source>`, so each source gets its colour separately below.
    --------------------------------------------------------------------------- */
 .expanded-edge.merged-source-line {
   stroke-dasharray: 6 4;
@@ -3548,8 +3554,10 @@ body:has(.graph-home-page) {
   stroke: #5f9fd6;
 }
 
-/* 圈定的检索没命中这个合并单元里的任何成员时，整条线退成背景色 —— 与逐酶线
-   (`scope-background`) 同一处理。写在来源色之后，靠更高的选择器权重取胜。 */
+/* When the scoped search hits none of this merged unit's members, the whole line
+   drops to the background colour -- the same treatment as the per-enzyme line
+   (`scope-background`). Written after the source colours and winning on higher
+   selector specificity. */
 .expanded-edge.merged-source-line.scope-background {
   stroke: rgba(198, 208, 226, 0.4);
   stroke-dasharray: 3 5;
@@ -5431,13 +5439,14 @@ body:has(.home-map-page) {
   line-height: 1.55;
 }
 
-/* 标题栏所在的卡片是**浅色**面板（`.pathway-result-card`：
-   `rgba(255,255,255,0.82)` 半透白 + `backdrop-filter`），而这里原来用的是深色面板
-   才该用的暖白 `#fff8f1` —— 白字写白底，实测对比度约 1.02:1，等于看不见。
-   `graphExperience.tsx:2678` 是 `.pathway-heading` 目前唯一的渲染点，
-   所以直接改在这里，不留一条被别处覆盖掉的死规则。
-   主标题用正文墨色、副行（`N routes · <查询词>`）用次级灰，与 `.home-map-page
-   .stack-heading` 的 `color: #0e1726` 及 `.pathway-row-meta` 的收法保持一致。 */
+/* The card the heading sits in is a **light** panel (`.pathway-result-card`:
+   `rgba(255,255,255,0.82)` translucent white + `backdrop-filter`), yet this used the
+   warm white `#fff8f1` that belongs on a dark panel -- white text on white, measured
+   contrast ~1.02:1, effectively invisible. `graphExperience.tsx:2678` is
+   `.pathway-heading`'s only current render site, so it is fixed directly here rather
+   than leaving a dead rule overridden elsewhere. The main title uses body ink, the
+   sub-line (`N routes · <query>`) a secondary grey, consistent with `.home-map-page
+   .stack-heading`'s `color: #0e1726` and `.pathway-row-meta`'s handling. */
 .pathway-heading strong {
   color: #0e1726;
 }
@@ -6541,14 +6550,20 @@ body:has(.home-map-page) {
   --graph-navy-2: #102b55;
   --graph-ink: #111827;
   --graph-muted: #5f6f82;
-  /* 侧栏「划出」时向左平移的距离 = 左侧留白 18 + 侧栏宽 216 + 12 余量(描边/阴影),
-     平移到位时右边缘停在 -12px,整块在屏幕外。
-     放在 .home-map-page 上是因为要用它的有三个东西 —— 侧栏本身、收起把手、展开键 ——
-     它们必须同距同速,否则动画会散架。 */
+  /* Distance the sidebar slides left when it "slides out" = left gap 18 + sidebar width
+     216 + 12 slack (border/shadow); fully translated, its right edge stops at -12px and
+     the whole block sits off-screen.
+     Defined on .home-map-page because three things need it -- the sidebar itself, the
+     collapse handle, the expand key -- and they must move the same distance at the same
+     speed or the animation falls apart. */
   --graph-sidebar-slide: -246px;
-  /* 一个过渡时长,三处共用,改这里就是改全部。 */
+  /* One transition duration, shared by all three -- change it here to change all. */
   --graph-sidebar-ease: 220ms cubic-bezier(0.22, 1, 0.36, 1);
   --graph-line: #b8c7d2;
+  /* Height of the bottom stats bar. It must match the bottom margin .home-live-map
+     reserves for this bar -- both places once hard-coded 64px; changing only one opens
+     a gap between the map canvas and the stats bar. */
+  --graph-footer-h: 46px;
   width: 100%;
   height: 100vh;
   min-height: 720px;
@@ -7045,10 +7060,12 @@ body:has(.home-map-page) {
   font-weight: 700;
 }
 
-/* 但 Graph controls 是个浅色浮层菜单,深色数值在那上面是对的 —— 上面那条要留着。
-   真正读不出来的是 DeepSolNet Score 那一格:它在深色侧栏里,却继承了同一条深色。
-   所以这条只能收窄到侧栏里的 .home-filter-subgroup,不能用 .graph-filter-sidebar 兜底
-   —— 菜单在 DOM 上也是侧栏的后代,用侧栏选择器会把它一起刷白(实测白底白字)。 */
+/* But Graph controls is a light-coloured overlay menu, where the dark value is correct
+   -- keep the rule above. What is actually unreadable is the DeepSolNet Score cell: it
+   sits in the dark sidebar but inherited the same dark value. So this rule can only
+   narrow to .home-filter-subgroup inside the sidebar, not fall back to
+   .graph-filter-sidebar -- the menu is also a DOM descendant of the sidebar, so a
+   sidebar selector would paint it white too (measured: white on white). */
 .home-map-page .graph-filter-sidebar .home-filter-subgroup .control-value {
   color: rgba(248, 251, 255, 0.92);
 }
@@ -7091,10 +7108,15 @@ body:has(.home-map-page) {
 }
 
 .home-map-page .home-live-map {
-  inset: var(--graph-band-bottom) 0 64px 150px;
+  /* No gap on the left: the canvas starts at 0, sharing the left edge with the stats
+     bar below. The sidebar floats as a layer above it, so the 234px covered while it is
+     expanded is invisible anyway -- collapse it and the same piece of map is simply
+     revealed. The point is that the box is **identical in both the open and closed
+     states**, so the camera does not recompute and the map does not jump. */
+  inset: var(--graph-band-bottom) 0 var(--graph-footer-h) 0;
   z-index: 1;
-  width: calc(100% - 150px);
-  height: calc(100% - var(--graph-band-bottom) - 64px);
+  width: 100%;
+  height: calc(100% - var(--graph-band-bottom) - var(--graph-footer-h));
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -7328,31 +7350,36 @@ body:has(.home-map-page) {
   overflow-wrap: anywhere;
 }
 
-/* 标题栏回到普通流。它原本是绝对定位（`app.css:3626` / `:3981`），高度靠面板的
-   `padding-top` 写死预留 —— 所以化合物名一折行、预留量就不够，标题会被下面第一张卡
-   或第一条路线**压住**（截图确认）。回到文档流后标题自己撑多高就占多高，与内容不再重叠。
-   拖动仍然可用：`map-panel-drag-handle` 的指针事件不依赖定位方式。 */
+/* The heading bar returns to normal flow. It was originally absolutely positioned
+   (`app.css:3626` / `:3981`), its height hard-reserved via the panel's `padding-top` --
+   so as soon as a compound name wraps the reserve is too small and the heading gets
+   **pressed under** the first card or first route below (confirmed by screenshot). Back
+   in document flow the heading takes exactly the height it needs and no longer overlaps
+   the content. Dragging still works: the `map-panel-drag-handle` pointer events do not
+   depend on the positioning mode. */
 .home-map-page .stack-heading {
   position: static;
 }
 
-/* 标题里的 `<div>` 是 flex 项，不给 min-width:0 的话它的最小宽度是「最长不可断词」，
-   会把整行顶出卡片。 */
+/* The `<div>` in the heading is a flex item; without min-width:0 its minimum width is
+   the longest unbreakable word, which pushes the whole line out of the card. */
 .home-map-page .stack-heading > div {
   min-width: 0;
 }
 
-/* 标题正文是 `inline-flex`（`app.css:3638`：文字 + ChevronRight 图标）。不让它 wrap 的话
-   「起点 → 终点」永远挤在一行里；再叠上 `overflow-wrap: anywhere`（它把 min-content 宽度
-   压到 1 个字符），flex 就会把终点名从**单词中间**劈开（截图里出现过 `squale|ne`）。
-   这里改成：允许整块换行，只在单个词实在放不下时才断。 */
+/* The heading body is `inline-flex` (`app.css:3638`: text + ChevronRight icon). Without
+   letting it wrap, "origin -> destination" is forever crammed on one line; stack
+   `overflow-wrap: anywhere` on top (it crushes the min-content width to 1 char) and flex
+   splits the destination name **mid-word** (a screenshot once showed `squale|ne`).
+   Changed here to: allow the whole block to wrap, breaking only when a single word does
+   not fit. */
 .home-map-page .stack-heading strong {
   flex-wrap: wrap;
   overflow-wrap: break-word;
   word-break: normal;
 }
 
-/* 「N enzymes · M shown · K edges」/「N routes · <查询词>」这两行：按空格换行即可。 */
+/* The two lines "N enzymes · M shown · K edges" / "N routes · <query>": wrapping at spaces is enough. */
 .home-map-page .stack-heading span {
   overflow-wrap: break-word;
   word-break: normal;
@@ -7465,8 +7492,9 @@ body:has(.home-map-page) {
   left: auto;
   right: 24px;
   width: min(430px, calc(100vw - 210px));
-  /* 标题栏已经是普通流（见下面的 `.home-map-page .stack-heading`），
-     这里不再需要为它预留 52px —— 预留量写死，化合物名一折行就不够。 */
+  /* The heading bar is already normal flow (see `.home-map-page .stack-heading` below),
+     so there is no longer any need to reserve 52px for it here -- a hard-coded reserve
+     is too small as soon as a compound name wraps. */
   padding: 14px;
 }
 
@@ -7485,10 +7513,12 @@ body:has(.home-map-page) {
   align-self: start;
   justify-self: center;
   margin-top: 1px;
-  /* 基础规则给的 padding: 1px 6px 是按 32px 见方调的。这里被压到 26px,去掉 2px 边框
-     只剩 22px,再被左右各 6px 的 padding 吃掉,留给 18px 图标的内容盒只有 10px ——
-     图标从内容盒左缘溢出,一路压到右边框上(实测左边空 8px、右边空 0px)。
-     清掉 padding 改用 flex 居中,图标位置就不再依赖按钮做多大。 */
+  /* The base rule's padding: 1px 6px is tuned for a 32px square. Here it is squeezed to
+     26px; minus the 2px border only 22px remains, then the 6px padding on each side eats
+     into it, leaving just 10px of content box for an 18px icon -- the icon overflows the
+     content box's left edge and runs onto the right border (measured: 8px of space on
+     the left, 0px on the right). Clearing the padding and switching to flex centring
+     makes the icon position independent of how big the button is made. */
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -7520,16 +7550,19 @@ body:has(.home-map-page) {
 }
 
 /* ---------------------------------------------------------------------------
-   合并卡（`.enzyme-card-merged`）：一张卡代表「某个来源的全部酶」。
-   它必须和逐条渲染的 Swiss-Prot 卡一眼可辨 —— 手段是左侧 3px 来源色边框
-   + 极淡的同色底；色相沿用 `table-results.css` 的 `.search-table-source-tag.*`
-   （两处是同一套来源配色，改一处就要改另一处）。底色是**往深里压**而不是提亮：
-   这张卡躺在深蓝的地图面板上。
+   Merged card (`.enzyme-card-merged`): one card represents "all enzymes from one
+   source". It must be distinguishable at a glance from the per-row Swiss-Prot cards
+   -- via a 3px source-colour border on the left + a very faint same-colour background;
+   the hue follows `table-results.css`'s `.search-table-source-tag.*` (both places share
+   one source palette, so change one and you must change the other). The background is
+   **pressed darker** rather than lightened: this card lies on the dark-blue map panel.
 
-   来源色走 `border-left` 而不是 `box-shadow`，因为 `.enzyme-card.selected`
-   用 `box-shadow: inset 3px 0 0 var(--graph-gold)` 表达选中 —— 两者都要占左边那条
-   3px，写进同一个属性就会互相覆盖（合并卡一被选中就丢掉来源色）。所以选中改成
-   内描边，两条信号互不遮挡。
+   Source colour goes through `border-left` rather than `box-shadow`, because
+   `.enzyme-card.selected` expresses selection with `box-shadow: inset 3px 0 0
+   var(--graph-gold)` -- both want that left 3px, and writing them into the same property
+   would overwrite each other (a merged card loses its source colour the moment it is
+   selected). So selection moves to an inset outline, and the two signals no longer
+   cover each other.
    --------------------------------------------------------------------------- */
 .home-map-page .enzyme-card.enzyme-card-merged {
   border-left: 3px solid rgba(255, 255, 255, 0.28);
@@ -7555,8 +7588,9 @@ body:has(.home-map-page) {
   background: rgba(16, 43, 85, 0.96);
   outline: 2px solid var(--graph-gold);
   outline-offset: -2px;
-  /* 基类 `.enzyme-card.selected` 的金色内阴影会和来源色左边框并排挤在左边 6px 里，
-     既乱又盖住来源色。选中信号已由 outline 承担，这里清掉。 */
+  /* The base class `.enzyme-card.selected`'s gold inset shadow would jostle alongside
+     the source-colour left border in the left 6px, both messy and covering the source
+     colour. The selection signal is now carried by outline, so clear it here. */
   box-shadow: none;
 }
 
@@ -7587,12 +7621,12 @@ body:has(.home-map-page) {
 }
 
 .home-map-page .map-footer-stats.home-map-stats {
-  left: 156px;
+  left: 0;
   right: 0;
   bottom: 0;
   z-index: 4;
-  height: 64px;
-  min-height: 64px;
+  height: var(--graph-footer-h);
+  min-height: var(--graph-footer-h);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
@@ -7602,7 +7636,7 @@ body:has(.home-map-page) {
   background: rgba(234, 245, 250, 0.74);
   color: #111827;
   font-family: "Times New Roman", Georgia, serif;
-  font-size: clamp(16px, 1.4vw, 20px);
+  font-size: clamp(13px, 1.1vw, 16px);
   backdrop-filter: blur(10px);
 }
 
@@ -7655,10 +7689,11 @@ body:has(.home-map-page) {
     font-size: 18px;
   }
 
-  /* 窄屏：导航折成两行(118px)，标题栏也跟着变高。变量在 :root 上重定义，
-     所以 --graph-band-bottom / --graph-band-gap 会自动跟着重算 ——
-     下面 .graph-filter-sidebar 的 top 之所以仍是裸数字，是因为窄屏这里
-     是固定 240px、并不等于「基准线 + 18」。 */
+  /* Narrow screen: navigation folds into two rows (118px) and the title band grows
+     taller with it. The variables are redefined on :root, so --graph-band-bottom /
+     --graph-band-gap recompute automatically -- the reason `.graph-filter-sidebar`'s
+     top below is still a bare number is that on narrow screens it is a fixed 240px, not
+     equal to "baseline + 18". */
   :root {
     --graph-nav-h: 118px;
     --graph-band-h: 108px;

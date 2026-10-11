@@ -43,19 +43,24 @@ from sources import SOURCES  # noqa: E402
 
 engine = create_engine(DB_URL)
 
-# 有 enzyme_id 外键、自身没有 source_type 的子表。删除时靠子查询定位来源。
-# 顺序无所谓(它们互不引用), 但都必须早于 enzyme 的删除。
+# Child tables that have an enzyme_id foreign key and no source_type of their own.
+# Deletion locates the source through a subquery.
+# Order does not matter (they do not reference each other), but all must come before
+# enzyme's deletion.
 CHILD_TABLES = ('enzyme_solubility_score', 'enzyme_isoform', 'enzyme_go', 'evidence',
                 'gene_sequence_link', 'gene')
 
 
 def purge_source(source):
-    """清掉该来源的全部行, 子表优先。编号映射表(enzyme_id_map / enzyme_alias_map)**不在其中**。"""
+    """Clear all rows of that source, child tables first. The ID map tables (enzyme_id_map /
+    enzyme_alias_map) are **not** included."""
     ids = 'SELECT enzyme_id FROM enzyme WHERE source_type = :s'
     with engine.begin() as conn:
-        # search_index: 只清「有 enzyme_id」的行。enzyme_id IS NULL 的是化合物/实体级行,
-        # 与来源无关(同一个化合物就是同一个化合物), 归 B 类由 etl_search_index 自己 upsert。
-        # 照搬 C 类的写法会让这些行永远匹配不上 -> 每次刷新重复累积一份。
+        # search_index: clear only rows that "have an enzyme_id". Rows with enzyme_id IS NULL
+        # are compound/entity-level rows, unrelated to source (the same compound is the same
+        # compound); they are class B and upserted by etl_search_index itself. Copying class
+        # C's approach would make those rows never match -> a duplicate accumulates on every
+        # refresh.
         n = conn.execute(text(f'DELETE FROM search_index WHERE enzyme_id IN ({ids})'),
                          {'s': source}).rowcount
         print(f'  search_index(有 enzyme_id): -{n}')
@@ -75,7 +80,7 @@ def purge_source(source):
 
 
 def steps_for(only):
-    """(标签, 可调用) —— 全部接受 only=<source|None>。"""
+    """(label, callable) -- all accept only=<source|None>."""
     return [
         ('1/6 compounds', lambda o: etl_compounds.run(o)),
         ('2/6 enzymes', lambda o: etl_enzymes.run(o)),
@@ -107,7 +112,8 @@ def main(argv=None):
     mode = f'只重灌 {only}' if only else f'全量重灌 ({len(SOURCES)} 个来源)'
     print(f'=== ETL 开始: {mode} ===')
 
-    # 必须在 purge 之前 —— purge 删掉本来源的边后, edge_id 就无从沿用了。
+    # Must be before purge -- once purge deletes this source's edges, there is no edge_id
+    # left to carry over.
     print('\n--- 快照 edge_id ---')
     etl_edges.snapshot_edge_ids()
 

@@ -37,7 +37,7 @@ async def get_compound_card(
     compound_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """装配在 `app.services.entity_service.load_compound_card`，与 `/bundle` 共用。"""
+    """Assembled in `app.services.entity_service.load_compound_card`, shared with `/bundle`."""
     card = await load_compound_card(db, compound_id)
     if card is None:
         return ApiResponse(success=False, error={"code": "NOT_FOUND", "message": f"Compound {compound_id} not found"})

@@ -1,24 +1,24 @@
-"""来源分段的唯一登记处。
+"""The single registry for source segments.
 
-分段的边界是「一行是否对应一个 UniProt 条目」: 条目级步骤按来源分段产出,
-跨条目聚合的步骤(化合物 / 底物-产物对)汇合产出。新增来源时**只改这里** ——
-download_uniprot.py 与 run_all.py 都从这里取。
+A segment boundary is "whether a row corresponds to one UniProt entry": entry-level steps are produced per source segment,
+while cross-entry aggregation steps (compounds / substrate-product pairs) are produced merged. When adding a source, **change only this file** --
+download_uniprot.py and run_all.py both read from here.
 
-为什么必须只有一份: 若两处各写一份, 加新来源时漏改其中一处,
-run_all.py --merge 的安全阀就会以为「来源都齐了」而产出一份缺该来源的汇合表,
-覆盖掉原本完整的版本 —— 这是整套分段设计里唯一还能静默丢数据的口子。
+Why there must be only one copy: if two places each wrote their own, missing an update in one when adding a source would make
+run_all.py --merge's safety valve think "all sources are present" and emit a merged table missing that source,
+overwriting the previously complete version -- the only remaining hole in the whole segmentation design through which data can be silently lost.
 
-顺序即优先级: 同一个 accession 同时出现在多个来源时, 排在前面的胜出
-(SwissProt 优先, 见 plan「accession 升降级」)。
+Order is priority: when the same accession appears in several sources at once, the one listed earlier wins
+(SwissProt first, see the plan's "accession promotion/demotion").
 """
 
 SOURCES = ('swiss_prot', 'trembl')
 
-# 检索词**只有一个**, 覆盖整个检索集。分段在本地按 `Reviewed` 列拆, 不按 reviewed 切检索词。
-# 加 --query= 可覆盖 (试点时用来切小片)。
+# There is **only one** query term, covering the whole query set. Segmentation happens locally by the `Reviewed` column, not by splitting the query term on reviewed.
+# --query= can override it (used to slice small pieces during a pilot).
 #
-# 为什么不再「一来源一个词」(`(terpene) AND reviewed:true` / `reviewed:false` 各下一次):
-# 那是**两个时间窗**。跨窗口的升/降级会让同一个 accession 同时落进两段、或被两段都漏掉,
-# 而本方案的前提是「分段必须作为一组重新产出」(见 plan)。一个检索词 = 一个快照,
-# 这个前提就成了脚本强制的, 不再依赖「记得两个词一起改」这种纪律。
+# Why no longer "one term per source" (`(terpene) AND reviewed:true` / `reviewed:false` fetched separately each time):
+# that is **two time windows**. A promotion/demotion across the windows lets the same accession land in both segments, or be missed by both,
+# while this approach's premise is that "segments must be re-produced as a group" (see the plan). One query term = one snapshot,
+# so that premise becomes enforced by the script, no longer relying on the discipline of "remember to change both terms together".
 ALL_QUERY = '(terpene)'

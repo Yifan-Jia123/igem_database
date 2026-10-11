@@ -159,9 +159,11 @@ async def search_entries(
         if edge_ids:
             graph_highlights = {"highlightedEdgeIds": edge_ids}
 
-    # ⚠️ 刻意**不用** ``scored.total``: 这里的 total 是「页内条数」, 被
-    # ``Pagination.total`` / ``total_pages`` 用着, 改它等于动分页显示与图范围选择的
-    # 既有行为 —— 与本次要修的「表格页显示」无关, 不混进来。
+    # ⚠️ Deliberately **not** using ``scored.total``: the total here is the
+    # "row count of this page", consumed by ``Pagination.total`` /
+    # ``total_pages`` -- changing it would move the existing behaviour of both
+    # pagination display and graph scope selection, which is unrelated to the
+    # "table page display" this change targets, so don't mix it in.
     total = len(enzyme_ids)
     total_pages = max(1, (total + page_size - 1) // page_size)
 
@@ -194,24 +196,31 @@ async def search_enzyme_table(
     ``search_entries``) where ``ec_numbers``/``source_types`` cover every
     reaction edge of that enzyme instead of a single representative edge.
 
-    ``source_types`` 是**搜索集**(search set): 它收窄的是**检索范围**本身,
-    由 ``_scoped_query`` 编进取数 SQL。
-    ``display_*`` 是结果页工具栏那三个**显示筛选**(来源 / 物种 / EC 前缀)——
-    它们同样编进取数 SQL, 因为**这三个筛选必须是同一条 SQL 的一部分**:
-    先按 ``ORDER BY score DESC LIMIT n`` 截断、再在客户端筛, 筛出来的是
-    「分数前 n 名里恰好属于该来源的那几个」, 与真实答案毫无关系。实测
-    `terpene synthase` 在 limit=600 下客户端筛完只剩 **2** 条 swiss_prot,
-    limit=2000 剩 **3** 条, 而服务端圈定给的是 **1,243** 条。
-    方向还会随查询翻转(`synthase` 留 98.5% swiss_prot), 因为 score 与「来源」这个
-    维度毫不相关 —— 所以「提高上限」只能缩小偏差, 消除不了它。
+    ``source_types`` is the **search set**: it narrows the **search scope** itself,
+    compiled into the fetch SQL by ``_scoped_query``.
+    ``display_*`` are the three **display filters** in the result-page toolbar
+    (source / organism / EC prefix) -- they too are compiled into the fetch SQL,
+    because **these three filters must be part of the same SQL**: truncate first
+    by ``ORDER BY score DESC LIMIT n`` and filter client-side, and what you get is
+    "those among the top n by score that happen to be of that source", unrelated
+    to the real answer. Measured, `terpene synthase` at limit=600 leaves only
+    **2** swiss_prot rows after client-side filtering, limit=2000 leaves **3**,
+    whereas the server-side scoping gives **1,243**.
+    The direction even flips with the query (`synthase` keeps 98.5% swiss_prot),
+    because score is unrelated to the "source" dimension -- so "raise the cap"
+    only shrinks the bias, never removes it.
 
-    返回的 ``total`` 是 **LIMIT 之前的真实命中数**(``COUNT(*) OVER ()``),
-    与 ``len(cards)`` 是两件事 —— 后者被 ``limit`` 截过。筛选之后若命中集仍超过
-    ``limit``, 页面会显示「2000 of 55712」这样的形态, 那正是诚实的读法。
+    The returned ``total`` is the **true hit count before LIMIT**
+    (``COUNT(*) OVER ()``), a different thing from ``len(cards)`` -- the latter is
+    truncated by ``limit``. If the hit set still exceeds ``limit`` after
+    filtering, the page shows a form like "2000 of 55712", which is the honest
+    reading.
 
-    ⚠️ ``display_*`` 与 ``source_types`` **必须保持是两组参数**: 前者只属于检索结果页,
-    后者在 App 里跨页保持且 BLAST / 图谱也认它。看混了就会重演
-    「调用时省掉实参 -> 谓词退化为空串」那次事故(见下)。
+    ⚠️ ``display_*`` and ``source_types`` **must stay two parameter sets**: the
+    former belongs only to the search results page, the latter persists across
+    pages in the App and is also honoured by BLAST / the graph. Mixing them
+    replays the "omitted argument at the call site -> predicate degrades to an
+    empty string" incident (see below).
     """
     if not input_type or input_type == "auto":
         detected = detect_input_type(q)
@@ -285,13 +294,17 @@ async def _aggregate_table_cards(
     source_by_enzyme: Dict[str, set] = {eid: set() for eid in enzyme_ids}
     reaction_by_enzyme: Dict[str, set] = {eid: set() for eid in enzyme_ids}
 
-    # 先用酶**自身**的 source_type 播种。**不能只从反应边推来源** —— 没有反应注释的酶
-    # (全量 TrEMBL 下是绝大多数) 边集为空, 推出来的 source_types 就是 [], 而检索页的
-    # 来源筛选是按 `row.sourceTypes.some(...)` 匹配的 (SearchResultsPage.tsx:363),
-    # 于是「一选来源就把无边酶整批隐藏」: 看着像筛掉了别的来源, 实际是把全量域
-    # 偷换成了有边的子集 (实测 4790 个酶里只有 124 个有边)。
-    # 边来源照样并入, docstring 承诺的「覆盖每条边」不受影响 —— 实测两者 0 处不一致
-    # (边的来源本来就是 ETL 从 enzyme 表读来的)。
+    # Seed first with the enzyme's **own** source_type. **Do not derive the
+    # source from reaction edges alone** -- enzymes with no reaction annotation
+    # (the great majority under full TrEMBL) have an empty edge set, so the
+    # derived source_types would be [], while the search page's source filter
+    # matches on `row.sourceTypes.some(...)` (SearchResultsPage.tsx:363), so
+    # "picking any source hides the whole batch of edgeless enzymes": it looks
+    # like other sources were filtered out, but really the full domain was
+    # swapped for the subset that has edges (measured: only 124 of 4790 enzymes
+    # have edges). Edge sources are merged in as before, so the docstring's
+    # promise to "cover every edge" is unaffected -- measured 0 disagreements
+    # (edge sources are read from the enzyme table by the ETL anyway).
     for eid, enz in enzymes.items():
         if enz.source_type:
             source_by_enzyme.setdefault(eid, set()).add(_enum_value(enz.source_type))
@@ -307,8 +320,10 @@ async def _aggregate_table_cards(
         if edge.source_type:
             source_by_enzyme[eid].add(_enum_value(edge.source_type))
 
-    # 模型参考分 + 膜三态。`isoform_id IS NULL` 取的是 canonical 序列那条 ——
-    # 不带这个谓词, 有变体的酶会一次返回多行, 分不清哪个是酶本身的分。
+    # Model reference score + membrane tri-state. `isoform_id IS NULL` picks the
+    # row for the canonical sequence -- without this predicate an enzyme with
+    # variants returns several rows at once, and there is no telling which is
+    # the score for the enzyme itself.
     score_by_enzyme: Dict[str, Tuple[Optional[float], Optional[str]]] = {}
     sol_result = await db.execute(
         select(
@@ -349,37 +364,45 @@ async def _aggregate_table_cards(
 
 
 def _enum_value(value) -> str:
-    """ENUM 列取回来可能是枚举成员, 也可能是裸字符串。"""
+    """An ENUM column may come back as an enum member or a bare string."""
     return value.value if hasattr(value, "value") else str(value)
 
 
-# 多条件检索时**每个条件**的取数上限。全库最大可能的命中集是酶表总行数
-# (95,869), 所以这个数等价于「不截断」。原来写死 10000, 于是
-# `terpene synthase` 这类**多词查询**(parse_query 的 OR 语义会拆成两个 clause)
-# 的命中集被硬顶在 20,000 —— 提高 `limit` 永远到不了真实集合,
-# 窗口函数数出来的 total 也会是截断后的假数。
-# 实测代价: 同一个三段聚合, LIMIT 600 是 7.896s, 不限行数把全部 37,150 个 id
-# 取回来是 8.144s —— 代价全在 `%词%` 的全表扫上, 与返回行数无关。
+# Fetch cap for **each condition** in multi-condition search. The largest
+# possible hit set is the enzyme table's row count (95,869), so this number is
+# equivalent to "no truncation". It was hard-coded to 10000, so the hit set of
+# a **multi-word query** like `terpene synthase` (parse_query's OR semantics
+# split it into two clauses) was capped at 20,000 -- raising `limit` never
+# reaches the true set, and the total counted by the window function is also a
+# truncated fake. Measured cost: for the same three-stage aggregate, LIMIT 600
+# is 7.896s, fetching all 37,150 ids with no row limit is 8.144s -- the cost is
+# entirely in the `%word%` full scan, unrelated to the number of rows returned.
 MULTI_CONDITION_CAP = 300_000
 
-# 物种筛选里「没有物种」那一项的哨兵。前端把空 organism_name 显示成
-# 'Unknown organism' 当成一个可选项, 但服务端按精确串相等去匹配,
-# 于是「选它反而什么都筛不到」。哨兵让这一项能翻译成
-# `organism_name IS NULL OR organism_name = ''`。当前库里 0 行 NULL、0 行空串,
-# 所以这是**潜伏**缺陷的关闭, 不是当下可见的修复。
+# Sentinel for the "no organism" entry in the organism filter. The frontend
+# shows an empty organism_name as 'Unknown organism' and treats it as a
+# selectable option, but the server matches by exact string equality, so
+# "picking it filters out everything instead". The sentinel lets that entry
+# translate to `organism_name IS NULL OR organism_name = ''`. The current
+# database has 0 NULL rows and 0 empty-string rows, so this closes a **latent**
+# defect, not a currently visible fix.
 UNKNOWN_ORGANISM_SENTINEL = "__unknown__"
 
 
 class ScopeFilters(NamedTuple):
-    """一次检索要编进 SQL 的**圈定谓词**的全部输入。
+    """All inputs for the **scoping predicates** compiled into SQL for one search.
 
-    ``source_types`` / ``review_statuses`` 是**搜索集**(检索范围);
-    其余三个是检索页工具栏的**显示筛选**(来源 / 物种 / EC)。
-    两者在 SQL 里 **AND 叠加** —— 搜索集=trembl 且显示筛选=swiss_prot 时结果是 0 行,
-    那是两层叠加的正确结果, 不是冲突(前端会先把这种组合渲染成 disabled 并用文案说明)。
+    ``source_types`` / ``review_statuses`` are the **search set** (search scope);
+    the other three are the search page toolbar's **display filters** (source /
+    organism / EC). The two are **AND-ed** in SQL -- with search set=trembl and
+    display filter=swiss_prot the result is 0 rows, which is the correct result
+    of stacking the two layers, not a conflict (the frontend first renders such
+    a combination as disabled and explains it in copy).
 
-    两者**必须保持是两个参数**: 生命周期与影响面都不同 —— 搜索集在 App 里跨页保持,
-    BLAST 与图谱也认它; 显示筛选只属于检索结果页。
+    The two **must stay two parameters**: their lifetimes and blast radius
+    differ -- the search set persists across pages in the App and is also
+    honoured by BLAST and the graph; the display filters belong only to the
+    search results page.
     """
 
     source_types: Optional[List[str]] = None
@@ -390,14 +413,16 @@ class ScopeFilters(NamedTuple):
 
 
 class ScoredEnzymes(NamedTuple):
-    """一条检索路径的返回: 本页的行 + **真实命中总数**。
+    """Return of one search path: this page's rows + the **true hit total**.
 
-    ``total`` 来自 ``COUNT(*) OVER ()``(见 ``_scoped_query``), 是 LIMIT **之前**的
-    去重酶数, 与 ``len(rows)`` 是两件事 —— 后者被 ``limit`` 截过。
-    多条件路径的 ``total`` 是 ``len(merged)``, 在 ``MULTI_CONDITION_CAP`` 之下即精确值。
+    ``total`` comes from ``COUNT(*) OVER ()`` (see ``_scoped_query``) and is the
+    deduplicated enzyme count before LIMIT, a different thing from ``len(rows)``
+    -- the latter is truncated by ``limit``. The multi-condition path's ``total``
+    is ``len(merged)``, exact below ``MULTI_CONDITION_CAP``.
 
-    ``/search/entries`` **不用** ``total``(它的分页语义保持 ``len(enzyme_ids)`` 不变),
-    只有表格检索用它 —— 见 ``search_enzyme_table``。
+    ``/search/entries`` does **not** use ``total`` (its pagination semantics keep
+    ``len(enzyme_ids)`` unchanged); only the table search uses it -- see
+    ``search_enzyme_table``.
     """
 
     rows: List[Tuple[str, int]]
@@ -405,31 +430,41 @@ class ScoredEnzymes(NamedTuple):
 
 
 def _scope_filter_sql(scope: ScopeFilters, left: str = "enzyme_id") -> Tuple[str, dict]:
-    """把圈定谓词(搜索集 + 显示筛选)编成一个**布尔条件**, 由调用方套在取数查询上。
+    """Compile the scoping predicates (search set + display filters) into a
+    **boolean condition** for the caller to wrap around its fetch query.
 
-    为什么必须进 SQL, 而不是像 organism 那样在 ``_fetch_cards`` 里对当前页做后置过滤:
-    后置过滤时 LIMIT/OFFSET 仍按**未过滤**的全集切页, 于是
-    「一页 20 条里恰好属于该来源的 0~2 条」= 用户看到几乎空白的结果页,
-    翻页还会漏掉/重复条目; ``select_scope_enzymes`` 拿 200 条候选去选图范围时,
-    也只是「未过滤的前 200 里属于该来源的那些」, 图的范围被静默缩窄。
-    写进 SQL 之后, 分页是对**过滤后的集合**切分, 与用户看到的一致。
+    Why it must go into SQL, rather than post-filtering the current page inside
+    ``_fetch_cards`` like organism: with post-filtering, LIMIT/OFFSET still pages
+    over the **unfiltered** full set, so "of a page of 20, 0~2 happen to be of
+    that source" = the user sees a nearly blank result page, and paging also
+    drops/duplicates entries; when ``select_scope_enzymes`` takes 200 candidates
+    to pick the graph scope, it too is only "those of that source among the
+    unfiltered first 200", silently narrowing the graph's scope. Once written
+    into SQL, pagination splits the **filtered set**, matching what the user
+    sees.
 
-    对**表格检索**而言这条更尖锐: 取数上限 2000, 而后置筛选的代价不是「少几条」而是
-    「按分数截断的那 2000 条里恰好有几个是 Swiss-Prot」—— 实测 `terpene synthase` 在
-    limit=600 下客户端筛完只剩 2 条, 而服务端圈定给的是 1,243 条。
+    This is sharper still for **table search**: the fetch cap is 2000, and the
+    cost of post-filtering is not "a few rows fewer" but "how many of the 2000
+    rows truncated by score happen to be Swiss-Prot" -- measured, `terpene
+    synthase` at limit=600 leaves only 2 rows after client-side filtering, while
+    the server-side scoping gives 1,243.
 
-    判定条件是 ``enzyme`` 表**自身**的 source_type / review_status —— 全量 TrEMBL 下
-    绝大多数酶没有反应边, 若按边过滤就等于把无边酶整批删掉 (取数域被偷换)。
+    The condition is judged on the ``enzyme`` table's **own** source_type /
+    review_status -- under full TrEMBL the great majority of enzymes have no
+    reaction edge, so filtering by edge would delete the whole batch of
+    edgeless enzymes (the fetch domain gets swapped).
 
-    返回的是**条件本身**(不含 WHERE), 由调用方拼进它自己的 WHERE ——
-    索引路径拼进三段扫描的段内(见 ``_search_single_index``),
-    legacy 路径同样拼进每一段。
+    What is returned is the **condition itself** (no WHERE), for the caller to
+    splice into its own WHERE -- the index path splices it inside each of the
+    three scans (see ``_search_single_index``), the legacy path likewise into
+    each segment.
 
-    ``left`` 是 IN 左侧那一列**所属的表别名**。索引路径的 ``search_index`` 只有一列
-    ``enzyme_id``, 不写表名也不会有歧义; 但 legacy 的三段本来就把 ``enzyme`` 与
-    ``enzyme_reaction_edge`` 都 JOIN 进来了 —— **两张表都有 ``enzyme_id``**,
-    裸写会直接报 ``(1052) Column 'enzyme_id' ... is ambiguous``。
-    所以 legacy 侧必须传 ``left="e.enzyme_id"``。
+    ``left`` is the **table alias** of the column on the left of IN. The index
+    path's ``search_index`` has only one column, ``enzyme_id``, so no table name
+    is needed and there is no ambiguity; but the legacy three segments already
+    JOIN in both ``enzyme`` and ``enzyme_reaction_edge`` -- **both tables have
+    ``enzyme_id``**, and a bare name reports ``(1052) Column 'enzyme_id' ...
+    is ambiguous``. So the legacy side must pass ``left="e.enzyme_id"``.
     """
     conditions: List[str] = []
     bind_params: dict = {}
@@ -442,9 +477,11 @@ def _scope_filter_sql(scope: ScopeFilters, left: str = "enzyme_id") -> Tuple[str
             placeholders.append(f":{name}")
         return f"e.{column} IN ({', '.join(placeholders)})"
 
-    # 搜索集与「Data source」显示筛选**各自**是一条 IN 条件, 两条之间是 AND。
-    # 不能把两个值表并成一个 IN —— 那是并集(放宽), 而两层叠加要的是交集:
-    # 搜索集=trembl 且显示筛选=swiss_prot 必须筛出 0 行。
+    # The search set and the "Data source" display filter are **each** an IN
+    # condition, AND-ed between the two. Do not merge the two value lists into
+    # one IN -- that is a union (a loosening), whereas stacking the two layers
+    # wants an intersection: search set=trembl and display filter=swiss_prot
+    # must yield 0 rows.
     if scope.source_types:
         conditions.append(in_condition("source_type", scope.source_types, "scope_src"))
     if scope.display_source_types:
@@ -453,8 +490,10 @@ def _scope_filter_sql(scope: ScopeFilters, left: str = "enzyme_id") -> Tuple[str
         conditions.append(in_condition("review_status", scope.review_statuses, "scope_rev"))
 
     if scope.organism_names:
-        # 物种是精确串相等(前端 `organismSet.has(row.organismName)`),
-        # NULL / 空串两边都恒不匹配 —— 除了那个哨兵项, 它专门指代这两类行。
+        # Organism is exact string equality (frontend
+        # `organismSet.has(row.organismName)`); NULL / empty string never match
+        # either side -- except the sentinel entry, which specifically denotes
+        # those two kinds of rows.
         known = [n for n in scope.organism_names if n != UNKNOWN_ORGANISM_SENTINEL]
         parts: List[str] = []
         if known:
@@ -464,13 +503,17 @@ def _scope_filter_sql(scope: ScopeFilters, left: str = "enzyme_id") -> Tuple[str
         conditions.append("(" + " OR ".join(parts) + ")")
 
     if scope.ec_prefixes:
-        # EC 前缀**必须**用逐段相等, 不能用 `LIKE '4.2.3%'` —— 后者会把
-        # `4.2.30.1` 也匹配进来(把 `30` 的 `3` 当成前缀)。要用 LIKE 就得写成
-        # `LIKE '4.2.3.%'`, 少写一个点就静默放宽, 所以选 SUBSTRING_INDEX。
+        # EC prefixes **must** use segment-by-segment equality, not
+        # `LIKE '4.2.3%'` -- the latter also matches `4.2.30.1` (treating the
+        # `3` of `30` as a prefix). To use LIKE you would have to write
+        # `LIKE '4.2.3.%'`, and omitting one dot silently loosens it, so
+        # SUBSTRING_INDEX it is.
         #
-        # 判据与前端 `prefixMatches`(SearchResultsPage.tsx) 逐段相等同一口径,
-        # 且**必须**走「边 ⋈ reaction」而不是 search_index 里的 ec 字段 ——
-        # 前端行上的 ecNumbers 就是从边来的, 没有反应边的酶两边都不匹配。
+        # The criterion is the same segment-by-segment equality as the frontend's
+        # `prefixMatches` (SearchResultsPage.tsx), and it **must** go through
+        # "edge ⋈ reaction" rather than the ec field in search_index -- the
+        # ecNumbers on the frontend row come from edges, so an enzyme with no
+        # reaction edge matches on neither side.
         ec_parts: List[str] = []
         for i, segments in enumerate(scope.ec_prefixes):
             if not segments:
@@ -509,18 +552,24 @@ def _scoped_query(
     offset: int,
     with_total: bool = False,
 ) -> str:
-    """把「已聚合到每个酶一行」的查询套上圈定谓词 + 排序 + 分页(+ 可选真实总数)。
+    """Wrap a "already aggregated to one row per enzyme" query with the scoping
+    predicates + ordering + pagination (+ an optional true total).
 
-    无筛选且不要 total 时**原样返回**单层写法(那条路径的 EXPLAIN 是实测过的,
-    不引入多余的派生表); 否则多套一层: 聚合先跑, 半连接只对去重后的少量酶做一次。
+    With no filters and no total, return the single-layer form **as-is** (that
+    path's EXPLAIN was measured; don't introduce an extra derived table);
+    otherwise add one layer: the aggregate runs first, and the semijoin runs once
+    over the small deduplicated set of enzymes.
 
-    ``with_total`` 把 ``COUNT(*) OVER ()`` 加在外层 select 上。**必须在外层**:
-    窗口函数在 GROUP BY **之后**、LIMIT **之前**求值, 所以桶恰好是「去重后的酶」,
-    数出来的就是真实命中数; 放进里面的聚合 select 数到的会是聚合**之前**的行。
-    实测这个窗口函数是免费的(7.896s vs 7.913s), 代价由 `%词%` 的全表扫决定。
+    ``with_total`` adds ``COUNT(*) OVER ()`` to the outer select. It **must be
+    outer**: the window function is evaluated after GROUP BY and before LIMIT, so
+    the bucket is exactly "the deduplicated enzymes" and what it counts is the
+    true hit count; put it inside the aggregate select and it would count rows
+    **before** aggregation. Measured, this window function is free (7.896s vs
+    7.913s); the cost is decided by the `%word%` full scan.
 
-    ``with_total=False`` 时 SQL 与改造前**逐字相同** —— ``/search/entries`` 走的就是
-    这条路径, 它的分页语义要保持不变。
+    With ``with_total=False`` the SQL is **character-for-character identical** to
+    before the change -- ``/search/entries`` takes this path, and its pagination
+    semantics must stay unchanged.
     """
     if not scope_cond and not with_total:
         return f"{aggregated_sql} ORDER BY score DESC LIMIT {limit} OFFSET {offset}"
@@ -555,10 +604,13 @@ async def _search_single(
         indexed = await _search_single_index(
             cond, input_type, limit, offset, db, value, scope_sql, scope_params, with_total
         )
-        # 空结果**且没有圈定谓词**时才回退到 legacy(索引可能不覆盖某个字段)。
-        # 有筛选时不能回退: 空结果在筛选下是**正常的用户可见状态**(用户圈了一个
-        # 没有命中的物种), 把它当成「索引不覆盖」的信号会白跑一次更贵的全表扫 ——
-        # 实测那正好是「筛不出东西时反而等两倍时间」。
+        # Fall back to legacy only on an **empty result with no scoping
+        # predicate** (the index may not cover some field). With filters, do not
+        # fall back: an empty result under filters is a **normal user-visible
+        # state** (the user scoped an organism with no hits), and treating it as
+        # an "index doesn't cover" signal burns a more expensive full scan for
+        # nothing -- measured, that is exactly the "when nothing matches, wait
+        # twice as long" behaviour.
         if indexed.rows or scope_sql:
             return indexed
 
@@ -580,22 +632,25 @@ def _normalized_search_value(cond: SearchCondition, input_type: Optional[str]) -
 
 
 def _index_hash(value: str) -> str:
-    """与 ETL 写入侧**同一个函数**: sha1(value.lower()) 的十六进制。
+    """**Same function as the ETL write side**: hex of sha1(value.lower()).
 
-    必须与 etl_search_index._hash 逐字一致 —— 写入侧算一次、查询侧再算一次来命中
-    `idx_search_index_hash`。两侧的 lower() 都必须是 Python 的 str.lower()
-    (不是 MySQL 的 LOWER()): 实测全库 137,995 行的 field_value_hash
-    与 SHA1(LOWER(field_value)) 完全一致, 所以两者在现有语料上等价。
+    Must be character-for-character identical to etl_search_index._hash -- the
+    write side computes it once and the query side again to hit
+    `idx_search_index_hash`. The lower() on both sides must be Python's
+    str.lower() (not MySQL's LOWER()): measured, all 137,995 rows in the
+    database have a field_value_hash matching SHA1(LOWER(field_value)) exactly,
+    so the two are equivalent on the current corpus.
     """
     return hashlib.sha1(value.lower().encode("utf-8")).hexdigest()
 
 
 def _escape_like(value: str) -> str:
-    """把用户在 LIKE 里输入的 % 和 _ 转义成字面量。
+    """Escape the % and _ a user types in a LIKE into literals.
 
-    这两个字符在 LIKE 里是通配符, 而本库的检索值里 `_` 很常见
-    (RefSeq accession 如 `NP_004453.3`) —— 不转义就会把「精确前缀」搜成
-    「任意单字符」, 结果偏宽且看起来像是正常的模糊匹配。
+    These two are wildcards in LIKE, and `_` is common in this database's search
+    values (RefSeq accessions like `NP_004453.3`) -- without escaping, an "exact
+    prefix" is searched as "any single character", giving wider results that look
+    like a normal fuzzy match.
     """
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -609,12 +664,14 @@ async def _scored(
     offset: int,
     with_total: bool,
 ) -> ScoredEnzymes:
-    """把一次取数的结果行包成 ``ScoredEnzymes``。
+    """Wrap one fetch's result rows into ``ScoredEnzymes``.
 
-    ``with_total`` 时外层 select 多一列 ``COUNT(*) OVER ()``, 它是 LIMIT **之前**的
-    去重酶数。窗口函数只附在**取回的那些行**上, 所以空页没有行可依附:
-    ``offset=0`` 的空页等价于 0 命中, 直接返回 0; 带 offset 的调用方(目前没有)则
-    单独数一次 —— 如实去数, 免得把 total 静默报成 0。
+    With ``with_total`` the outer select has one more column, ``COUNT(*) OVER
+    ()``, the deduplicated enzyme count before LIMIT. The window function only
+    rides on the **rows fetched**, so an empty page has no row to attach to: an
+    empty page at ``offset=0`` is equivalent to 0 hits, so return 0 directly; a
+    caller with an offset (there is none currently) counts separately -- count
+    honestly, so the total is not silently reported as 0.
     """
     pairs = [(row[0], row[1]) for row in rows]
     if not with_total:
@@ -661,40 +718,62 @@ async def _search_single_index(
     if field_placeholders:
         field_filter = f"AND field_name IN ({', '.join(field_placeholders)})"
 
-    # 圈定谓词进每一段（理由见下）；无圈定时与原写法逐字相同。
-    # 安全前提: field_filter 要么是 `AND field_name IN (...)`、要么是空串, 所以拼出来
-    # 永远是一个合法的谓词序列, 不会出现悬空的 AND。
+    # The scoping predicate goes into each segment (reasons below); with no
+    # scoping it is character-for-character identical to the original. Safety
+    # premise: field_filter is either `AND field_name IN (...)` or an empty
+    # string, so the concatenation is always a valid predicate sequence, never a
+    # dangling AND.
     scan_filter = f"{field_filter}\n              AND {scope_sql}" if scope_sql else field_filter
 
-    # 三段 UNION ALL 的代价差别很大, 改法针对的是「索引能不能用上」:
+    # The three UNION ALL segments differ greatly in cost; the fix targets
+    # "whether the index can be used":
     #
-    #   精确段  -> `field_value_hash = :exact_hash`, 走 `idx_search_index_hash`。
-    #              原来写的是 `LOWER(field_value) = LOWER(:v)`: 列被函数包住 + field_value
-    #              是 TEXT 且无索引 -> 每次都全表扫。用 hash 等值既走索引, 又与写入侧
-    #              同一套算法。**等价性有实测支撑**: 全库 distinct(field_value_hash) 与
-    #              distinct(LOWER(field_value)) 都是 34,777, 且「同一 hash 对应多个不同
-    #              小写值」的组数为 0 —— 即 hash 是小写值的单射, 等值匹配结果一致。
-    #   前缀/包含段 -> 去掉 LOWER 包装, 交给列自身的 utf8mb4_unicode_ci 排序规则做
-    #              大小写不敏感(LIKE 也遵循排序规则), 于是至少能用到 field_name 上的索引,
-    #              而不是每行都跑一次 LOWER()。`%...%` 本身无法走 B-tree, 这是已知代价。
+    #   exact segment  -> `field_value_hash = :exact_hash`, using
+    #              `idx_search_index_hash`. The original wrote
+    #              `LOWER(field_value) = LOWER(:v)`: the column is wrapped in a
+    #              function + field_value is TEXT with no index -> a full scan
+    #              every time. Hash equality both uses the index and is the same
+    #              algorithm as the write side. **Equivalence is measured**:
+    #              distinct(field_value_hash) and distinct(LOWER(field_value))
+    #              are both 34,777 across the database, and the number of groups
+    #              where "one hash maps to several distinct lowercase values" is
+    #              0 -- i.e. the hash is injective over lowercase values, so
+    #              equality matches agree.
+    #   prefix/contains segment -> drop the LOWER wrapper and let the column's own
+    #              utf8mb4_unicode_ci collation do case-insensitivity (LIKE also
+    #              follows the collation), so at least the index on field_name can
+    #              be used, rather than running LOWER() on every row. `%...%`
+    #              itself cannot use a B-tree, a known cost.
     #
-    # 来源/状态/物种/EC 筛选推进**每一段扫描内**(`{scan_filter}`), 而不是套在聚合之外。
+    # The source/status/organism/EC filters are pushed **inside each scan**
+    # (`{scan_filter}`), not wrapped outside the aggregate.
     #
-    # 这个位置决定「圈定能不能省下扫描」, 是这条查询最关键的一处:
-    #   套在聚合之外(旧写法) —— 三段照旧全表扫 376 万行, 等 GROUP BY 去重成每个酶一行
-    #      之后, 才用半连接把不要的行丢掉。等价, 但**一行扫描都没省下**: 实测圈 swiss_prot
-    #      反而略慢(10.50s -> 10.96s); 圈 trembl(98.4%) 更是白圈。
-    #   推进段内(现写法) —— MySQL 改拿 `enzyme` 表当驱动表(`idx_enzyme_source_review`,
-    #      1535 行, `Using index`), 再逐点回探 `idx_search_index_enzyme`(每次约 32 行),
-    #      于是只读约 4.9 万行, 而不是 376 万行。EXPLAIN 已确认这个计划。
+    # This position decides "whether scoping saves scanning" and is the most
+    # critical point of this query:
+    #   outside the aggregate (old form) -- the three segments still full-scan
+    #      3.76M rows, and only after GROUP BY dedups them to one row per enzyme
+    #      is a semijoin used to drop the unwanted rows. Equivalent, but **not one
+    #      row of scanning saved**: measured, scoping swiss_prot was actually
+    #      slightly slower (10.50s -> 10.96s); scoping trembl (98.4%) is pure
+    #      waste.
+    #   inside the segment (current form) -- MySQL instead uses the `enzyme` table
+    #      as the driving table (`idx_enzyme_source_review`, 1535 rows, `Using
+    #      index`), then probes back into `idx_search_index_enzyme` per point
+    #      (~32 rows each), so it reads only ~49k rows instead of 3.76M. EXPLAIN
+    #      has confirmed this plan.
     #
-    # 语义不变: 圈定谓词只依赖 `enzyme_id`(某个酶属不属于该来源), 而分数的 MAX 只依赖该酶
-    # 自己的行 —— 谓词与聚合可交换, 先筛后聚合 == 先聚合后筛。多条件路径同理, 因为
-    # (A ∪ B) ∩ F == (A ∩ F) ∪ (B ∩ F)。**已在整个语料上逐条比对**(EC / 物种 / 来源的
-    # 集合相等, 见 _searchset_probe.py), 不是抽样。
+    # Semantics unchanged: the scoping predicate depends only on `enzyme_id`
+    # (whether an enzyme belongs to that source), and the MAX of the score
+    # depends only on that enzyme's own rows -- the predicate and the aggregate
+    # commute, filter-then-aggregate == aggregate-then-filter. The multi-condition
+    # path is the same, because (A ∪ B) ∩ F == (A ∩ F) ∪ (B ∩ F). **Compared
+    # row-by-row over the entire corpus** (equal sets of EC / organism / source),
+    # not sampled.
     #
-    # 实测(2GB 缓冲池, 热): 裸扫描 4.1s -> 段内圈定 0.57s; 冷态 7.9s -> 2.5s。
-    # 唯一代价: 搜索集很宽时无东西可剪(如 trembl, 98.4%), 三段各多做一次半连接, 约 +8%。
+    # Measured (2GB buffer pool, hot): bare scan 4.1s -> in-segment scoping 0.57s;
+    # cold 7.9s -> 2.5s. The only cost: when the search set is very wide there is
+    # nothing to prune (e.g. trembl, 98.4%), each of the three segments does one
+    # extra semijoin, about +8%.
 
     aggregated = f"""
         SELECT enzyme_id, MAX(score) AS score
@@ -719,8 +798,10 @@ async def _search_single_index(
         ) t
         GROUP BY enzyme_id
     """
-    # 圈定已进段内, 所以这里不再传 scope_sql: 只让 `_scoped_query` 补上
-    # `COUNT(*) OVER ()`(total 必须在**筛选之后**数, 圈定进了段内它就天然是对的)。
+    # Scoping is already inside the segments, so scope_sql is no longer passed
+    # here: only let `_scoped_query` add `COUNT(*) OVER ()` (the total must be
+    # counted **after** filtering, and with scoping inside the segments it is
+    # naturally correct).
     sql = _scoped_query(aggregated, "", limit, offset, with_total)
 
     escaped = _escape_like(value)
@@ -748,10 +829,12 @@ async def _search_single_legacy(
 ) -> ScoredEnzymes:
     """Original normalized-table search used when search_index is unavailable.
 
-    圈定谓词由**本函数自己**构建, 而不是从调用方收一个现成的字符串 ——
-    它在这里必须带表别名(``e.enzyme_id``, 理由见 ``_scope_filter_sql``), 而索引路径
-    那一份是不带的。收字符串就等于让「传对哪一份」成为调用方的责任, 那是一处
-    只会在 search_index 空掉时才暴露的坑。让唯一知道别名的地方构建它。
+    The scoping predicate is built by **this function itself**, rather than
+    receiving a ready-made string from the caller -- here it must carry the table
+    alias (``e.enzyme_id``, reasons in ``_scope_filter_sql``), whereas the index
+    path's copy does not. Receiving a string would make "pass the right copy" the
+    caller's responsibility, a trap that only surfaces when search_index is
+    empty. Let the one place that knows the alias build it.
     """
     scope_sql, scope_params = _scope_filter_sql(scope or ScopeFilters(),
                                                 left="e.enzyme_id")
@@ -771,9 +854,11 @@ async def _search_single_legacy(
         cfg = FIELD_CONFIG[field]
         join_sql = TABLE_JOIN[cfg["table"]]
         filter_sql = TABLE_FILTER.get(cfg["table"], "")
-        # 圈定谓词与索引路径同处理: 进每一段, 而不是套在聚合之外（理由见
-        # `_search_single_index` 的注释）。这里三段本就各自 JOIN 了 enzyme, 所以
-        # `e.enzyme_id IN (…)` 只是把已有的连接再用一次, 不会多出一次扫描。
+        # The scoping predicate is handled as in the index path: into each
+        # segment, not wrapped outside the aggregate (reasons in the
+        # `_search_single_index` comment). Here the three segments already JOIN
+        # enzyme individually, so `e.enzyme_id IN (…)` just reuses an existing
+        # join, adding no extra scan.
         if scope_sql:
             filter_sql = f"{filter_sql} AND {scope_sql}"
         alias = cfg["alias"]
@@ -808,8 +893,10 @@ async def _search_single_legacy(
     if not union_parts:
         return ScoredEnzymes([], 0)
 
-    # 圈定谓词已进每一段（见上）, 这里不再传 scope_sql —— 分页与 total 都切在
-    # 过滤后的集合上, 但省下的是**扫描**：不需要的行根本不会进 UNION。
+    # The scoping predicate is already in every segment (see above), so scope_sql
+    # is no longer passed here -- pagination and total both split the filtered
+    # set, but what is saved is the **scanning**: unwanted rows never enter the
+    # UNION at all.
     aggregated = (
         "SELECT enzyme_id, MAX(score) AS score FROM ("
         + " UNION ALL ".join(union_parts)
@@ -833,10 +920,12 @@ async def _search_index_ready(db: AsyncSession) -> bool:
         )
         if not result.scalar():
             return False
-        # 这里只回答「索引非空吗」——`SELECT COUNT(*)` 会真去数完 376 万行
-        # (实测 4.605s), 而本函数是**每条检索条件**都调一次, 于是 35.6s 的
-        # /search/entries 里有相当一部分是在反复数同一张表。LIMIT 1 命中即返回,
-        # 非空 ⇔ 取得到行, 两者对这里的布尔判定完全等价。
+        # This only answers "is the index non-empty" -- `SELECT COUNT(*)` really
+        # counts all 3.76M rows (measured 4.605s), and this function is called
+        # **per search condition**, so a fair share of the 35.6s /search/entries
+        # is repeatedly counting the same table. LIMIT 1 returns as soon as it
+        # hits; non-empty <=> a row is fetchable, fully equivalent for the boolean
+        # test here.
         row_count = await db.execute(text("SELECT 1 FROM search_index LIMIT 1"))
         return row_count.scalar() is not None
     except (ProgrammingError, OperationalError):
@@ -854,22 +943,29 @@ async def _search_multi(
 ) -> ScoredEnzymes:
     """OR-of-ANDs search: merge OR groups, intersect AND groups.
 
-    ⚠️ **圈定谓词必须推进每一次 ``_search_single`` 调用, 不能只在这里过滤最终结果。**
-    否则截断仍发生在**未筛选**的域上, 筛出来的还是偏的 —— 那正是本轮要消灭的
-    「先截断后筛选」。这一步是**可证等价**的, 且严格更准:
+    ⚠️ **The scoping predicate must be pushed into every ``_search_single`` call;
+    it cannot just filter the final result here.** Otherwise truncation still
+    happens over the **unfiltered** domain, and the filtered result is still
+    biased -- exactly the "truncate then filter" this round eliminates. This step
+    is **provably equivalent** and strictly more accurate:
 
         (A ∪ B) ∩ F = (A ∩ F) ∪ (B ∩ F)
         (A ∩ B) ∩ F = (A ∩ F) ∩ (B ∩ F)
 
-    别把它「优化」回「合并之后再筛」—— 那会让筛选重新退化成对任意切片做筛选。
+    Don't "optimise" it back to "merge then filter" -- that would degrade
+    filtering again into filtering an arbitrary slice.
 
-    ``total`` = ``len(merged)``。在每个条件取满 ``MULTI_CONDITION_CAP`` 之后这就是
-    精确值(全库总共才 95,869 个酶), 所以 total 保持 ``int``, 不需要让前端多一个分支。
+    ``total`` = ``len(merged)``. Once each condition fetches up to
+    ``MULTI_CONDITION_CAP``, this is exact (the whole database has only 95,869
+    enzymes), so total stays ``int`` and the frontend needs no extra branch.
 
-    返回顺序按 ``(-score, enzyme_id)`` 排定。原来这里用的是一批 Python ``set``
-    的迭代顺序, 于是「看到哪 N 行」是不确定的 —— 每点一次筛选, 前 2000 行都可能换一批。
-    分数在合并时取各条件中的**最高分**, 与单条件路径的 ``MAX(score)`` 同一口径
-    (单条件路径本来就 ``ORDER BY score DESC``, 这里原来恒为 0 是条捷径, 不是设计)。
+    The return order is set by ``(-score, enzyme_id)``. This used to follow the
+    iteration order of a batch of Python ``set``s, so "which N rows you see" was
+    nondeterministic -- every filter click could swap the first 2000 rows. On
+    merge the score takes the **highest** among the conditions, the same criterion
+    as the single-condition path's ``MAX(score)`` (the single-condition path
+    already does ``ORDER BY score DESC``; here it was always 0, which was a
+    shortcut, not a design).
     """
     scope = scope or ScopeFilters()
     merged: Dict[str, int] = {}
@@ -905,13 +1001,17 @@ async def _fetch_cards(
     enzyme_ids: List[str],
     organism_name: Optional[str] = None,
 ) -> List[EnzymeCard]:
-    """每个 enzyme_id 一张卡; 反应/EC 取该酶的第一条边, 没有边就留空。
+    """One card per enzyme_id; reaction/EC taken from the enzyme's first edge,
+    blank if it has no edge.
 
-    来源与审核状态取自 ``enzyme`` 表**自身**的列, 不取自边 —— 全量 TrEMBL 下绝大多数酶
-    (实测沙箱 4790 个里 4666 个) 没有反应边, 若从边取, 这些酶的卡片会退回硬编码的
-    ``swiss_prot`` / ``official``, 把 TrEMBL 条目显示成 Swiss-Prot。
-    来源/状态的**筛选**也不在这里做, 已在 ``_search_single`` 里编进取数 SQL
-    (见 ``_scope_filter_sql``), 所以这里拿到的 id 本来就在目标范围内。
+    Source and review status come from the ``enzyme`` table's **own** columns, not
+    from an edge -- under full TrEMBL the great majority of enzymes (measured 4666
+    of 4790 in the sandbox) have no reaction edge, and if taken from an edge their
+    cards would fall back to the hard-coded ``swiss_prot`` / ``official``,
+    displaying TrEMBL entries as Swiss-Prot. The source/status **filtering** is not
+    done here either; it is already compiled into the fetch SQL in
+    ``_search_single`` (see ``_scope_filter_sql``), so the ids received here are
+    already within the target range.
     """
     if not enzyme_ids:
         return []

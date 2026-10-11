@@ -212,24 +212,30 @@ type HomeSearchFilter = (typeof homeSearchFilters)[number]['id']
 type HomeActiveFilters = {
   species: string[]
   sourceTypes: string[]
-  /** 模型参考分阈值，0 = 不过滤。**只作用于「非膜蛋白」这一档**，膜蛋白豁免。 */
+  /** Model reference score threshold, 0 = no filter. **Applies only to the 'non-membrane'
+   *  tier**; membrane proteins are exempt. */
   minScore: number
-  /** 「膜蛋白」档。与 `showNonMembrane` 是**平级的两个兄弟**，互不隶属，默认都亮。 */
+  /** The 'membrane' tier. A **sibling** of `showNonMembrane`, neither under the other,
+   *  both on by default. */
   showMembrane: boolean
-  /** 「非膜蛋白」档 = `'non-membrane'` **加上** `'unannotated'`。分数滑块是它的下级：
-   *  这一档不亮时滑块没有作用对象，置灰。 */
+  /** The 'non-membrane' tier = `'non-membrane'` **plus** `'unannotated'`. The score
+   *  slider is its child: with this tier off the slider has nothing to act on and
+   *  greys out. */
   showNonMembrane: boolean
 }
 
-/** 膜蛋白标记值。**只有它豁免分数阈值** —— 它和「非膜蛋白」是平级的两档，
- *  滑块挂在后者下面，所以滑块永远藏不掉一个膜蛋白。 */
+/** Membrane-protein marker value. **Only it is exempt from the score threshold** -- it
+ *  and the 'non-membrane' tier are peers, and the slider hangs under the latter, so the
+ *  slider can never hide a membrane protein. */
 const MEMBRANE_VALUE = 'membrane'
 
-/** 模型参考分 chip。分数为空就不渲染。
+/** Model reference score chip. Nothing renders when the score is empty.
  *
- *  膜蛋白在文案里带 `· membrane` —— 卡片上要解释的正是「它为什么没被阈值筛掉」，
- *  否则用户会以为过滤器坏了。`'non-membrane'` / `'unannotated'` 不出标记：
- *  前者只有 1,262 条、标记没信息量，后者占八成、标上去只是噪声。 */
+ *  Membrane proteins carry `· membrane` in the copy -- what the card needs to explain is
+ *  exactly "why was this not filtered out by the threshold", otherwise the user thinks
+ *  the filter is broken. `'non-membrane'` / `'unannotated'` get no marker: the former has
+ *  only 1,262 rows, so a marker carries no information, and the latter is 80%, so marking
+ *  it is just noise. */
 function EnzymeScoreChip({ score, membrane }: { score?: number | null; membrane?: string | null }) {
   if (score == null) return null
   const isMembrane = membrane === MEMBRANE_VALUE
@@ -243,9 +249,10 @@ function EnzymeScoreChip({ score, membrane }: { score?: number | null; membrane?
   )
 }
 
-/** 膜三态的显示文案。`'unannotated'` 不是 `'non-membrane'` —— 前者是没注释（八成），
- *  后者是明确非膜。两者都受分数阈值约束，只有 `'membrane'` 豁免，所以豁免那句
- *  只挂在 membrane 上。 */
+/** Display copy for the three membrane states. `'unannotated'` is not `'non-membrane'`:
+ *  the former is no annotation (80%), the latter is explicitly non-membrane. Both are
+ *  bound by the score threshold; only `'membrane'` is exempt, so the exemption line hangs
+ *  on membrane alone. */
 function membraneLabel(membrane?: string | null) {
   if (membrane === MEMBRANE_VALUE) return 'Membrane — exempt from the score filter'
   if (membrane === 'non-membrane') return 'Non-membrane'
@@ -261,25 +268,29 @@ function formatScopeEValue(value: number): string {
 type Point = { x: number; y: number }
 
 type PairEntry = {
-  /** **无向**（`canonicalCompoundPairKey`）—— 同一对化合物只留一条。 */
+  /** **Undirected** (`canonicalCompoundPairKey`) -- one row per compound pair. */
   key: string
-  /** 主导方向的端点（确定性选取，见 `buildHomePairs`）：箭头、卡片标题都跟它一致。 */
+  /** Endpoints of the dominant direction (chosen deterministically, see
+   *  `buildHomePairs`); the arrow and card title follow it. */
   sourceId: string
   targetId: string
   label: string
   count: number
-  /** 这一对端点上**不同的酶**个数 —— 地图那行 `enzyme*N` 要的就是它。
-   *  `count` 是记录数：同一个酶用两条反应催化同一对化合物时，后端给两条记录，
-   *  于是 `count=2` 而酶只有 1 个（全库 175 个组里 11 个如此；最大的一组
-   *  FPP↔squalene 是 7093 vs 3595）。 */
+  /** The number of **distinct enzymes** on this pair of endpoints -- that is what the
+   *  map's `enzyme*N` line wants. `count` is the record count: when one enzyme
+   *  catalyses the same compound pair with two reactions the backend returns two
+   *  records, so `count=2` while the enzyme count is 1 (11 of the database's 175 groups
+   *  are like this; the largest, FPP↔squalene, is 7093 vs 3595). */
   enzymeCount: number
-  /** = `edgeGroupIds[0] ?? null`，保留给「只关心主导方向」的调用点。 */
+  /** = `edgeGroupIds[0] ?? null`, kept for call sites that only care about the dominant
+   *  direction. */
   edgeGroupId?: string | null
-  /** 折叠进来的全部 group，主导方向在前；非复合边为 `[]`。 */
+  /** All groups folded in, dominant direction first; `[]` for a non-composite edge. */
   edgeGroupIds: string[]
   edgeIds: string[]
   edges: HomeGraphEdge[]
-  /** 被折掉的另一个方向的端点；这对化合物只有一个方向有记录时为 `null`。 */
+  /** Endpoints of the folded-away other direction; `null` when this pair has records in
+   *  one direction only. */
   reverseSourceId?: string | null
   reverseTargetId?: string | null
 }
@@ -301,16 +312,17 @@ type ExpandedEdgeGroup = {
   edgeIds: string[]
   reactionIds: string[]
   representative: HomeGraphEdge
-  // ---- 合并单元专有（逐酶分组上不存在）----
-  // 两条渲染路径（SVG / 卡片栈）按同一批字段取数，所以让合并单元**结构上兼容**
-  // 比在每个消费点写分支类型省事得多。
-  /** true = 这一条是「某来源的全部酶」的汇总，不是单个酶。 */
+  // ---- Merge-unit only (does not exist on per-enzyme groups) ----
+  // Both render paths (SVG / card stack) read the same set of fields, so making the merge
+  // unit **structurally compatible** is far less work than branching the type at every
+  // consumption site.
+  /** true = this row is a summary of "all enzymes from one source", not a single enzyme. */
   merged?: boolean
-  /** 被汇总的来源（`HomeGraphEdge.sourceType`）。 */
+  /** The source being summarised (`HomeGraphEdge.sourceType`). */
   sourceType?: string
-  /** 被汇总的酶数（= members.length）。 */
+  /** Number of enzymes summarised (= members.length). */
   memberCount?: number
-  /** 被汇总的逐酶分组，抽屉逐条列出时用。 */
+  /** The per-enzyme groups being summarised, used when the drawer lists them one by one. */
   members?: ExpandedEdgeGroup[]
 }
 
@@ -368,7 +380,8 @@ type GraphSearchMatch =
 /* ---------- Active-filter engine (organism + data source) ---------- */
 
 function homeFiltersActive(filters: HomeActiveFilters) {
-  // 两档默认都亮、阈值默认 0，所以「都亮 + 阈值 0」就是默认态，不算有筛选。
+  // Both tiers default to on and the threshold to 0, so "both on + threshold 0" is the
+  // default state, not a filter.
   return filters.species.length > 0 || filters.sourceTypes.length > 0
     || filters.minScore > 0 || !filters.showMembrane || !filters.showNonMembrane
 }
@@ -386,12 +399,14 @@ function homeUnitPasses(
   if (filters.species.length > 0 && (!unit.organismName || !filters.species.includes(unit.organismName))) return false
   if (filters.sourceTypes.length > 0 && (!unit.sourceType || !filters.sourceTypes.includes(unit.sourceType))) return false
 
-  // 层级：膜蛋白 / 非膜蛋白 是平级两档；分数阈值是「非膜蛋白」的下级，只约束它。
+  // Hierarchy: membrane / non-membrane are peer tiers; the score threshold is a child of
+  // "non-membrane" and only constrains it.
   const isMembrane = unit.membrane === MEMBRANE_VALUE
   if (isMembrane) return filters.showMembrane
   if (!filters.showNonMembrane) return false
-  // 非膜蛋白组 = 'non-membrane' + 'unannotated'。阈值只走到这里，走不到膜蛋白。
-  // 拿不到分的酶视为不达标 —— 全库目前每个酶都有分，但「没有数据」不能当成「通过」。
+  // Non-membrane group = 'non-membrane' + 'unannotated'. The threshold reaches only here,
+  // never membrane. An enzyme with no score counts as failing -- every enzyme in the
+  // database has a score today, but "no data" must not be read as "passes".
   if (filters.minScore > 0) {
     if (unit.deepSolnetScore == null || unit.deepSolnetScore < filters.minScore) return false
   }
@@ -409,10 +424,12 @@ function homeEdgePasses(edge: HomeGraphEdge, filters: HomeActiveFilters) {
 
 /** Sub-edges that survive the active filters for a collapsed composite pair (group items first, loaded edges fallback).
  *
- * 折叠后的 pair 可能挂着两个方向的 group（正反各一条记录，见 `buildHomePairs`），
- * 两个都要收 —— 只收 `edgeGroupIds[0]` 会让面板与计数漏掉另一个方向的酶。
- * `edges[]` 只在**确实被折过**（`reverseSourceId` 非空）时才并入：单方向对里有 7 条
- * `edges[]` 与自己的 group 共用 edgeId，无条件并入会改变它们的 `displayCount`。 */
+ * A collapsed pair may carry groups in both directions (one record each way, see
+ * `buildHomePairs`), and both must be collected -- taking only `edgeGroupIds[0]` would
+ * drop the other direction's enzymes from the panel and the counts. `edges[]` is merged
+ * in only when the pair was **actually folded** (`reverseSourceId` non-null): 7
+ * single-direction pairs share an edgeId between `edges[]` and their own group, so
+ * merging unconditionally would change their `displayCount`. */
 function homePairPassingUnits(pair: PairEntry, groupItemMap: Map<string, HomeGraphEdgeGroupItem[]>, filters: HomeActiveFilters): (HomeGraphEdgeGroupItem | HomeGraphEdge)[] {
   const units: (HomeGraphEdgeGroupItem | HomeGraphEdge)[] = []
   const seen = new Set<string>()
@@ -474,9 +491,11 @@ const emptyPathwayDraft = (): PathwayDraft => ({
 })
 
 /**
- * `mapSearch` → 稳定的比较键。`undefined`（不在首页）必须与 `null`（裸首页）
- * 分开: 前者是「无信号」, 拿它当「该清空」会在每次打开酶详情页时清掉地图上的检索
- * 结果 —— 那正是这次改动要保住的行为。NUL 分隔是因为化合物名里会出现逗号。
+ * `mapSearch` -> a stable comparison key. `undefined` (not on home) must stay distinct
+ * from `null` (bare home): the former is "no signal", and treating it as "should clear"
+ * would wipe the map's search results every time an enzyme detail page is opened --
+ * which is exactly the behaviour this change exists to preserve. NUL-separated because
+ * compound names can contain commas.
  */
 function mapSearchKey(spec: MapSearchRoute | null | undefined): string {
   if (spec === undefined) return 'off-home'
@@ -521,11 +540,13 @@ export function CompoundGraphHome({
   onQueueMany,
 }: {
   /**
-   * 地图在整个会话里**常驻**，离开首页只隐藏不卸载（见 App.tsx）。
-   * 因此 hide 只是移出布局，绝不能影响任何内部状态 —— 用户回来时要一切照旧。
+   * The map is **resident** for the whole session; leaving the home page only hides it,
+   * never unmounts it (see App.tsx). So hide just moves it out of layout and must not
+   * touch any internal state -- when the user comes back, everything is as it was.
    */
   hidden?: boolean
-  /** App 的 `resetHome` 递增值；变化时清掉本组件自己的 scope/通路现场。 */
+  /** App's `resetHome` increment; when it changes, clear this component's own
+   *  scope/pathway state. */
   resetNonce?: number
   onOpenSearch: (query?: string) => void
   onOpenDownloads: () => void
@@ -533,27 +554,32 @@ export function CompoundGraphHome({
   onOpenBlast: () => void
   onOpenBlastTable: () => void
   onToggleQueue: (entry: string | Entity) => void
-  /** 批量入队（合并抽屉的「Queue all」）。逐条调 `onToggleQueue` 是 O(n²)。 */
+  /** Batch enqueue (the merge drawer's "Queue all"). Calling `onToggleQueue` one by one
+   *  is O(n²). */
   onQueueMany: (entries: Entity[]) => void
   isQueued: (id: string) => boolean
   queueCount: number
   /**
-   * URL 上的检索规格 —— 检索是**地址栏的一条记录**, 不是本组件的一段内部 state。
-   * 三态: `undefined` 不在首页(无信号, 什么都别动)、`null` 裸首页(清场)、有值(跑它)。
-   * 详见 `lib/routes.ts` 的 `MapSearchRoute`。
+   * The search spec on the URL -- a search is **a record in the address bar**, not a
+   * piece of this component's internal state. Three states: `undefined` not on home (no
+   * signal, do nothing), `null` bare home (clear), a value (run it). See `MapSearchRoute`
+   * in `lib/routes.ts`.
    */
   mapSearch?: MapSearchRoute | null
-  /** 同一个规格被再次提交时递增 —— 只靠它发现「同一个词又按了一次回车」。 */
+  /** Incremented when the same spec is submitted again -- the only way to notice "the
+   *  same word, Enter hit twice". */
   mapSearchNonce?: number
-  /** 把一次检索交给 App 写进 URL; 本组件只消费回流的 `mapSearch`。 */
+  /** Hands a search to App to write into the URL; this component only consumes the
+   *  `mapSearch` that flows back. */
   onMapSearch?: (spec: MapSearchRoute | null) => void
   /** Last completed BLAST run (for scoping the map to its hit enzymes). */
   blastSession?: BlastSession | null
   autoBlastScope?: { sessionId: number; nonce: number } | null
   onAutoBlastScopeConsumed?: () => void
-  /** Starase Atlas brand → drop every active scope/search and head home. */
+  /** Atlas EDGE brand → drop every active scope/search and head home. */
   onResetHome?: () => void
-  /** 搜索集（检索范围，`[]` = 全部）。图上的取数、联想、scope 检索、展开、通路都按它圈定。 */
+  /** Search set (search scope, `[]` = all). Graph fetches, suggestions, scope search,
+   *  expansion and pathways are all bounded by it. */
   searchSet: string[]
   onSearchSetChange: (next: string[]) => void
 }) {
@@ -569,8 +595,9 @@ export function CompoundGraphHome({
   const [expandedLoading, setExpandedLoading] = useState(false)
   const [mapExpanding, setMapExpanding] = useState(false)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-  /** 被点开的合并单元（点合并卡或合并线）—— 抽屉逐条列出它折起来的那些酶。
-   *  没有它，被合并的酶就变成「看不到也下载不了」，那是不能接受的。 */
+  /** The merge unit that was opened (clicking a merge card or merge line) -- the drawer
+   *  lists its folded enzymes one by one. Without it those enzymes become "invisible and
+   *  undownloadable", which is not acceptable. */
   const [mergedUnit, setMergedUnit] = useState<ExpandedEdgeGroup | null>(null)
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string>>(new Set())
   const [highlightedEdgeIds, setHighlightedEdgeIds] = useState<Set<string>>(new Set())
@@ -602,7 +629,7 @@ export function CompoundGraphHome({
   const pathwayDraftRef = useRef<PathwayDraft>(emptyPathwayDraft())
   /** In-map single-route detail sub-view. While non-null the map graph/positions/
    *  camera are swapped to exactly one returned route's chain; ``restore`` is the
-   *  union-results view snapshot given back on "返回结果". Never Date.now()-keyed. */
+   *  union-results view snapshot given back on "Back to results". Never Date.now()-keyed. */
   const [pathwayDetail, setPathwayDetail] = useState<{
     card: HomePathwayCard
     graph: HomeGraphData
@@ -622,7 +649,7 @@ export function CompoundGraphHome({
   const [pickerGroupEdges, setPickerGroupEdges] = useState<Record<string, HomeGraphEdge[]>>({})
   const [pickerGroupLoading, setPickerGroupLoading] = useState<string[]>([])
   const pickerGroupRequestedRef = useRef<Set<string>>(new Set())
-  /** 连星 trace state. While ``traceChain`` is non-null the user is building a
+  /** Trace state. While ``traceChain`` is non-null the user is building a
    *  pathway by clicking map compounds one hop at a time. The chain always starts
    *  at the session's start compound; each next pick must be a compound the
    *  current last node feeds a directed (source → target) map pair into, and may
@@ -664,17 +691,20 @@ export function CompoundGraphHome({
   const [edgeThickness, setEdgeThickness] = useState(1)
   const [labelFontScale, setLabelFontScale] = useState(1)
   const [structureOpen, setStructureOpen] = useState(false)
-  // 两档 chip 默认都亮、阈值默认 0 —— 打开就是全显示，与加筛选器之前的默认视图一致。
+  // Both tier chips default to on and the threshold to 0 -- opening shows everything,
+  // matching the default view before filters were added.
   const [activeFilters, setActiveFilters] = useState<HomeActiveFilters>({
     species: [], sourceTypes: [], minScore: 0, showMembrane: true, showNonMembrane: true,
   })
   const [speciesOptions, setSpeciesOptions] = useState<string[]>([])
-  /** 后端 sourceTypes 枚举; 拉不到就退回内置的 4 个值。 */
+  /** Backend sourceTypes enum; falls back to the built-in 4 values if unreachable. */
   const [sourceTypesFromApi, setSourceTypesFromApi] = useState<string[]>([])
   const [speciesMenuOpen, setSpeciesMenuOpen] = useState(false)
   const [speciesQuery, setSpeciesQuery] = useState('')
-  /** 侧栏「Solubility score」旁边那个问号的说明卡。它要能点空白处/按 Esc 关掉 ——
-   *  同组的 `.home-filter-menu` 只能靠再点一次按钮关，弹一个盖住滑块的卡片不能那样。 */
+  /** The help card for the question mark beside "Solubility score" in the sidebar. It
+   *  must dismiss on a background tap / Esc -- the sibling `.home-filter-menu` only
+   *  closes by pressing its button again, and a card that covers the slider cannot work
+   *  that way. */
   const [scoreHelpOpen, setScoreHelpOpen] = useState(false)
   const scoreHelpRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -705,17 +735,19 @@ export function CompoundGraphHome({
   const expandingRef = useRef(false)
   const prevFiltersActiveRef = useRef(false)
   const browseSnapshotRef = useRef<{ graph: HomeGraphData; positions: Record<string, Point>; camera: Point } | null>(null)
-  /** The pathway card that was selected when 连星 began, so Cancel can restore it. */
+  /** The pathway card that was selected when the trace began, so Cancel can restore it. */
   const preTraceRef = useRef<{ card: HomePathwayCard | null; id: string | null }>({ card: null, id: null })
-  /** Handle for the auto-dismissing 连星 hint message timer. */
+  /** Handle for the auto-dismissing trace hint message timer. */
   const traceHintTimerRef = useRef<number | null>(null)
-  /** 上一次真正执行过的 URL 检索 (规格键 + nonce), 用来判断这次要不要动。 */
+  /** The last URL search actually executed (spec key + nonce), used to decide whether
+   *  this one needs to act. */
   const appliedMapSearchRef = useRef<{ key: string; nonce: number } | null>(null)
   const autoBlastHandledRef = useRef<number | null>(null)
 
-  // 搜索集变了要重新取图 —— 首页这张「全局浏览图」本身就是一次检索,
-  // 所以它也在搜索集的作用范围内（`selection_mode=global` 走的是同一条边查询）。
-  // `searchSet` 只在真的改动时换引用（App 里每次都是新数组），所以不会白重跑。
+  // A changed search set must re-fetch the graph -- the home page's "global browse graph"
+  // is itself a search, so it too is within the search set's scope (`selection_mode=global`
+  // runs the same edge query). `searchSet` only changes reference when it really changed
+  // (App builds a fresh array each time), so this does not re-run needlessly.
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -731,10 +763,12 @@ export function CompoundGraphHome({
         setSelectedPairKey(null)
         setExpandedEdges([])
         setSelectedEdgeId(null)
-        // 换搜索集会整张图换掉，而下面这些 scope/session 状态**重置的是图，不是它们**。
-        // 不一起清就会出现「浏览图 + 还活着的通路 session」：`scopeActive` 为真、
-        // 结果卡片照常渲染，但高亮键指向已经不在图里的节点。
-        // 地图常驻之后这条路更容易走到（酶详情页上也有搜索集控件），所以在这里收口。
+        // Changing the search set swaps the whole graph, but the scope/session state below
+        // **resets the graph, not them**. Clearing them together would leave "browse graph
+        // + a still-live pathway session": `scopeActive` true, result cards rendering as
+        // usual, but highlight keys pointing at nodes no longer in the graph. Residency
+        // makes this path easier to hit (the enzyme detail page also has the search-set
+        // control), so it is closed here.
         setPathwayDetail(null)
         setPickerOpen(false)
         setPathwaySession(null)
@@ -750,7 +784,8 @@ export function CompoundGraphHome({
         setEnzymeScopeHitIds(null)
         setBlastScope(null)
         setBlastHitMap(new Map())
-        // 快照记的是「旧搜索集下的浏览图」，换集后已经对不上了，必须作废。
+        // The snapshot records "the browse graph under the old search set", which no longer
+        // matches after a set change, so it must be invalidated.
         browseSnapshotRef.current = null
       })
       .catch((err) => {
@@ -766,8 +801,10 @@ export function CompoundGraphHome({
 
   useEffect(() => {
     let cancelled = false
-    // module=graph: 物种下拉必须与图上能出现的酶同域 (metadata.py 按 module 收窄),
-    // 否则会出现「选了一个物种、图却是空的」—— 96k 全量下物种有一万多个, 能进图的只是一部分。
+    // module=graph: the species dropdown must share the domain of the enzymes that can
+    // appear on the map (metadata.py narrows by module), otherwise you get "picked a
+    // species, map is empty" -- at the full 96k there are over ten thousand species and
+    // only a subset can enter the graph.
     loadMetadataFilters('graph')
       .then((payload) => {
         if (cancelled) return
@@ -845,8 +882,9 @@ export function CompoundGraphHome({
   // never on raw enzyme-edge ids: one enzyme row can back several pairs (bi-bi
   // reactions, reversible rows), and per-id matching would bleed the highlight
   // onto sibling pairs of the same enzyme (the "wrong edges lighting up" bug).
-  // 地图上一条线代表**一对化合物**（`PairEntry.key` 已无向化），所以这里也要用无向
-  // key：否则走向与主导方向相反的 pathway step 高亮不到它自己那条线。
+  // A line on the map **is a compound pair** (`PairEntry.key` is already undirected), so
+  // this must use the undirected key too: otherwise a pathway step running opposite to
+  // the dominant direction would not highlight its own line.
   const activePathwayStepKeys = useMemo(() => {
     if (!activePathway) return null
     const chain = activePathway.compoundIds
@@ -862,7 +900,7 @@ export function CompoundGraphHome({
   // neighbourhoods into it (drag-to-edge is gated on scopeActive at :522).
   const scopeActive = Boolean(scopeSearch || blastScope || pathwaySession)
   /** True while the in-map single-route detail sub-view is open. Gates every
-   *  pathway-mode floating panel (composer/launcher/连星/results list) off. */
+   *  pathway-mode floating panel (composer/launcher/trace/results list) off. */
   const detailOpen = pathwayDetail !== null
   /** 1..stepCount step list of the open detail route. Memoised once per detail so
    *  the picker's step bar, the picker step-state effects and the map→step edge
@@ -873,10 +911,12 @@ export function CompoundGraphHome({
   )
   const speciesSelectOptions = useMemo(() => {
     const present = new Set<string>()
-    // 搜索集生效时，物种下拉的取值域必须跟着收窄到「当前作用域真的画得出」的那些 ——
-    // 与来源 chips 同一条原则（见 sourceOptionsFromUnits）：下拉里出现一个「选了就空」
-    // 的物种，正是 metadata.py 按 module 收窄要防的那件事，只是换成按搜索集收窄。
-    // 搜索集为空（默认，全部）时维持原行为：API 的图域物种 ∪ 当前图上出现的。
+    // With a search set active, the species dropdown's domain must narrow to those the
+    // current scope really draws -- the same principle as the source chips (see
+    // sourceOptionsFromUnits): a species in the dropdown that "empties on selection" is
+    // exactly what metadata.py's module narrowing guards against, only now narrowed by
+    // search set. With an empty search set (the default, all) the old behaviour holds:
+    // the API's graph-domain species ∪ those on the current map.
     if (searchSet.length === 0) speciesOptions.forEach((species) => present.add(species))
     groupItemMap.forEach((items) => items.forEach((item) => { if (item.organismName) present.add(item.organismName) }))
     return [...present].sort((a, b) => a.localeCompare(b))
@@ -890,7 +930,9 @@ export function CompoundGraphHome({
         meta.set(pair.key, {
           visible: passing.length > 0,
           passing: passing.length,
-          // 过滤后剩下的**不同的酶**数 —— `passing` 是单元（记录）数，两者不等的原因同 `PairEntry.enzymeCount`。
+          // The number of **distinct enzymes** left after filtering -- `passing` is the
+          // unit (record) count, and they differ for the same reason as
+          // `PairEntry.enzymeCount`.
           enzymes: new Set(passing.map((unit) => unit.enzymeId)).size,
           singleLabel: passing.length === 1 && first ? homeUnitLabel(first) : null,
         })
@@ -904,9 +946,10 @@ export function CompoundGraphHome({
     [pairEdges, selectedPair?.sourceId, selectedPair?.targetId],
   )
   /**
-   * 渲染用的单元列表 —— 在**已有的逐酶分组之后**再加一层合并（见
-   * `mergeAutoAnnotatedUnits`）。只有 SVG 与卡片栈读它；`expandedEdgeGroups`
-   * 仍是逐酶的真值，`selectedExpandedGroup` / `selectedEdge` / 筛选 / 下载都不受影响。
+   * The unit list used for rendering -- one more layer of merging **after the existing
+   * per-enzyme grouping** (see `mergeAutoAnnotatedUnits`). Only the SVG and the card stack
+   * read it; `expandedEdgeGroups` remains the per-enzyme truth, and
+   * `selectedExpandedGroup` / `selectedEdge` / filtering / download are unaffected.
    */
   const expandedRenderUnits = useMemo(() => mergeAutoAnnotatedUnits(expandedEdgeGroups), [expandedEdgeGroups])
   // Enzyme ids that count as "retrieved by the active search". BLAST scopes use
@@ -922,18 +965,22 @@ export function CompoundGraphHome({
   const selectedPairTotal = selectedPair ? Math.max(selectedPair.count, selectedPair.edges.length) : 0
   const visibleEdgeCount = viewModel.pairs.reduce((sum, pair) => sum + Math.max(pair.count, pair.edges.length || 0), 0)
 
-  // 来源筛选的选项 = 当前图上**实际出现**的来源 (见 sourceOptionsFromUnits):
-  // 图只画有反应注释的酶, 选项里若出现图上没有的来源, 用户一选就是一张空图。
+  // Source filter options = the sources **actually present** on the current map (see
+  // sourceOptionsFromUnits): the map draws only enzymes with reaction annotations, so a
+  // source in the options that is not on the map empties the map the moment it is
+  // selected.
   //
-  // ⚠️ 必须连 groupItemMap 一起收 —— 只收 pair.edges 是个几乎恒真的陷阱:
-  // buildHomePairs 给每个 edgeGroup 建 pair 时 `edges: []`(:3652), 只有顶层
-  // graph.edges 会被填。首页 payload 实测 157 组 / 36,452 条 items, 而 edges 只有
-  // 7 条 —— 于是 seen 只反映那 7 条边的来源。当前恰好奇偶性地两个来源都在里面
-  // (5 swiss_prot + 2 trembl), 所以看不出错; 一旦 edges 为 0(limit_nodes 小、
-  // 或加了筛选), present 为空 -> sourceOptionsFromUnits 回退成 API 全枚举,
-  // 选项里就会出现图上一个都没有的 ai_literature / manual_literature,
-  // 用户一选就是空图 —— 正是本函数注释要防的那件事。
-  // 物种选项(:523-528)收的就是 groupItemMap, 两者现在一致。
+  // ⚠️ groupItemMap must be collected too -- collecting only pair.edges is a near-always-
+  // true trap: buildHomePairs builds each edgeGroup's pair with `edges: []` (:3652), and
+  // only the top-level graph.edges gets filled. The home payload was measured at 157
+  // groups / 36,452 items while edges has only 7 -- so seen reflects just those 7 edges'
+  // sources. Right now both sources happen to be in there by parity (5 swiss_prot + 2
+  // trembl), so the bug is invisible; once edges is 0 (small limit_nodes, or a filter
+  // added), present is empty -> sourceOptionsFromUnits falls back to the full API enum,
+  // and the options then include ai_literature / manual_literature that are on the map
+  // nowhere; selecting one empties the map -- exactly what this function's comment guards
+  // against. The species options (:523-528) collect groupItemMap too, and the two are now
+  // consistent.
   const sourceFilterOptions = useMemo(() => {
     const seen = new Set<string>()
     groupItemMap.forEach((items) => items.forEach((item) => { if (item.sourceType) seen.add(item.sourceType) }))
@@ -942,12 +989,14 @@ export function CompoundGraphHome({
         if (edge.sourceType) seen.add(edge.sourceType)
       })
     })
-    // 搜索集是硬边界: 集外的来源在这批数据里一个都没有, 列出来用户一选就是空图 ——
-    // 正是上面注释要防的那件事。空集时不回退到 API 全枚举(那会列出 0 行的枚举值)。
+    // The search set is a hard boundary: a source outside it has not one row in this data,
+    // so listing it empties the map on selection -- exactly what the comment above guards
+    // against. An empty set does not fall back to the full API enum (that would list enum
+    // values with 0 rows).
     return sourceOptionsFromUnits(sourceTypesFromApi, seen, searchSet.length > 0 ? searchSet : null)
   }, [viewModel, groupItemMap, sourceTypesFromApi, searchSet])
   const compoundName = (compoundId: string) => viewModel.nodes.find((node) => node.compoundId === compoundId)?.name || compoundId
-  // ---- 连星 support data -------------------------------------------------
+  // ---- Trace support data ------------------------------------------------
   // Every server-returned card begins at the session start compound and ends at
   // the session end compound, so those anchor the trace. Legal hops come from the
   // directed (source → target) pair graph actually drawn, which is exactly the
@@ -971,9 +1020,10 @@ export function CompoundGraphHome({
         if (!meta || !meta.visible) return
       }
       addHop(pair.sourceId, pair.targetId)
-      // 被折掉的另一个方向同样是图上真实可走的一跳（能折的对全部来自 `unknown`，
-      // 搜索邻接表里本来就是两条有向边）。放在同一个可见性门控内，所以被筛选隐藏的
-      // pair 依旧不是合法跳。
+      // The folded-away other direction is likewise a real walkable hop on the map (every
+      // foldable pair comes from `unknown`, which is two directed edges in the search
+      // adjacency anyway). It sits inside the same visibility gate, so a filtered-out pair
+      // is still not a legal hop.
       if (pair.reverseSourceId && pair.reverseTargetId) addHop(pair.reverseSourceId, pair.reverseTargetId)
     })
     return map
@@ -1000,9 +1050,10 @@ export function CompoundGraphHome({
     for (let index = 0; index < steps; index += 1) {
       const from = chain[index]
       const to = chain[index + 1]
-      // 按无向 key 查：一条线代表一对化合物，走向与之相反的一步同样落在它上面。
-      // 推入**全部** edgeGroupIds（而非只有主导方向）——否则与主导方向相反的这一步
-      // `groupId` 为 null，酶就没了，「下载路线」会少一步。
+      // Look up by the undirected key: a line is a compound pair, and a step running
+      // opposite to it lands on the same line. Push **all** edgeGroupIds (not just the
+      // dominant direction) -- otherwise a step running opposite to the dominant direction
+      // gets `groupId` null, its enzymes are gone, and "download route" loses a step.
       const pair = viewModel.pairs.find((p) => p.key === canonicalCompoundPairKey(from, to))
       const singleId = pair && !pair.edgeGroupId ? pair.edges[0]?.edgeId ?? pair.edgeIds[0] ?? null : null
       const groupId = pair?.edgeGroupId ?? null
@@ -1311,8 +1362,9 @@ export function CompoundGraphHome({
     } else if (pair.edgeGroupIds.length > 0) {
       setExpandedLoading(true)
       try {
-        // 折叠对的两个方向各挂一个 group；当两侧指向同一批记录时（56 对孪生）展开
-        // 结果完全一样，所以按 edgeId 去重 —— 不去重面板计数会翻倍。
+        // A folded pair carries one group per direction; when both sides point at the same
+        // records (56 twin pairs) the expansion is identical, so dedupe by edgeId --
+        // without deduping the panel counts double.
         const loaded = await Promise.all(pair.edgeGroupIds.map((groupId) => loadExpandedEdgeGroup(groupId, searchSet)))
         const expanded = Array.from(new Map(loaded.flat().map((edge) => [edge.edgeId, edge])).values())
         const edges = pair.reverseSourceId
@@ -1349,7 +1401,7 @@ export function CompoundGraphHome({
     }
     // While the picker is open the map stays fully operable and NEVER closes it.
     // Clicking a chain edge instead retargets the popup to that step and fans its
-    // composite edge out — the "点边" half of the bidirectional linkage.
+    // composite edge out — the "click-edge" half of the bidirectional linkage.
     if (pickerOpen && pathwayDetail) {
       const index = detailSteps.findIndex(
         (step) => canonicalCompoundPairKey(step.sourceId, step.targetId) === pair.key,
@@ -1373,21 +1425,24 @@ export function CompoundGraphHome({
     setActivePathway(null)
     setSelectedLibraryItem(null)
     setSearchFeedback(null)
-    // 合并抽屉跟着它折起来的那条边组走：边组没了，抽屉也必须关掉。
+    // The merge drawer follows the edge group it folded: when the group is gone the drawer
+    // must close too.
     setMergedUnit(null)
   }
 
-  /** 打开合并单元的抽屉（点合并卡或合并线）。 */
+  /** Open the merge unit's drawer (clicking a merge card or merge line). */
   const openMergedUnit = (unit: ExpandedEdgeGroup) => {
-    // 合并线同时也是「该边组被选中」，与点单条边的观感一致。
+    // The merge line is also "this edge group is selected", matching how clicking a single
+    // edge feels.
     setSelectedEdgeId(unit.representative.edgeId)
     setMergedUnit(unit)
   }
 
   useEffect(() => {
-    // 这个监听挂在 window 上，而地图现在是常驻的 —— 不挡住的话，用户在酶详情页
-    // 按 Esc（比如关闭 BLAST 抽屉）就会顺手清掉**看不见的**地图选中，
-    // 回来时选中的边/配对莫名其妙没了。
+    // This listener is on window, and the map is now resident -- without the guard, a user
+    // on an enzyme detail page pressing Esc (say, closing the BLAST drawer) would wipe the
+    // **invisible** map selection along the way, and the selected edge/pair would be gone
+    // for no reason on return.
     if (hidden) return
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') clearPairSelection()
@@ -1414,7 +1469,8 @@ export function CompoundGraphHome({
     setActiveFilters((prev) => ({ ...prev, minScore }))
   }
 
-  /** 两档是平级兄弟，各有各的开关；谁都不影响滑块 —— 滑块只认 `showNonMembrane`。 */
+  /** The two tiers are peers, each with its own switch; neither affects the slider -- the
+   *  slider only reads `showNonMembrane`. */
   const toggleMembraneLayer = (layer: 'membrane' | 'nonMembrane') => {
     setActiveFilters((prev) => (layer === 'membrane'
       ? { ...prev, showMembrane: !prev.showMembrane }
@@ -1451,7 +1507,7 @@ export function CompoundGraphHome({
     }
   }, [anyFilterActive, selectedPairKey, expandedEdges])
 
-  // ---- 连星 trace interactions ------------------------------------------
+  // ---- Trace interactions ------------------------------------------------
   const clearTraceHintTimer = () => {
     if (traceHintTimerRef.current !== null) {
       window.clearTimeout(traceHintTimerRef.current)
@@ -1468,7 +1524,7 @@ export function CompoundGraphHome({
     setTraceHint(null)
     clearTraceHintTimer()
   }
-  /** Enter 连星: anchor on the session start compound and let the user click its
+  /** Enter trace mode: anchor on the session start compound and let the user click its
    *  way through direct neighbours. The previous selection is remembered so the
    *  Cancel button can hand the map back to it. */
   const beginTrace = () => {
@@ -1745,8 +1801,9 @@ export function CompoundGraphHome({
   useEffect(() => {
     if (resetHandledRef.current === resetNonce) return
     resetHandledRef.current = resetNonce
-    // 品牌键是唯一的「从头开始」手势 —— 只有它连草稿一起清。退回首页(规格 `null`)
-    // 是「退掉那次检索」, 措辞不同, 所以那边保留输入框。
+    // The brand button is the only "start over" gesture -- only it clears the draft too.
+    // Going back home (spec `null`) is "back out of that search"; the wording differs, so
+    // that path keeps the input box.
     pathwayDraftRef.current = emptyPathwayDraft()
     switchSearchMode('enzyme')
     clearSearchScope()
@@ -1887,8 +1944,9 @@ export function CompoundGraphHome({
     }
   }
 
-  /** 撤掉地图上这次检索, 并且把 URL 上那条记录一起退掉 —— 否则刷新会把它复活。
-   *  没接 App 时(独立用这个组件)退回本地清理。 */
+  /** Undo this search on the map and back out its record on the URL too -- otherwise a
+   *  refresh revives it. With no App wired up (using this component standalone) it falls
+   *  back to local cleanup. */
   const clearSearchEverywhere = () => {
     clearSearchScope()
     if (onMapSearch) onMapSearch(null)
@@ -1905,7 +1963,8 @@ export function CompoundGraphHome({
       onOpenSearch(trimmed)
       return
     }
-    // 检索必须成为一条历史记录: 交给 App 写进 URL, 结果由 `mapSearch` 回流。
+    // A search must become a history entry: hand it to App to write into the URL, and the
+    // result flows back through `mapSearch`.
     if (onMapSearch) {
       onMapSearch({ mode: 'enzyme', query: trimmed, start: '', end: '', via: [] })
       return
@@ -1914,22 +1973,26 @@ export function CompoundGraphHome({
   }
 
   /**
-   * 检索的唯一入口: 地址栏说什么, 地图就画什么。
+   * The one entry point for search: whatever the address bar says, the map draws.
    *
-   * 三态是这套东西成立的关键。从 `/?q=x` 打开 `/enzymes/X` 时规格变成
-   * `undefined`(不是首页, 无信号), 于是后退回 `/?q=x` 规格没变、结果原样还在;
-   * 再退一步到 `/` 规格才变成 `null`, 这时才清场。把两者合并就没法同时表达
-   * 「打开酶详情页别清」和「退回裸首页要清」。
+   * The three states are what makes this work. Opening `/enzymes/X` from `/?q=x` turns
+   * the spec to `undefined` (not on home, no signal), so going back to `/?q=x` leaves the
+   * spec unchanged and the result still there; one more step back to `/` turns it to
+   * `null`, and only then is the map cleared. Merging the two could not express both
+   * "opening an enzyme detail page must not clear" and "returning to bare home must
+   * clear".
    *
-   * `mapSearchNonce` 只补 URL 表达不了的那一种: 同一个词连按两次回车时目标
-   * URL 与当前地址相同, `navigate` 提前 return, 光看规格发现不了第二次。
+   * `mapSearchNonce` covers only what the URL cannot express: when the same word is
+   * entered twice the target URL equals the current address, `navigate` returns early,
+   * and the spec alone cannot reveal the second one.
    */
   useEffect(() => {
     if (mapSearch === undefined) return
     const key = mapSearchKey(mapSearch)
     const nonce = mapSearchNonce ?? 0
     if (appliedMapSearchRef.current?.key === key && appliedMapSearchRef.current.nonce === nonce) return
-    // 图还没就绪就先不消费 —— 但**不要**记已处理, 等图谱到位后这次仍要跑。
+    // Don't consume it while the graph isn't ready -- but do **not** mark it as
+    // handled; it still has to run once the graph arrives.
     if (loading || mapExpanding || !graph || graph.nodes.length === 0) return
     appliedMapSearchRef.current = { key, nonce }
     setResultMode('map')
@@ -1941,19 +2004,24 @@ export function CompoundGraphHome({
     // a chain is actually described (start / waypoints / end).
     if (mapSearch.mode === 'pathway') {
       if (!mapSearch.start && !mapSearch.end && mapSearch.via.length === 0) {
-        // 只有 `?mode=pathway`: 打开描述新链的输入框。以前靠地图被卸载来得到一个空
-        // composer；地图常驻之后不清的话，从酶详情页点「Pathway」回来会看到上一次的
-        // 结果列表加一个折叠的启动器, 而不是用来描述新链的输入框。
-        // `clearPathwayResults` 末尾会把 composer 打开。草稿**不**跟着清: 后退也会
-        // 落到这条 URL 上(跑完是 `?mode=pathway&start=…`, 再退一步就是它), 清掉就
-        // 等于把刚描述的那条链扔了 —— 那正是这轮要修的东西。
+        // Only `?mode=pathway`: open the composer for describing a new chain. This
+        // used to rely on the map being unmounted to yield an empty composer; with the
+        // map resident, not clearing it makes returning from an enzyme detail page via
+        // "Pathway" show the previous result list plus a collapsed launcher, not the
+        // composer for describing a new chain.
+        // `clearPathwayResults` opens the composer at its end. The draft is **not**
+        // cleared with it: pressing back also lands on this URL (a completed run is
+        // `?mode=pathway&start=…`, one step further back is this one), so clearing it
+        // would discard the chain just described -- which is exactly what this round fixes.
         clearPathwayResults()
         setSearchMode('pathway')
         return
       }
-      // 草稿为空才拿 URL 回填: composer 手上的 `text` 是人读的化合物名, 而 URL 里存
-      // 的是交给服务端的 token(`CHEBI:60374`). 有草稿时以 composer 为准, 否则会把
-      // 好名字换成 token。空草稿只出现在深链 / 分享链接 / 新标签页。
+      // Refill from the URL only when the draft is empty: the composer's `text` is a
+      // human-readable compound name, while the URL stores the token handed to the
+      // server (`CHEBI:60374`). With a draft, the composer wins, otherwise a good name
+      // would be replaced by a token. An empty draft only occurs on deep links /
+      // shared links / new tabs.
       const draft = pathwayDraftRef.current
       if (!draft.start.text && !draft.end.text && draft.vias.length === 0) {
         pathwayDraftRef.current = {
@@ -1962,8 +2030,9 @@ export function CompoundGraphHome({
           vias: mapSearch.via.map((token) => ({ id: null, text: token })),
         }
       }
-      // token 原样回放 —— 与 composer 交给 API 的是同一个契约(服务端自己解析
-      // id / 裸 ChEBI 号 / 化合物名), 所以 `pathwaySession.query` 的标签也一模一样。
+      // Replay the token verbatim -- the same contract the composer hands the API (the
+      // server resolves id / bare ChEBI number / compound name itself), so the
+      // `pathwaySession.query` labels come out identical too.
       void runPathwaySearch({
         startCompoundId: mapSearch.start,
         endCompoundId: mapSearch.end,
@@ -1977,12 +2046,13 @@ export function CompoundGraphHome({
 
   // Same hand-off for a completed BLAST run: scope the map to the hit enzymes.
   //
-  // 这个交接让 App push 了一条裸 `/`（`goTo('home')`），所以上面的 route effect
-  // 会看到规格从「有」变成 `null` 并顺手 `clearSearchScope()` —— 看起来会把自己
-  // 刚画好的 BLAST scope 抹掉。实际不会: 两个 effect 在**同一次 commit** 里按声明
-  // 顺序跑, route effect 在前, 本 effect 在后, 它的 `runBlastScopeSearch` 覆盖
-  // 前者清掉的那个 scope。`setAutoBlastScope` 与 `goTo('home')` 在同一个事件处理器
-  // 里被调用（React 批处理），两者永远同进同出。
+  // This hand-off makes App push a bare `/` (`goTo('home')`), so the route effect above
+  // sees the spec go from "present" to `null` and calls `clearSearchScope()` -- which
+  // looks like it would wipe the BLAST scope just drawn. It doesn't: both effects run in
+  // the **same commit** in declaration order, route effect first, this effect second, and
+  // its `runBlastScopeSearch` overwrites the scope the former cleared. `setAutoBlastScope`
+  // and `goTo('home')` are called in the same event handler (React batching), so they
+  // always go together.
   useEffect(() => {
     if (!autoBlastScope || !blastSession) return
     if (blastSession.id !== autoBlastScope.sessionId) return
@@ -1998,8 +2068,8 @@ export function CompoundGraphHome({
   /** Single-select one returned pathway card: clear any node/pair popover so the
    *  results list is the only floating panel, then highlight its chain on the map. */
   const selectPathwayCard = (card: HomePathwayCard) => {
-    // Choosing a returned row is an explicit exit from 连星: stop tracing and
-    // highlight the picked card instead of the in-progress chain.
+    // Choosing a returned row is an explicit exit from tracing: stop and highlight
+    // the picked card instead of the in-progress chain.
     if (traceChain) stopTrace()
     setSelectedPairKey(null)
     setSelectedNodeId(null)
@@ -2022,10 +2092,10 @@ export function CompoundGraphHome({
 
   /** Open the in-map single-route detail sub-view for one returned card. Swaps
    *  the map to the card's own chain graph (double-writing ref/state), keeping a
-   *  snapshot of the union-results view so "返回结果" restores it exactly. */
+   *  snapshot of the union-results view so "Back to results" restores it exactly. */
   const openPathwayDetail = (card: HomePathwayCard) => {
     if (!pathwaySession) return
-    // Opening a route detail is an explicit exit from 连星.
+    // Opening a route detail is an explicit exit from tracing.
     if (traceChain) stopTrace()
     const chainGraph = buildPathwayChainGraph(card, pathwaySession.graph)
     if (chainGraph.nodes.length === 0) return
@@ -2111,8 +2181,8 @@ export function CompoundGraphHome({
   const expandPickerStepOnMap = (step: PathwayDetailStep) => {
     const edges = step.groupId ? pickerGroupEdges[step.groupId] : step.edges
     const key = canonicalCompoundPairKey(step.sourceId, step.targetId)
-    // 高亮这个 step 落在的那条线（折叠对可能挂着两个 group，只亮 step 自己那个会让
-    // 线看着没选中）。
+    // Highlight the line this step falls on (a folded pair can carry two groups;
+    // lighting only the step's own one makes the line look unselected).
     const pair = viewModel.pairs.find((item) => item.key === key)
     setSelectedPairKey(key)
     setSelectedNodeId(null)
@@ -2277,11 +2347,11 @@ export function CompoundGraphHome({
     <div className={`home-map-page${hidden ? ' map-hidden' : ''}`} style={homeMapStyle}>
       <section className="atlas-map-stage atlas-live-stage" aria-label="Interactive compound graph homepage">
         <header className="graph-top-nav">
-          <button type="button" className="atlas-brand" onClick={handleBrandHome} title="Back to the Atlas home map" aria-label="Starase Atlas home">
+          <button type="button" className="atlas-brand" onClick={handleBrandHome} title="Back to the Atlas home map" aria-label="Atlas EDGE home">
             <span className="atlas-logo">
               <img className="atlas-logo-mark" src="/starase-atlas-logo.png" alt="" />
             </span>
-            <span>Starase Atlas</span>
+            <span>Atlas EDGE</span>
           </button>
 
           <div className={`home-search-bar ${searchMode === 'pathway' ? 'pathway-mode' : ''}`}>
@@ -2420,8 +2490,9 @@ export function CompoundGraphHome({
             )}
           </div>
 
-          {/* 没有可筛的来源时整组不渲染 —— 空的 chip 行只是个视觉噪声。
-              搜索集生效但图上一个来源都没有时会走到这里。 */}
+          {/* With no source to filter, the whole group isn't rendered -- an empty
+              chip row is just visual noise. Reached when a search set is active
+              but the graph has no source at all. */}
           {sourceFilterOptions.length > 0 && (
           <div className="home-filter-group">
             <p className="home-filter-label">Data source</p>
@@ -2438,15 +2509,19 @@ export function CompoundGraphHome({
           </div>
           )}
 
-          {/* 两个 chip 是**平级**的两档；分数滑块挂在「非膜蛋白」下级，只约束它。
-              「非膜蛋白」含 'unannotated'（图上约两成）—— 严格只算 'non-membrane'
-              的话图上只剩 4% 的边，滑块等于空转。
-              全库 95,869 个酶都有分，所以滑块这组不需要「有没有数据」的守卫。
+          {/* The two chips are two **peer** levels; the score slider hangs under
+              "Non-membrane" and constrains only it. "Non-membrane" includes
+              'unannotated' (~20% of the map) -- counting strictly 'non-membrane'
+              would leave only 4% of the edges on the map, so the slider would spin
+              idle. All 95,869 enzymes in the library have a score, so this slider
+              group needs no "has data" guard.
 
-              分组标题 2026-10-01 从 "Membrane" 改成 "Solubility score"（用户要求），
-              所以「标题叫分数、底下却是膜 chip」不是写错了：膜是**豁免**分数阈值的那一档,
-              两者本来就绑在一起。旁边的问号卡片负责把这层关系对用户讲清楚。
-              滑块自己的标签仍是 DeepSolNet Score, 没跟着改。 */}
+              The group title was changed from "Membrane" to "Solubility score" on
+              2026-10-01 (user request), so "title says score, chip below says
+              membrane" is not a mistake: membrane is the level **exempt** from the
+              score threshold, the two are bound together by design. The help card
+              beside it explains this relationship to the user. The slider's own
+              label is still DeepSolNet Score, it did not follow the title. */}
           <div className="home-filter-group">
             <div className="home-filter-label-row" ref={scoreHelpRef}>
               <p className="home-filter-label">Solubility score</p>
@@ -2482,8 +2557,9 @@ export function CompoundGraphHome({
                 Membrane
               </button>
 
-              {/* 「Non-membrane」和它的下级滑块包在一起 —— 层级在 DOM 里就是真的，
-                  滑块在版面上直接落在这个 chip 底下，而不是落在整排 chip 后面。 */}
+              {/* "Non-membrane" and its subordinate slider are wrapped together -- the
+                  hierarchy is real in the DOM, the slider sits directly under this
+                  chip in the layout, not after the whole chip row. */}
               <div className="home-membrane-branch">
                 <button
                   type="button"
@@ -2581,9 +2657,10 @@ export function CompoundGraphHome({
           </button>
         </aside>
 
-        {/* 两个按钮都常驻,只切 `is-hidden` 而不条件渲染 —— 卸载是一帧消失的,没得过渡。
-            `is-hidden` 里带 visibility:hidden(延迟到动画结束),所以隐藏的那个不会留在
-            tab 顺序里。 */}
+        {/* Both buttons stay mounted and only toggle `is-hidden`, never conditionally
+            render -- an unmount disappears in one frame, with nothing to transition.
+            `is-hidden` carries visibility:hidden (deferred to the end of the animation),
+            so the hidden one is kept out of the tab order. */}
         <button
           className={`home-sidebar-collapse ${filtersOpen ? '' : 'is-hidden'}`}
           type="button"
@@ -2672,9 +2749,10 @@ export function CompoundGraphHome({
               pathwayDraftRef.current = draft
             }}
             onRun={(payload) => {
-              // 同上: 先写进 URL, 再由 `mapSearch` 回流触发 `runPathwaySearch`。
-              // 带的是 composer 交给 API 的那串 token, 所以从 URL 重放出来的
-              // `pathwaySession.query` 标签与手动跑一次逐字相同。
+              // As above: write the URL first, then the `mapSearch` round-trip fires
+              // `runPathwaySearch`. It carries the same token string the composer hands
+              // the API, so replaying from the URL gives byte-identical
+              // `pathwaySession.query` labels to running it by hand.
               if (onMapSearch) {
                 onMapSearch({
                   mode: 'pathway',
@@ -2702,7 +2780,7 @@ export function CompoundGraphHome({
           </button>
         ))}
 
-        {/* 连星 floats directly beneath the composer pill (not in the results
+        {/* The trace button floats directly beneath the composer pill (not in the results
             header) so it never crowds the card list; it only makes sense once a
             pathway session has results to trace across. */}
         {searchMode === 'pathway' && !loading && !error && graph && !detailOpen && pathwaySession && !composerOpen && !traceChain && (
@@ -2777,15 +2855,18 @@ export function CompoundGraphHome({
                   if (!source || !target) return null
                   const pairMeta = anyFilterActive ? pairFilterMeta.get(pair.key) : undefined
                   if (pairMeta && !pairMeta.visible) return null
-                  // 折叠对可能挂着两个 group，高亮要认全部（单元素时与原逻辑等价）。
+                  // A folded pair can carry two groups; highlighting must honour all of them (matches the original single-element logic).
                   const pairGroupIds = pair.edgeGroupIds.length > 0 ? pair.edgeGroupIds : [pair.key]
                   const isExpanded = selectedPairKey === pair.key && pairEdges.length > 0
                   const expandedItems = expandedRenderUnits
                   const offsets = expandedItems.length > 1 ? expandedItems.map((_, index) => (index - (expandedItems.length - 1) / 2) * 5.2) : [0]
                   const displayCount = pairMeta ? pairMeta.passing : pair.count
-                  // 这行字写的是 `enzyme*N`，N 必须是**不同的酶**数而不是记录数：同一个酶用两条
-                  // 反应催化同一对化合物时后端给两条记录，`count=2` 而酶只有 1 个。过滤生效时
-                  // 同理，按通过的单元去重。`displayCount` 仍按记录数管线型（`multi`）与粗细。
+                  // This label reads `enzyme*N`, where N must be the count of **distinct
+                  // enzymes**, not records: when one enzyme catalyses the same compound
+                  // pair via two reactions the backend gives two records, `count=2` while
+                  // there is only 1 enzyme. Same under filtering -- dedupe by the passing
+                  // units. `displayCount` still follows the record count for the line
+                  // style (`multi`) and thickness.
                   const labelCount = pairMeta ? pairMeta.enzymes : pair.enzymeCount
                   // When a composite is filtered down to a single surviving enzyme, that enzyme's
                   // accession is the one to annotate the collapsed line with.
@@ -2794,8 +2875,9 @@ export function CompoundGraphHome({
                     : undefined
                   const singleUnit = filteredSingle || pair.edges[0]
                   const singleUnitAccession = singleUnit ? homeUnitAccession(singleUnit) : null
-                  // 只剩一个酶时没有 `enzyme*1` 这种写法。复合边折叠着的时候 `pair.edges` 可能是
-                  // 空的，末尾兜到 `pair.label` —— 此时酶只有一个，它就是那个酶的 uniprot/名字。
+                  // With a single enzyme there is no `enzyme*1` form. While a composite
+                  // edge is collapsed `pair.edges` may be empty, so it falls through to
+                  // `pair.label` -- with one enzyme that is that enzyme's uniprot/name.
                   const singleUnitName = anyFilterActive
                     ? (singleUnit ? homeUnitLabel(singleUnit) : null)
                     : (pair.edges[0]?.card?.primaryName || pair.label)
@@ -2810,8 +2892,9 @@ export function CompoundGraphHome({
                   // each expanded line as retrieved (the searched enzymes) or not so
                   // the searched edges can be drawn clearly stronger.
                   const scopedRender = Boolean(scopeHitSet)
-                  // 合并单元要用**全体成员**判命中：只查 `group.enzymeId`（= members[0]）
-                  // 会让「圈定的检索命中了组里第 2 个酶」的那条线被当成背景色。
+                  // A merged unit must test hit against **all its members**: checking only
+                  // `group.enzymeId` (= members[0]) would treat the line where "the scoped
+                  // search hit the group's 2nd enzyme" as background colour.
                   const retrievedFlags = scopedRender
                     ? expandedItems.map((group) =>
                         group.merged ? Boolean(group.members?.some((member) => scopeHitSet!.has(member.enzymeId))) : scopeHitSet!.has(group.enzymeId),
@@ -2847,8 +2930,9 @@ export function CompoundGraphHome({
                         const offset = offsets[index] ?? 0
                         const highlightedEdge = highlightedPair || edge.edgeIds.some((edgeId) => highlightedEdgeIds.has(edgeId))
                         const pathwayEdge = Boolean(activePathway && activePathwayStepKeys?.has(pair.key))
-                        // 合并单元的 edgeIds 是全体成员的**并集**，所以展开后选中其中
-                        // 任何一个成员，这条汇总线都会高亮 —— 期望行为（它就是那些边的线）。
+                        // A merged unit's edgeIds are the **union** of all members, so after
+                        // expanding, selecting any one member highlights this summary line
+                        // too -- expected (it is the line for those edges).
                         const selectedEdgeGroup = edge.edgeIds.includes(selectedEdgeId || '')
                         const retrieved = retrievedFlags ? retrievedFlags[index] : true
                         const isBackground = scopedRender && !retrieved
@@ -2857,9 +2941,11 @@ export function CompoundGraphHome({
                         // distinguishable); background isoenzymes collapse to the plain
                         // `scope-background` tone.
                         //
-                        // 合并单元不参与 `reaction-color-N` 轮转：它代表的是「某个来源的
-                        // 一大批酶」，用来源色（`.merged-source-line.src-*`）才说得通，
-                        // 也给用户一个和 Swiss-Prot 单条线一眼可辨的区别。
+                        // A merged unit does not take part in the `reaction-color-N`
+                        // rotation: it stands for "a whole batch of enzymes from one
+                        // source", so the source colour (`.merged-source-line.src-*`) is
+                        // the only thing that makes sense, and it gives the user a
+                        // distinction from a single Swiss-Prot line at a glance.
                         const reactionColorClass = edge.merged
                           ? `merged-source-line src-${edge.sourceType}`
                           : scopedRender
@@ -2867,7 +2953,7 @@ export function CompoundGraphHome({
                             : (expandedItems.length === 1 ? 'single-reaction' : `reaction-color-${index % 10}`)
                         const edgeEmphasized = selectedEdgeGroup || highlightedEdge || pathwayEdge
                         const expandedStroke = edge.merged
-                          // 一条线代表 N 条边，加粗一档（与「检索命中」同档）。
+                          // One line stands for N edges, so one step thicker (same step as "search hit").
                           ? (edgeEmphasized ? 0.72 : 0.6) * edgeThickness
                           : !scopedRender
                             ? (edgeEmphasized ? 0.52 : 0.46) * edgeThickness
@@ -2993,8 +3079,9 @@ export function CompoundGraphHome({
             <div className="stack-heading map-panel-drag-handle" onPointerDown={handlePanelPointerDown} onPointerMove={handlePanelPointerMove} onPointerUp={finishPanelDrag} onPointerCancel={finishPanelDrag}>
               <div>
                 <strong>{compoundName(selectedPair.sourceId)} <ChevronRight size={14} /> {compoundName(selectedPair.targetId)}</strong>
-                {/* 折叠后仍报**真实酶数**，后面补一段渲染数 —— 否则 3,595 变成 61，
-                    看起来像酶丢了。没有折叠时后半段不显示。 */}
+                {/* After folding it still reports the **true enzyme count**, followed by
+                    a rendered count -- otherwise 3,595 becoming 61 looks like enzymes
+                    were lost. Without folding, the second part is not shown. */}
                 <span>{expandedLoading ? 'Loading enzyme paths...' : `${expandedEdgeGroups.length} enzymes${expandedRenderUnits.length < expandedEdgeGroups.length ? ` · ${expandedRenderUnits.length} shown` : ''} · ${pairEdges.length || selectedPairTotal} edge${(pairEdges.length || selectedPairTotal) === 1 ? '' : 's'}`}</span>
               </div>
               <button className="stack-close-button" type="button" onClick={clearPairSelection} title="Close enzyme list">
@@ -3007,8 +3094,10 @@ export function CompoundGraphHome({
               const blastHit = blastHitMap.get(enzymeId)
               const queued = isQueued(enzymeId)
               const queueEntity = homeEnzymeToEntity(edge, enzymeId, compoundName(edge.sourceCompoundId), compoundName(edge.targetCompoundId))
-              // 合并卡：一张卡代表「某来源的全部酶」。它不是「一堆同名酶」——
-              // 里面可能有几十个物种、几十个 EC，所以那两行报的是**计数**而不是第一个成员的值。
+              // Merged card: one card stands for "all enzymes from a source". It is not
+              // "a pile of same-named enzymes" -- it may hold dozens of organisms and
+              // dozens of ECs, so those two lines report **counts**, not the first
+              // member's values.
               if (group.merged) {
                 const members = group.members ?? []
                 const organisms = new Set<string>()
@@ -3024,15 +3113,16 @@ export function CompoundGraphHome({
                     key={group.key}
                     className={`enzyme-card enzyme-card-merged src-${group.sourceType} ${group.edgeIds.includes(selectedEdgeId || '') ? 'selected' : ''}`}
                   >
-                    {/* 不是 Download 图标：一下载 3,595 条不是这里该暗示的动作。
-                        底部有写明数字的「Queue all」。 */}
+                    {/* Not a Download icon: downloading 3,595 rows is not the action to
+                        hint at here. "Queue all" with the number spelled out is at the
+                        bottom. */}
                     <button className="card-check" type="button" onClick={() => openMergedUnit(group)} title={`Show all ${members.length.toLocaleString()} entries`}>
                       <Layers size={18} />
                     </button>
                     <button className="enzyme-card-copy" type="button" onClick={() => openMergedUnit(group)}>
                       <h3>{singleMember ? (singleMember.representative.card?.primaryName || singleMember.label) : `${sourceLabel(group.sourceType || '')} entries`}</h3>
                       <span className={`search-table-source-tag ${group.sourceType}`}>{sourceLabel(group.sourceType || '')}</span>
-                      {/* 只有单成员时才显示分数 —— 合并卡片聚合了几千条，标一个分数是误导。 */}
+                      {/* Score is shown only for a single member -- a merged card aggregates thousands of rows, so labelling one score misleads. */}
                       {singleMember && <EnzymeScoreChip score={singleMember.representative.card?.deepSolnetScore} membrane={singleMember.representative.card?.membrane} />}
                       <p>{organisms.size} organism{organisms.size === 1 ? '' : 's'}</p>
                       <p>{group.reactionIds.length === 1 ? '1 reaction' : `${group.reactionIds.length} reactions`}</p>
@@ -3646,8 +3736,8 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
   onOpenMap: (query: string) => void
   onOpenPathwaySearch: () => void
   onOpenMapScoped: (query: string) => void
-  /** 搜索集（检索范围，`[]` = 全部）。本页只是显示它 —— 从这里发起的检索
-   *  （搜索框 / Map / Pathway）都会带着它走。 */
+  /** Search set (the search scope, `[]` = all). This page only displays it -- any
+   *  search started from here (search box / Map / Pathway) carries it along. */
   searchSet: string[]
   onSearchSetChange: (next: string[]) => void
 }) {
@@ -3764,7 +3854,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
             <span className="atlas-logo">
               <img className="atlas-logo-mark" src="/starase-atlas-logo.png" alt="" />
             </span>
-            <span>Starase Atlas</span>
+            <span>Atlas EDGE</span>
           </button>
 
           <div className="enzyme-topnav-slot">
@@ -3860,7 +3950,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
 
               {detail && (
                 <>
-                  {/* 1. 基本信息 — identity and gene record. The UniProt jump link
+                  {/* 1. Basic information — identity and gene record. The UniProt jump link
                       lives on the card itself; every other external database is
                       already linked from Cross-references, so there is no link card. */}
                   <section className="enzyme-module" data-module="basic" id="enzyme-module-basic">
@@ -3892,7 +3982,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     </div>
                   </section>
 
-                  {/* 2. 反应信息 */}
+                  {/* 2. Reaction information */}
                   <section className="enzyme-module" data-module="reactions" id="enzyme-module-reactions">
                     <div className="section-title-row"><h3>Reactions</h3></div>
                     {detail.reactions.length > 0 ? (
@@ -3927,7 +4017,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     ) : <p className="muted-copy">No reaction records available.</p>}
                   </section>
 
-                  {/* 3. 序列 — canonical first, then one block per isoform */}
+                  {/* 3. Sequence — canonical first, then one block per isoform */}
                   <section className="enzyme-module" data-module="sequence" id="enzyme-module-sequence">
                     <div className="section-title-row">
                       <h3>Sequence</h3>
@@ -3971,8 +4061,10 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                         <div key={`${label}:${index}`} className="detail-card enzyme-sequence-block enzyme-isoform-block">
                           <div className="enzyme-sequence-head">
                             <strong>Isoform {label}</strong>
-                            {/* 变体自己的分。全库只有 30 条真变体有 —— 其余是 null，不渲染。
-                                canonical 块上不重复显示，那里的分就是酶级那个。 */}
+                            {/* The variant's own score. Only 30 true variants in the
+                                whole library have one -- the rest are null, not
+                                rendered. Not repeated on the canonical block; the
+                                score there is the enzyme-level one. */}
                             {isoform.deepSolnetScore != null && (
                               <span className="enzyme-sequence-badge" title="DeepSolNet model reference score — not a solubility label">DeepSolNet Score {isoform.deepSolnetScore.toFixed(3)}</span>
                             )}
@@ -4001,7 +4093,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     })}
                   </section>
 
-                  {/* 4. 生物过程 — the GO table has no aspect column, and in this
+                  {/* 4. Biological process — the GO table has no aspect column, and in this
                       dataset every term is a biological process, so the module
                       renders `goTerms` as-is. */}
                   <section className="enzyme-module" data-module="process" id="enzyme-module-process">
@@ -4023,7 +4115,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     ) : <p className="muted-copy">No biological process annotations available.</p>}
                   </section>
 
-                  {/* 5. 相关序列编号及链接 — nucleotide paired with its protein */}
+                  {/* 5. Sequence identifiers and links — nucleotide paired with its protein */}
                   <section className="enzyme-module" data-module="xref" id="enzyme-module-xref">
                     <div className="section-title-row"><h3>Cross-references</h3></div>
                     {sequenceXrefRows.length > 0 ? (
@@ -4042,7 +4134,7 @@ export function EnzymeDetailView({ enzymeId, onBack, onToggleQueue, isQueued, qu
                     ) : <p className="muted-copy">No sequence links available.</p>}
                   </section>
 
-                  {/* 6. 参考文献 */}
+                  {/* 6. References */}
                   <section className="enzyme-module" data-module="references" id="enzyme-module-references">
                     <div className="section-title-row"><h3>References</h3></div>
                     <div className="detail-reference-list">
@@ -4448,35 +4540,43 @@ type DirectedPairBucket = {
   targetId: string
   label: string
   count: number
-  /** 这一对端点上**不同的酶**个数（见 `PairEntry.enzymeCount`）。 */
+  /** The number of **distinct enzymes** on this pair of endpoints (see `PairEntry.enzymeCount`). */
   enzymeCount: number
   group: HomeGraphEdgeGroup | null
   edgeIds: string[]
   edges: HomeGraphEdge[]
-  /** 载荷里的 `edgeIds`/`items` 是否完整覆盖 `count`（见 `buildHomePairs`）。 */
+  /** Whether the payload's `edgeIds`/`items` fully cover `count` (see `buildHomePairs`). */
   complete: boolean
 }
 
 /**
- * 首页边列表：**一对化合物一条**。
+ * Home edge list: **one entry per compound pair**.
  *
- * 为什么要折叠：`graph_service._build_edges_and_groups` 按**有向** pair 分组，而
- * `unknown` 同时属于两个方向白名单（`graph_service.py:17-18`），所以一条 `unknown`
- * 反应会被正反各生成一条记录、**共用同一个 `edge_id`**。前端原先按有向 key 建索引，
- * 于是同一对化合物被画成两条完全重合的线、两个标签叠在同一个坐标上 —— 实测 371 条线
- * 里 80 条是这种重复，正是首页标签互相遮挡的主因（调节点间距永远分不开同坐标的标签）。
+ * Why fold: `graph_service._build_edges_and_groups` groups by **directed** pair, and
+ * `unknown` belongs to both direction whitelists (`graph_service.py:17-18`), so one
+ * `unknown` reaction gets a record generated for each direction, **sharing the same
+ * `edge_id`**. The frontend used to index by directed key, so the same compound pair
+ * was drawn as two exactly overlapping lines with two labels stacked on one coordinate
+ * -- measured, 80 of 371 lines were this kind of duplicate, the main cause of home-map
+ * labels occluding each other (adjusting node spacing can never separate same-coordinate
+ * labels).
  *
- * 折叠**不丢方向信息**：能被折的必是 `unknown` 对（两个方向都合法，搜索邻接表里本来
- * 就是两条有向边），而 `forward`/`reverse` 的对是单方向对（反向记录根本不会生成），
- * 各自独立成桶，箭头照旧。布局层 `buildForceLayoutLinks` 早就无向化了，折叠后「画出来
- * 的」「布局算的」「搜索走的」三者才真正一致。
+ * Folding **loses no direction information**: anything foldable must be an `unknown`
+ * pair (both directions legal, and the search adjacency already holds two directed
+ * edges), while `forward`/`reverse` pairs are single-direction pairs (a reverse record
+ * is never generated), each its own bucket, arrows unchanged. The layout layer
+ * `buildForceLayoutLinks` was undirected all along, so only after folding do "what is
+ * drawn", "what the layout computes" and "what the search walks" truly agree.
  *
- * 计数**绝不虚增**：56/58 对 group 孪生的 `edgeIds` 集合完全相同（两侧指向同一批记录），
- * 相加会翻倍。所以只在载荷可以证明完整时求并集，否则取主导方向的原值。
+ * Counting **never inflates**: for 56/58 of the twin group pairs the `edgeIds` sets are
+ * identical (both sides point at the same records), so adding them would double. That is
+ * why the union is taken only when the payload can prove completeness, otherwise the
+ * dominant direction's original value is kept.
  */
 function buildHomePairs(graph: HomeGraphData, visibleIds: Set<string>) {
-  // ---- 第一趟：按**有向** pair 分桶。取值优先级与折叠前逐条一致，所以单方向对
-  // （即绝大多数）的输出逐字节不变。 ----
+  // ---- Pass 1: bucket by **directed** pair. Value precedence matches the pre-fold
+  // per-record order, so single-direction pairs (the vast majority) come out
+  // byte-identical. ----
   const buckets = new Map<string, DirectedPairBucket>()
   const bucketFor = (sourceId: string, targetId: string) => {
     const key = pairKey(sourceId, targetId)
@@ -4494,9 +4594,11 @@ function buildHomePairs(graph: HomeGraphData, visibleIds: Set<string>) {
     bucket.count = Math.max(bucket.count, group.count)
     bucket.enzymeCount = Math.max(bucket.enzymeCount, group.enzymeCount)
     bucket.edgeIds = Array.from(new Set([...bucket.edgeIds, ...group.edgeIds]))
-    // 后端 `count` = 参与分组的记录数，`edgeIds` 与之等长；`graph_service.py:180-181`
-    // 只保留「edge_id 也出现在 `edges[]` 里」的那些（一个都不剩时整体回退成完整列表）。
-    // 所以「长度 ≥ count」就是「载荷没被截断」的判据 —— 被截断的 group 会短，据此拒绝求并集。
+    // Backend `count` = the number of records grouped, `edgeIds` is the same length;
+    // `graph_service.py:180-181` keeps only those whose edge_id also appears in `edges[]`
+    // (falling back to the full list when none survive). So "length >= count" is the
+    // test for "the payload wasn't truncated" -- a truncated group is short, and the
+    // union is refused accordingly.
     bucket.complete = bucket.complete && bucket.edgeIds.length >= group.count
   })
   graph.edges.forEach((edge) => {
@@ -4509,8 +4611,8 @@ function buildHomePairs(graph: HomeGraphData, visibleIds: Set<string>) {
     bucket.label = bucket.label || edge.card?.primaryName || edge.label
   })
 
-  // ---- 第二趟：按**无向** key 折叠。一个无向对最多只有两个方向，所以「另一个方向」
-  // 至多一个。 ----
+  // ---- Pass 2: fold by **undirected** key. An undirected pair has at most two
+  // directions, so there is at most one "other direction". ----
   const folded = new Map<string, DirectedPairBucket[]>()
   buckets.forEach((bucket) => {
     const key = canonicalCompoundPairKey(bucket.sourceId, bucket.targetId)
@@ -4519,7 +4621,7 @@ function buildHomePairs(graph: HomeGraphData, visibleIds: Set<string>) {
     else folded.set(key, [bucket])
   })
 
-  // 主导方向 = 记录数最多的那个；并列时按端点名序，保证与载荷顺序无关。
+  // Dominant direction = the one with the most records; ties broken by endpoint name order, so the result is independent of payload order.
   const bucketWeight = (bucket: DirectedPairBucket) => (bucket.group ? bucket.count : Math.max(bucket.count, 1))
   const pairs: PairEntry[] = []
   folded.forEach((list, key) => {
@@ -4534,16 +4636,21 @@ function buildHomePairs(graph: HomeGraphData, visibleIds: Set<string>) {
     const edgeIds = Array.from(new Set(ordered.flatMap((bucket) => bucket.edgeIds)))
     const edges = Array.from(new Map(ordered.flatMap((bucket) => bucket.edges).map((edge) => [edge.edgeId, edge])).values())
     const complete = ordered.every((bucket) => bucket.complete)
-    // 一条记录 = 一个 edge_id（`unknown` 的两个方向共用同一个），所以 edgeId 并集就是
-    // 这对化合物的真实记录数 —— 与后端 `count` 同义。载荷被截断时并集不可知，退到
-    // 主导方向的原值：宁可偏小，绝不虚增，因为地图那行字正是 `enzyme*${count}`。
+    // One record = one edge_id (both directions of `unknown` share it), so the edgeId
+    // union is the true record count for this compound pair -- synonymous with the
+    // backend `count`. When the payload is truncated the union is unknown, so it falls
+    // back to the dominant direction's value: prefer too small, never inflate, because
+    // the map line is exactly `enzyme*${count}`.
     const count = complete ? edgeIds.length : Math.max(...ordered.map((bucket) => bucket.count))
-    // 只有两侧 group 的 `items` 都完整时才敢用酶并集重算标签；否则保留主导方向的标签，
-    // 不臆造一个载荷算不出来的数字。
+    // Only when the `items` of both sides' groups are complete may the enzyme union be
+    // used to recompute the label; otherwise the dominant direction's label is kept and
+    // no number the payload cannot produce is invented.
     const itemsKnown = ordered.every((bucket) => bucket.group && bucket.complete && (bucket.group.items?.length ?? 0) >= bucket.group.count)
-    // 地图那行 `enzyme*N` 要的是**不同的酶**数，不是记录数（见 `PairEntry.enzymeCount`）。
-    // 载荷能证明完整时按 items 去重 —— 折叠的两个方向共用同一批记录，这里必须取并集；
-    // 与 `count` 同一条原则：证明不了就宁可偏小，绝不虚增（退回各方向酶数的最大值）。
+    // The map line `enzyme*N` wants the count of **distinct enzymes**, not records (see
+    // `PairEntry.enzymeCount`). When the payload proves completeness, dedupe by items --
+    // the two folded directions share the same records, so the union is required here;
+    // same principle as `count`: if unprovable, prefer too small, never inflate (fall
+    // back to the max enzyme count across directions).
     const enzymeCount = itemsKnown
       ? new Set(ordered.flatMap((bucket) => (bucket.group?.items ?? []).map((item) => item.enzymeId))).size
       : Math.max(...ordered.map((bucket) => bucket.enzymeCount))
@@ -5146,24 +5253,29 @@ function canonicalCompoundPairKey(sourceId: string, targetId: string) {
 }
 
 /**
- * 把每个边组里**自动注释来源**（非 Swiss-Prot）的逐酶分组折成一个汇总单元。
+ * Fold the per-enzyme groups of **auto-annotated sources** (non Swiss-Prot) in each
+ * edge group into a single summary unit.
  *
- * 为什么必须折：实测最大一组 `RHEA:32299` 挂着 **3,595 个酶**（其中 3,5xx 是 TrEMBL），
- * 而每个酶要渲染 1 张卡 + 2 条 `<path>` + 1 个 `<text>` —— 一次展开就是
- * 3,595 卡 + 7,190 path + 3,595 label。更要命的是扇形偏移
- * `((i - (n-1)/2) * 5.2, 见 SVG 侧的 offsets)`：n=3,595 时最外的线被推到
- * **±9,342 单位**外，远超 viewbox —— 所以这种规模的展开不只是慢，它本身就不可读。
+ * Why folding is required: the largest group measured, `RHEA:32299`, carries **3,595
+ * enzymes** (3,5xx of them TrEMBL), and each enzyme renders 1 card + 2 `<path>` + 1
+ * `<text>` -- one expansion is 3,595 cards + 7,190 paths + 3,595 labels. Worse, the
+ * fan offset `((i - (n-1)/2) * 5.2, see the SVG-side offsets)`: at n=3,595 the outermost
+ * line is pushed **±9,342 units** out, far past the viewbox -- so an expansion of this
+ * scale is not merely slow, it is unreadable by itself.
  *
- * Swiss-Prot 保持逐条：它们是人工审核的那批，数量本来就少（实测最大组里 60 条），
- * 读得过来。其余来源**每个来源折一个**（不是只认 trembl）——这样以后
- * `ai_literature` 真有批量数据时会自动同样折叠，不必再改这条规则。
+ * Swiss-Prot stays per-record: it is the manually reviewed batch, small by nature
+ * (measured, 60 records in the largest group), readable as-is. Every other source folds
+ * to **one unit per source** (not just trembl) -- so when `ai_literature` really has
+ * bulk data one day it folds the same way automatically, with no change to this rule.
  *
- * 合并后单元数 = 1 + 该组里不同非 Swiss-Prot 来源的个数 + Swiss-Prot 的酶数。
- * 上面的例子里从 7,093 降到 61。
+ * Merged unit count = 1 + the number of distinct non Swiss-Prot sources in the group +
+ * the number of Swiss-Prot enzymes. In the example above, 7,093 drops to 61.
  *
- * ⚠️ 这一层是**纯渲染**的：数据层 `expandedEdgeGroups` 一行不改，仍是逐酶的真值，
- * 详情面板 / 筛选 / 下载都还拿它。所以筛选语义完全没变 —— 筛选作用在 `pairEdges`
- * 上、发生在合并之前，圈到 swiss_prot 时本来就一条 TrEMBL 边都没有，自然不产生合并卡。
+ * ⚠️ This layer is **render-only**: the data layer `expandedEdgeGroups` is unchanged,
+ * still the per-enzyme truth, and the detail panel / filters / download all still read
+ * it. So the filter semantics are entirely unchanged -- filtering acts on `pairEdges`
+ * and happens before merging, and scoping to swiss_prot leaves no TrEMBL edge at all, so
+ * no merged card is produced.
  */
 function mergeAutoAnnotatedUnits(groups: ExpandedEdgeGroup[]): ExpandedEdgeGroup[] {
   if (groups.length === 0) return groups
@@ -5172,8 +5284,8 @@ function mergeAutoAnnotatedUnits(groups: ExpandedEdgeGroup[]): ExpandedEdgeGroup
   const buckets = new Map<string, ExpandedEdgeGroup[]>()
   groups.forEach((group) => {
     const sourceType = group.representative.sourceType
-    // 来源未知时按 Swiss-Prot 处理（逐条显示）—— 宁可多渲染，也不要因为一个
-    // 空值把不同来源的酶折进同一张卡里。
+    // Unknown source is treated as Swiss-Prot (shown per-record) -- better to render
+    // more than to fold enzymes of different sources into one card over a null.
     if (!sourceType || sourceType === 'swiss_prot') {
       singles.push(group)
       return
@@ -5196,11 +5308,12 @@ function mergeAutoAnnotatedUnits(groups: ExpandedEdgeGroup[]): ExpandedEdgeGroup
         key: `merged::${sourceType}::${canonicalCompoundPairKey(first.sourceId, first.targetId)}`,
         sourceId: first.sourceId,
         targetId: first.targetId,
-        // 结构兼容用；合并分支不读它。
+        // Kept for structural compatibility; the merged branch does not read it.
         enzymeId: first.enzymeId,
-        // 成员只有 1 个时用**成员自己的 label**：用户选的是「只要有 TrEMBL 就合并」
-        // （不设阈值），所以 1 个 TrEMBL 的小组也会折叠 —— 那时把酶名换成
-        // 「TrEMBL ×1」等于白丢信息。外观仍是合并卡（带来源徽标）。
+        // With a single member, use the **member's own label**: the user chose "merge
+        // whenever there is TrEMBL" (no threshold), so a group with just one TrEMBL
+        // folds too -- swapping the enzyme name for "TrEMBL ×1" then throws information
+        // away for nothing. The look stays a merged card (with the source badge).
         label: members.length > 1 ? `${sourceLabel(sourceType)} ×${members.length}` : first.label,
         directionMode: directionModeForEdges(edges, first.sourceId, first.targetId),
         edges,
@@ -5214,8 +5327,9 @@ function mergeAutoAnnotatedUnits(groups: ExpandedEdgeGroup[]): ExpandedEdgeGroup
       }
     })
 
-  // 顺序确定（不随扫描顺序漂移）：Swiss-Prot 逐条沿用 groupExpandedEdgesByEnzyme
-  // 已有的 label 序在前，合并单元按来源名字典序在后。
+  // Deterministic order (no drift with scan order): Swiss-Prot per-record keeps
+  // groupExpandedEdgesByEnzyme's existing label order first, merged units follow in
+  // source-name lexical order.
   return [...singles, ...merged]
 }
 
@@ -5284,8 +5398,8 @@ function buildHomeSearchSuggestions(query: string, graph: HomeGraphData | null, 
     const sourceName = compoundNames.get(pair.sourceId) || pair.sourceId
     const targetName = compoundNames.get(pair.targetId) || pair.targetId
     if (includeKind('reaction')) {
-      // 折进来的另一个方向的 group id 也应当搜得到（否则搜 `GROUP_B_A` 会搜不到
-      // 已经合并成一条的那对化合物）。
+      // The group id of the other folded direction should be searchable too (otherwise
+      // searching `GROUP_B_A` misses the compound pair already merged into one line).
       const pairValues = [pair.label, ...pair.edgeGroupIds, pair.sourceId, pair.targetId, sourceName, targetName]
       const representativeEdge = pair.edges[0]
       const edgeValues = representativeEdge
@@ -5354,8 +5468,8 @@ function searchSuggestionScore(suggestion: HomeSearchSuggestion, normalizedQuery
 function findPairForEndpoints(graph: HomeGraphData, sourceId: string, targetId: string) {
   const visibleIds = new Set(graph.nodes.map((node) => node.compoundId))
   const pairs = buildHomePairs(graph, visibleIds)
-  // `PairEntry.key` 已无向化，正反两向落在同一条上 —— 一次查找就够了（原来的
-  // 「反向回退」现在会命中同一条，属多余）。
+  // `PairEntry.key` is already undirected, both directions land on the same one -- a
+  // single lookup suffices (the old "reverse fallback" now hits the same row, redundant).
   return pairs.find((pair) => pair.key === canonicalCompoundPairKey(sourceId, targetId)) || null
 }
 
@@ -5726,7 +5840,7 @@ function dedupeEnzymeChoices(edges: HomeGraphEdge[]): PathwayEnzymeChoice[] {
       name: card?.primaryName || edge.label || edge.enzymeId,
       organismName: card?.organismName ?? null,
       sourceType: edge.sourceType ?? null,
-      // 抄给抽屉与下载页用。不抄的话选完酶之后分数就丢了。
+      // Copied for the drawer and download page. Without it the score is lost once the enzyme is picked.
       deepSolnetScore: card?.deepSolnetScore ?? null,
       membrane: card?.membrane ?? null,
     })
@@ -5749,7 +5863,7 @@ function pathwayEnzymeEntityId(cardId: string, perStep: Array<{ step: number; en
 
 /* ---------------------------------------------------------------------------
  * Per-step enzyme picker (right slide-in drawer) for the pathway detail bar's
- * 下载 button. It is NOT a modal: no backdrop, no auto-close from map operation —
+ * Download button. It is NOT a modal: no backdrop, no auto-close from map operation —
  * the map behind stays fully operable. The picker shows ONE current step at a
  * time: a step-bar of chips at the top switches steps, and clicking that step's
  * composite edge on the map does too (bidirectional, driven by the parent's
@@ -5964,14 +6078,17 @@ function PathwayEnzymePickerDrawer({
 const MERGED_DRAWER_PAGE = 100
 
 /**
- * 「某个来源的一整批酶」折成一张卡之后，这张卡点开的抽屉 —— 被合并的酶必须仍然
- * 可达：能看、能挑、能进下载表。**不复用** `PathwayEnzymePickerDrawer`：那个绑死在
- * 通路多步选择上（`steps` / 每步 `selection` / `handleAdd` 组装 Pathway Entity），
- * 只借它的 CSS 类与行结构。
+ * After "a whole batch of enzymes from one source" folds into a card, this is the
+ * drawer that card opens -- the merged enzymes must stay reachable: viewable,
+ * selectable, and able to enter the download table. It does **not** reuse
+ * `PathwayEnzymePickerDrawer`: that one is tied to multi-step pathway selection
+ * (`steps` / per-step `selection` / `handleAdd` assembling a Pathway Entity), so only
+ * its CSS classes and row structure are borrowed.
  *
- * 一行 = 一个酶。`unit.members` 已经由 `groupExpandedEdgesByEnzyme` 按 enzymeId
- * 去重，所以天然一酶一行，不必再 dedupe；而且每行保留着 backing edge
- * （`homeEnzymeToEntity` 要它才能进下载队列）。
+ * One row = one enzyme. `unit.members` is already deduped by enzymeId via
+ * `groupExpandedEdgesByEnzyme`, so it is one enzyme per row by construction and needs
+ * no further dedupe; and each row keeps its backing edge (which `homeEnzymeToEntity`
+ * needs to enter the download queue).
  */
 function MergedEnzymeDrawer({
   unit,
@@ -5988,14 +6105,14 @@ function MergedEnzymeDrawer({
   onOpenEnzyme: (enzymeId: string) => void
   onToggleQueue: (entry: Entity) => void
   isQueued: (enzymeId: string) => boolean
-  /** 批量入队。逐条调 `onToggleQueue` 是 O(n²)（见 App 的 `queueEntities`）。 */
+  /** Bulk queue. Calling `onToggleQueue` per entry is O(n²) (see App's `queueEntities`). */
   onQueueMany: (entries: Entity[]) => void
 }) {
   const members = unit.members ?? []
   const [filter, setFilter] = useState('')
   const [visibleCount, setVisibleCount] = useState(MERGED_DRAWER_PAGE)
 
-  // 换一个合并单元就是换一份列表：筛选框与分批游标都要跟着重置。
+  // A different merged unit is a different list: the filter box and batch cursor both reset with it.
   useEffect(() => {
     setFilter('')
     setVisibleCount(MERGED_DRAWER_PAGE)
@@ -6029,7 +6146,7 @@ function MergedEnzymeDrawer({
   }
 
   const queueAll = () => {
-    // 标签里写明数字，不做静默批量。
+    // The label spells out the number; no silent bulk action.
     onQueueMany(rows.map(entityOf))
     onClose()
   }

@@ -1,9 +1,11 @@
-"""ETL Step 1: 化合物表 —— B 类(全局字典, 无来源概念)。
+"""ETL Step 1: the compound table -- class B (a global dictionary, no notion of source).
 
-化合物是客观化学实体: 同一个 ChEBI ID 就是同一个化合物, 与它被哪个来源的酶引用无关。
-所以**不按来源分段、也不按来源删除**, 只做 upsert(只增 + 原地更新)。
+A compound is an objective chemical entity: the same ChEBI ID is the same compound,
+regardless of which source's enzyme references it. So it is **not segmented by source and
+not deleted by source**, only upserted (add-only + update in place).
 
-原实现的缺陷: 无查重直接 `append` -> 二次运行主键冲突, ETL 第 1 步就 `sys.exit(1)`。
+Defect of the original implementation: `append` with no de-dup -> a primary-key conflict on
+the second run, and ETL step 1 hits `sys.exit(1)`.
 """
 import os
 import sys
@@ -25,27 +27,31 @@ EXCLUDED_COMMON_COMPOUND_IDS = {"CHEBI:15377", "CHEBI:15378", "CHEBI:33019"}
 
 COMPOUND_COLUMNS = {
     "inchi_key": "VARCHAR(100)",
-    # 第二个键 (RDKit 从 smiles 现算)。只服务端匹配用, 不进任何 API 响应。
-    # 注意 _ensure_columns 只 ADD COLUMN, **不建索引** —— 线上库的
-    # idx_compound_inchi_key_derived 要手工 ALTER 一次, 见 sql/schema.sql。
+    # The second key (computed by RDKit from smiles). Used only for server-side matching,
+    # absent from every API response. Note _ensure_columns only ADD COLUMNs, it does **not
+    # create indexes** -- the live database's idx_compound_inchi_key_derived needs a manual
+    # ALTER once, see sql/schema.sql.
     "inchi_key_derived": "VARCHAR(100)",
 }
 
 
 def _fill_blank_name(out):
-    """name 为空的化合物用 compound_id 兜底。
+    """Compounds with a blank name fall back to compound_id.
 
-    compound.name 是 NOT NULL, 而 all_nodes 里会混进解析不出名字的条目 ——
-    全量 TrEMBL 实测有 4 个 POLYMER:* (Rhea 方程里的 ChEBI 聚合物实体,
-    ChEBI 参考库里没有它们的名字与结构)。空名会让**整条 upsert 事务**
-    因 (1048, "Column 'name' cannot be null") 回滚, 连非空的那些行一起丢。
+    compound.name is NOT NULL, and all_nodes mixes in entries whose name cannot be
+    parsed -- the full TrEMBL run measured 4 POLYMER:* entries (ChEBI polymer entities
+    from Rhea equations, with no name or structure in the ChEBI reference library). A
+    blank name rolls back the **whole upsert transaction** with (1048, "Column 'name'
+    cannot be null"), dropping the non-blank rows too.
 
-    兜底值取 compound_id 而不是空串: 前端 compound_filters.py 的既有约定是
-    `Compound.name != Compound.compound_id` 才 displayable, 所以 name=id 恰好
-    表达「这是个没有真名的实体」-> 不进图(画出来也会是个没标签的节点),
-    但仍然留在字典里, 不影响 reaction_compound 的外键。
+    The fallback takes compound_id rather than an empty string: the frontend
+    compound_filters.py already assumes `Compound.name != Compound.compound_id` is what
+    makes a compound displayable, so name=id exactly expresses "this entity has no real
+    name" -> not drawn into the graph (it would be an unlabelled node anyway), but still
+    kept in the dictionary, so reaction_compound's foreign key is unaffected.
 
-    空串与 None 都要认(两者都会在 COALESCE 里被当"没值"或被 MySQL 拒)。
+    Both an empty string and None must be recognised (COALESCE treats both as "no
+    value", and MySQL rejects them).
     """
     blank = out["name"].isna() | (out["name"].astype(str).str.strip() == "")
     out.loc[blank, "name"] = out.loc[blank, "compound_id"]
@@ -80,8 +86,8 @@ def load_compounds():
     out["smiles"] = df["SMILES"]
     out["average_mass"] = pd.to_numeric(df["Molecular Mass"], errors="coerce")
     out["chebi_url"] = df["ChEBI URL"]
-    out["inchi_key"] = None          # 由 supplement_from_all_nodes 填
-    out["inchi_key_derived"] = None  # 同上
+    out["inchi_key"] = None          # filled by supplement_from_all_nodes
+    out["inchi_key_derived"] = None  # same
     out["structure_image_url"] = df["ChEBI ID"].apply(
         lambda x: f"https://www.ebi.ac.uk/chebi/displayImage.do?defaultImage=true&chebiId={x.split(':')[-1]}"
     )
@@ -97,14 +103,15 @@ def load_compounds():
 
 
 def supplement_from_all_nodes():
-    """all_nodes.tsv 里的化合物补进 compound 表, 并把两个 InChI Key 填上。"""
+    """Supplement the compound table with compounds from all_nodes.tsv and fill both
+    InChI Keys."""
     _ensure_columns("compound", COMPOUND_COLUMNS)
     df = read_merged(ALL_NODES_FILE)
     df = df[~df["ChEBI ID"].isin(EXCLUDED_COMMON_COMPOUND_IDS)]
 
     key_cols = [
-        ("inchi_key", "InChI Key"),                  # ChEBI 官方值: 对外发布的那一列
-        ("inchi_key_derived", "InChI Key Derived"),  # RDKit 现算: 只服务端匹配用
+        ("inchi_key", "InChI Key"),                  # ChEBI official value: the published column
+        ("inchi_key_derived", "InChI Key Derived"),  # computed live by RDKit: server-side matching only
     ]
     out = pd.DataFrame()
     out["compound_id"] = df["ChEBI ID"]
@@ -113,7 +120,8 @@ def supplement_from_all_nodes():
     for column, source in key_cols:
         present = source in df.columns
         out[column] = df[source].fillna("") if present else None
-        # 空串会让 COALESCE 认为「有值」而把已有值抹成空串 -> 先归一成 None。
+        # An empty string makes COALESCE think "has a value" and blanks the existing
+        # value -> normalise to None first.
         if present:
             out.loc[out[column].astype(str).str.strip() == "", column] = None
     _fill_blank_name(out)
@@ -131,6 +139,7 @@ if __name__ == "__main__":
 
 
 def run(only=None):
-    """only 未使用 —— 化合物与来源无关(B 类)。保留参数是为了步骤签名一致。"""
+    """only is unused -- compounds are source-independent (class B). The parameter is
+    kept for a consistent step signature."""
     load_compounds()
     supplement_from_all_nodes()

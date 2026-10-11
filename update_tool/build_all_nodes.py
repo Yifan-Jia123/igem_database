@@ -1,58 +1,64 @@
 """
-Generate all_nodes.tsv (图节点表).
+Generate all_nodes.tsv (graph node table).
 Format: ChEBI ID, Name, InChI Key, InChI Key Derived
 
-构造逻辑:
-  - 化合物集合 = terpene_only 所有 Substrate/Product ChEBI 去重, 去掉 GENERIC:*
-  - Name        = chebi_full.tsv 的 Name
-  - InChI Key   = ChEBI 官方 standard_inchi_key (structures.tsv.gz 里 default_structure=true
-                  的那一行)。权威值, 也是对外发布的那一列。
-  - InChI Key Derived = RDKit 从本行 SMILES 现算。SMILES 与写进 compound.smiles 的是同一份
-                  (chebi_full.tsv 与 uniprotkb_terpene_compounds.tsv 实测 730/730 逐字节
-                  相同), 所以它保证与库里的结构自洽。两列在 710 条可比数据里只在 2 条上分歧
-                  (CHEBI:231826 / CHEBI:53643 —— ChEBI 自己的 smiles 与 standard_inchi
-                  互相矛盾), 那两条两个键都能查到。留第二列就是为了不仲裁这 2 条。
-  - 排序        = ChEBI ID 字符串升序 (与旧表一致)
+Construction:
+  - Compound set = all Substrate/Product ChEBI from terpene_only, de-duplicated, GENERIC:* dropped
+  - Name        = Name from chebi_full.tsv
+  - InChI Key   = ChEBI official standard_inchi_key (the default_structure=true row in
+                  structures.tsv.gz). The authoritative value, and the column published externally.
+  - InChI Key Derived = computed by RDKit from this row's SMILES. The SMILES is the same one written
+                  to compound.smiles (chebi_full.tsv and uniprotkb_terpene_compounds.tsv measured
+                  byte-for-byte identical on 730/730), so it is guaranteed consistent with the
+                  structure in the database. Across the 710 comparable rows the two columns
+                  disagree on only 2 (CHEBI:231826 / CHEBI:53643 -- ChEBI's own smiles and
+                  standard_inchi contradict each other), and both keys resolve for those two.
+                  The second column exists precisely to avoid arbitrating these 2 rows.
+  - Sort        = ChEBI ID string ascending (same as the old table)
 
-第 4 个参数给一个已有的 all_nodes 文件时, 复用它里面的官方 InChI Key 列 (恢复/验证用)。
-派生列**总是现算** —— 它是本地计算, 没有省的必要, 而"复用一个缺列的旧文件"会静默产出空列。
+When the 4th argument is an existing all_nodes file, reuse its official InChI Key column
+(for recovery/verification). The derived column is **always computed fresh** -- it is a local
+calculation with no reason to skip, and "reusing an old file missing the column" silently
+produces an empty column.
 
-历史: 2026-10 之前 InChI Key 是拿 ChEBI ID 去问 PubChem 的 /compound/name/ 得来的。那是
-**同义词模糊匹配**端点, 多个 ChEBI 号会折到同一个 CID —— 712 条有值的行里 27 条写进了别人
-分子的键 (5 对撞车, 其中 4 条连连接层都不同)。那条网络路径已整体删除, 不要恢复。
+History: before 2026-10 the InChI Key was fetched by asking PubChem's /compound/name/ endpoint
+with the ChEBI ID. That is a **synonym fuzzy-match** endpoint, and multiple ChEBI IDs collapse to
+the same CID -- of 712 rows with a value, 27 got another molecule's key (5 colliding pairs, 4 of
+them differing even in the connectivity layer). That network path has been removed entirely; do
+not restore it.
 """
 import csv
 import gzip
 import os
 import sys
 
-# 用法: python build_all_nodes.py [terpene_only] [chebi_full] [输出] [可选: 已有all_nodes复用它官方键]
+# Usage: python build_all_nodes.py [terpene_only] [chebi_full] [output] [optional: existing all_nodes to reuse its official keys]
 TERPENE_INPUT = sys.argv[1] if len(sys.argv) > 1 else '../for_graph/uniprotkb_terpene_only.tsv'
 CHEBI_INPUT = sys.argv[2] if len(sys.argv) > 2 else 'chebi_data/chebi_full.tsv'
 OUTPUT = sys.argv[3] if len(sys.argv) > 3 else 'output_all_nodes.tsv'
 REUSE = sys.argv[4] if len(sys.argv) > 4 else ''
 
-# structures.tsv.gz 与 chebi_full.tsv 同在 chebi_data/ —— 按输入路径推导, 不写死本机路径
+# structures.tsv.gz sits in chebi_data/ alongside chebi_full.tsv -- derived from the input path, not hard-coded to a local path
 STRUCTURES_FILE = os.path.join(os.path.dirname(os.path.abspath(CHEBI_INPUT)), 'structures.tsv.gz')
 
-# 解析失败的化合物超过这个数就打印明细 (避免一屏刷不完, 又不会把问题藏起来)
+# Print the detail once parse failures exceed this count (avoids an unending screenful while not hiding the problem)
 MAX_REPORT_FAILED = 20
 
 
 def _load_rdkit():
-    """延迟导入: 走第 4 参数的恢复路径时不需要 rdkit。"""
+    """Lazy import: the recovery path via the 4th argument does not need rdkit."""
     try:
         from rdkit import Chem, RDLogger
     except ImportError:
         sys.exit('算派生 InChI Key 需要 rdkit:  pip install rdkit\n'
                  '(若只想复用已有产物, 传第 4 个参数指向它)')
-    # 解析告警很刷屏, 但失败不会漏 —— 下面按 None 计数并打印
+    # Parse warnings are noisy, but failures are not missed -- they are counted as None and printed below
     RDLogger.DisableLog('rdApp.*')
     return Chem
 
 
 def load_official_keys(chebi_ids):
-    """从 ChEBI 官方 structures.tsv.gz 取 default_structure 那一行的 standard_inchi_key。"""
+    """Read standard_inchi_key from the default_structure row of ChEBI's official structures.tsv.gz."""
     if not os.path.exists(STRUCTURES_FILE):
         sys.exit(f'缺少参考库: {STRUCTURES_FILE}\n'
                  f'先跑:  python {os.path.join(os.path.dirname(os.path.abspath(__file__)), "update_chebi_library.py")}')
@@ -65,7 +71,7 @@ def load_official_keys(chebi_ids):
             acc = row.get('compound_id', '').strip()
             if not acc:
                 continue
-            # 这里是裸数字 (15377), 我们库里是 CHEBI:15377
+            # Bare number here (15377); our database uses CHEBI:15377
             if not acc.startswith('CHEBI:'):
                 acc = 'CHEBI:' + acc
             if acc not in wanted:
@@ -90,7 +96,7 @@ def compute_derived_keys(chebi_ids, smiles_by_id):
         smi = smiles_by_id.get(cid, '')
         mol = Chem.MolFromSmiles(smi) if smi else None
         if mol is None:
-            # 无 SMILES 与解析不出来都归到这里: 都拿不到派生键, 都不该静默
+            # No SMILES and failed parse both land here: neither yields a derived key, and neither should be silent
             failed.append(cid)
             keys[cid] = ''
             continue
@@ -98,7 +104,7 @@ def compute_derived_keys(chebi_ids, smiles_by_id):
     return keys, failed
 
 
-# ---- Step 1: 化合物集合 + 名称 + SMILES ----
+# ---- Step 1: compound set + names + SMILES ----
 comps, smiles = {}, {}
 with open(TERPENE_INPUT, 'r', encoding='utf-8') as f:
     for r in csv.DictReader(f, delimiter='\t'):
@@ -113,7 +119,7 @@ with open(CHEBI_INPUT, 'r', encoding='utf-8') as f:
 chebi_ids = sorted(comps.keys())
 print(f'Distinct non-GENERIC compounds: {len(chebi_ids)}')
 
-# ---- Step 2a: 官方 InChI Key ----
+# ---- Step 2a: official InChI Key ----
 if REUSE and os.path.exists(REUSE):
     official = reuse_official_keys(REUSE)
     print(f'Reused {len(official)} official InChI Keys from {REUSE}')
@@ -121,7 +127,7 @@ else:
     official = load_official_keys(chebi_ids)
     print(f'Official InChI Keys from {os.path.basename(STRUCTURES_FILE)}: {len(official)}/{len(chebi_ids)}')
 
-# ---- Step 2b: 派生 InChI Key (RDKit, 本行 SMILES 现算) ----
+# ---- Step 2b: derived InChI Key (RDKit, computed from this row's SMILES) ----
 derived, failed = compute_derived_keys(chebi_ids, smiles)
 print(f'Derived InChI Keys: {sum(1 for k in derived.values() if k)}/{len(chebi_ids)}'
       f' (无 SMILES 或解析失败 {len(failed)})')
@@ -129,12 +135,12 @@ if failed:
     print('  解析不出来: ' + ', '.join(failed[:MAX_REPORT_FAILED])
           + (f' ... 另 {len(failed) - MAX_REPORT_FAILED} 个' if len(failed) > MAX_REPORT_FAILED else ''))
 
-# 两列分歧的明细直接打出来 —— 正常就是那 2 条, 不是就该停下看
+# Print the disagreement detail directly -- normally just those 2 rows; anything else means stop and look
 both = [c for c in chebi_ids if official.get(c) and derived.get(c)]
 diff = [c for c in both if official[c] != derived[c]]
 print(f'两列都有值 {len(both)} 条, 其中分歧 {len(diff)} 条' + (': ' + ', '.join(diff) if diff else ''))
 
-# ---- Step 3: 输出 ----
+# ---- Step 3: output ----
 fields = ['ChEBI ID', 'Name', 'InChI Key', 'InChI Key Derived']
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')

@@ -38,8 +38,9 @@ class EdgeGroupItem(CamelModel):
     organism_name: Optional[str] = None
     source_type: Optional[str] = None
     review_status: Optional[str] = None
-    # 客户端拿这两项做本地筛选（阈值 + 只看膜蛋白），所以要挂在**每条子边**上，
-    # 而不是只在展开后的卡片上 —— 不展开的复合边也要能判显隐。
+    # The client uses these two for local filtering (threshold + membrane-only),
+    # so they hang on **every sub-edge**, not just on the expanded cards -- a
+    # collapsed composite edge must be able to decide visibility too.
     deep_solnet_score: Optional[float] = None
     membrane: Optional[str] = None
 
@@ -50,11 +51,15 @@ class EdgeGroup(CamelModel):
     target_compound_id: str
     label: str
     count: int
-    # `label` 里那个 N，即**不同的酶**个数。`count` 是记录数 —— 同一个酶用两条反应催化
-    # 同一对化合物时会生成两条记录（一个 edge_id 一条）。全库 175 个组里有 11 个两者不等，
-    # 最大的一组（FPP↔squalene）count=7093 而酶只有 3595。界面上那行 `enzyme*N` 要的是后者，
-    # 但 `count` 不能跟着改：客户端拿「edgeIds.length >= count」当载荷是否被截断的判据
-    # （`graphExperience.tsx` 的 `buildHomePairs`），也拿它当拼贴图的排序键。
+    # The N in `label`, i.e. the number of **distinct enzymes**. `count` is the
+    # record count -- the same enzyme catalysing the same compound pair via two
+    # reactions produces two records (one edge_id each). In the whole database 11
+    # of 175 groups differ between the two; the largest (FPP↔squalene) has
+    # count=7093 with only 3595 enzymes. The UI's `enzyme*N` line wants the
+    # latter, but `count` must not change with it: the client uses
+    # "edgeIds.length >= count" to judge whether the payload was truncated
+    # (`buildHomePairs` in `graphExperience.tsx`), and as the sort key for the
+    # collage map.
     enzyme_count: int
     edge_ids: List[str] = []
     items: List[EdgeGroupItem] = []

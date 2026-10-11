@@ -18,8 +18,9 @@ from app.services.search_service import search_entries
 DIRECTION_ALLOWS_SUBSTRATE_TO_PRODUCT = {"forward", "reversible", "unknown"}
 DIRECTION_ALLOWS_PRODUCT_TO_SUBSTRATE = {"reverse", "reversible", "unknown"}
 
-# enzyme_id -> (模型参考分, 膜三态)。一次查询取一批, 避免每条边各查一次。
-# 定义在模块顶部: 下面的函数签名用它做注解, 而注解在 def 时就求值。
+# enzyme_id -> (model reference score, membrane tri-state). Batched in one query
+# to avoid a per-edge lookup. Defined at module top: the function signatures below
+# use it as an annotation, and annotations are evaluated at def time.
 SolubilityMeta = Dict[str, Tuple[Optional[float], Optional[str]]]
 
 
@@ -197,12 +198,14 @@ def _limit_graph_payload(
             items=kept_items,
         ))
 
-    # 顺序必须显式定死。客户端对 edgeGroups 是**按下标**取的
-    # (`api.ts: graph.edgeGroups.slice(0, 120)`, 而这里会返回 157 组),
-    # 所以「哪 120 组装进拼贴图」直接由数组顺序决定。而原来的顺序来自
-    # reaction_compound/edge 的扫描顺序 —— 随执行计划变, 改一条无关的查询
-    # 就会静默换掉拼贴图的成员。这里按与 pair_candidates 同一个优先级键排序
-    # (规模降序, 再按标签/端点), 于是它是确定的, 且被截断时留下的是最大的那些组。
+    # The order must be pinned down explicitly. The client reads edgeGroups **by
+    # index** (`api.ts: graph.edgeGroups.slice(0, 120)`, while this returns 157
+    # groups), so "which 120 groups land in the collage" is decided straight by
+    # array order. The old order came from the scan order of reaction_compound/edge
+    # -- it varies with the execution plan, so changing an unrelated query would
+    # silently swap the collage's members. Here it is sorted by the same priority
+    # key as pair_candidates (size descending, then label/endpoint), so it is
+    # deterministic, and truncation keeps the largest groups.
     limited_edge_groups.sort(
         key=lambda g: (-g.count, g.label or "", g.source_compound_id, g.target_compound_id)
     )
@@ -229,18 +232,21 @@ async def _pick_default_center(db: AsyncSession) -> Optional[Compound]:
 
 
 class _EnzymeRef(NamedTuple):
-    """首页图只用到酶表的这 4 列 —— 用轻量引用代替 ORM 实体。
+    """The home graph uses only these 4 columns of the enzyme table -- a light
+    ref instead of an ORM entity.
 
-    直接 `select(Enzyme)` 的代价远不止多读几列: 实体带 `sequence`(平均 ~1.3KB)
-    与 `secondary_names`, 且有 3 个 `lazy="selectin"` 关系(genes/edges/evidences),
-    每取一批酶就会再发一轮查询把整张边表重读一遍。实测全量库下取 20,543 条边:
+    Loading `select(Enzyme)` costs far more than a few extra columns: the entity
+    carries `sequence` (~1.3KB on average) and `secondary_names`, and has 3
+    `lazy="selectin"` relations (genes/edges/evidences), so every batch of enzymes
+    fires another round of queries that re-reads the whole edge table. Measured on
+    the full database for 20,543 edges:
 
-        整实体      5.883s  发出 70 条 SQL (23×gene + 23×enzyme_reaction_edge + 23×evidence)
-        列投影      0.482s  发出  1 条 SQL
+        whole entity    5.883s  70 SQL statements (23×gene + 23×enzyme_reaction_edge + 23×evidence)
+        column project  0.482s   1 SQL statement
 
-    `_edge_group_item` 与 `_make_enzyme_card` 只读这 4 个属性, 所以两者对
-    实体和本引用同样工作 —— 其它调用点(`build_graph_payload_for_enzymes` 等)
-    仍传真实体, 不受影响。
+    `_edge_group_item` and `_make_enzyme_card` read only these 4 attributes, so
+    they work the same on the entity and on this ref -- other call sites
+    (`build_graph_payload_for_enzymes` etc.) still pass real entities, unaffected.
     """
 
     enzyme_id: str
@@ -250,7 +256,8 @@ class _EnzymeRef(NamedTuple):
 
 
 class _ReactionRef(NamedTuple):
-    """同上, 反应侧只用到这 4 列 (`_make_enzyme_card` 读 ec_number/equation)。"""
+    """Same as above -- the reaction side uses only these 4 columns
+    (`_make_enzyme_card` reads ec_number/equation)."""
 
     reaction_id: str
     ec_number: Optional[str]
@@ -262,21 +269,27 @@ def _edge_scope_exists(
     source_types: Optional[List[str]],
     review_statuses: Optional[List[str]],
 ):
-    """EXISTS(该反应在搜索集里至少有一条边) —— 相关子查询, 用于圈定可遍历的反应。
+    """EXISTS(the reaction has at least one edge in the search set) -- a correlated
+    subquery, used to scope the traversable reactions.
 
-    搜索集必须落在 `EnzymeReactionEdge` 上, 不能落在 `Reaction` 上:
-    `reaction.source_type` / `review_status` 是**常量列**(实测 714 行全为
-    swiss_prot / official —— 反应是跨酶共享的客观实体, ETL 无条件盖章),
-    筛它等于 no-op: `source_types=['trembl']` 会放行全部 714 个反应, 但下方的
-    edge_query 一条 trembl 边都取不到, 于是只剩节点没有边(前端表现为 300 个孤立点)。
+    The search set must land on `EnzymeReactionEdge`, not on `Reaction`:
+    `reaction.source_type` / `review_status` are **constant columns** (measured 714
+    rows all swiss_prot / official -- a reaction is an objective entity shared
+    across enzymes, ETL stamps it unconditionally), so filtering on it is a no-op:
+    `source_types=['trembl']` lets all 714 reactions through, but the edge_query
+    below fetches not one trembl edge, leaving nodes with no edges (the frontend
+    shows 300 isolated points).
 
-    EXISTS 与 edge_query 圈定同一张表、同一组谓词, 所以反应域与最终画出的边严格一致。
-    两种 rc_query 形状都兼容: SQLAlchemy 的自动相关在**编译期**按外层 SELECT 的
-    FROM 列表解析, 与本表达式在哪个函数里构造无关 —— 所以引用 join 进来的
-    `Reaction` 是合法的, 尽管它不是 FROM 的第一张表。
+    EXISTS and edge_query scope the same table with the same predicates, so the
+    reaction domain and the drawn edges stay strictly consistent. Both rc_query
+    shapes are supported: SQLAlchemy's auto-correlation resolves at **compile time**
+    from the outer SELECT's FROM list, independent of which function builds this
+    expression -- so referencing the joined-in `Reaction` is legal even though it
+    is not the first table in FROM.
 
-    `source_types` / `review_statuses` 均为空时**不要**调用本函数, 直接在
-    `rc_query` 上追加一个恒真的 EXISTS 会改变 SQL 形状(见两个调用点的 `if`)。
+    Do **not** call this function when `source_types` / `review_statuses` are both
+    empty: appending an always-true EXISTS to `rc_query` changes the SQL shape (see
+    the `if` at the two call sites).
     """
     edge_match = select(EnzymeReactionEdge.reaction_id).where(
         EnzymeReactionEdge.reaction_id == Reaction.reaction_id
@@ -299,10 +312,12 @@ async def _build_global_graph_payload(
         return GraphPayload()
 
     displayable_ids = {compound.compound_id for compound in compounds}
-    # 列投影而不是 select(ReactionCompound, Reaction): 实体形式会连带触发
-    # Reaction 上两个 lazy="selectin" 关系(reaction_compounds / edges) —— 后者会把
-    # 整张边表再拉一遍。实测 1,553 行: 实体 1.139s/5 条 SQL -> 投影 0.041s/1 条。
-    # 反应侧的列名两表都有 reaction_id, 所以只取 Reaction 的那一份(join 相等)。
+    # Column projection rather than select(ReactionCompound, Reaction): the entity
+    # form also triggers Reaction's two lazy="selectin" relations
+    # (reaction_compounds / edges) -- the latter re-pulls the whole edge table.
+    # Measured on 1,553 rows: entity 1.139s/5 SQL -> projection 0.041s/1.
+    # Both tables name the reaction column reaction_id, so take Reaction's copy
+    # (the join makes them equal).
     rc_query = select(
         ReactionCompound.compound_id,
         ReactionCompound.role,
@@ -314,9 +329,10 @@ async def _build_global_graph_payload(
         Reaction, ReactionCompound.reaction_id == Reaction.reaction_id
     ).where(ReactionCompound.compound_id.in_(displayable_ids))
 
-    # 搜索集圈定在边上, 不在 reaction 上 —— 见 _edge_scope_exists 的 docstring。
-    # 剔除「零匹配边的反应」对结果集是幂等的: 那些反应的边本来就会被下方
-    # edge_query 的 EnzymeReactionEdge 筛选滤光。
+    # The search set scopes on edges, not on reaction -- see _edge_scope_exists's
+    # docstring. Dropping reactions with zero matching edges is idempotent for the
+    # result set: their edges would be filtered out by edge_query's
+    # EnzymeReactionEdge filter below anyway.
     if source_types or review_statuses:
         rc_query = rc_query.where(_edge_scope_exists(source_types, review_statuses))
 
@@ -347,7 +363,7 @@ async def _build_global_graph_payload(
         cards = [_compound_to_card(compound) for compound in compounds]
         return GraphPayload(nodes=cards[:limit_nodes] if limit_nodes else cards)
 
-    # 见 _EnzymeRef 的 docstring: 实体形式在本查询上要发 70 条 SQL。
+    # See _EnzymeRef's docstring: the entity form fires 70 SQL statements here.
     edge_query = select(
         EnzymeReactionEdge.edge_id,
         EnzymeReactionEdge.enzyme_id,
@@ -661,10 +677,13 @@ async def _bfs_subgraph(
             Reaction, ReactionCompound.reaction_id == Reaction.reaction_id
         ).where(ReactionCompound.compound_id == current_id)
 
-        # 同 global, 但这里换 EXISTS 是**语义**修复而不只是防御: 下方扩展 frontier 时
-        # 不看该反应有没有匹配的边, 所以筛错表会让遍历顺着「本来源里根本无边」的反应
-        # 把节点拉进图(source_types=['swiss_prot'] 实测多出 71 个孤立化合物); 而
-        # ['trembl'] 时 rc_query 直接空转, 整张图退化成中心点。
+        # Same as global, but here swapping in EXISTS is a **semantic** fix, not
+        # just defensive: expanding the frontier below never checks whether the
+        # reaction has a matching edge, so filtering the wrong table lets the
+        # traversal pull nodes in via reactions with no edge in the source
+        # (measured +71 isolated compounds for source_types=['swiss_prot']); and
+        # with ['trembl'] rc_query spins empty, degrading the whole graph to the
+        # center point.
         if source_types or review_statuses:
             rc_query = rc_query.where(_edge_scope_exists(source_types, review_statuses))
 
@@ -789,17 +808,22 @@ async def _fetch_displayable_compound_ids(db: AsyncSession, compound_ids: Set[st
 
 
 async def _load_solubility_meta(db: AsyncSession, enzyme_ids: Set[str]) -> SolubilityMeta:
-    """取这批酶的 canonical 分数 + 膜注释。与 `_load_gene_names` 同款: 一次查询。
+    """Fetch the canonical score + membrane annotation for this batch of enzymes.
+    Same shape as `_load_gene_names`: one query.
 
-    ⚠️ **`isoform_id IS NULL` 不能省** —— 一个酶在库里可有 1 条 canonical 行
-    加 0..N 条变体行, 不带这个谓词会把变体的分当成酶的分(且顺序不定)。
+    ⚠️ **`isoform_id IS NULL` is not optional** -- an enzyme can have 1 canonical
+    row plus 0..N variant rows in the database; without this predicate a variant's
+    score is taken as the enzyme's (and in non-deterministic order).
 
-    ⚠️ **不要把这些字段并进 `_EnzymeRef` 再改投影 SQL。** 看起来更省一次查询, 但
-    `build_graph_payload_for_enzymes` / `expand_edge_group` 传的是**真 Enzyme 实体**,
-    那条路上 `enz` 没有这两个属性 —— 会 AttributeError。按请求取一次字典对两条路都成立。
+    ⚠️ **Do not fold these fields into `_EnzymeRef` and change the projection SQL.**
+    It looks like it saves a query, but `build_graph_payload_for_enzymes` /
+    `expand_edge_group` pass a **real Enzyme entity**, and on that path `enz` has
+    neither attribute -- it would AttributeError. Fetching a dict per request works
+    for both paths.
 
-    DECIMAL 经 pymysql 回来是 `Decimal`, 这里转 float: 声明上是 `Optional[float]`,
-    留着 Decimal 会在 pydantic 序列化时多一层转换, 值也已经是 6 位定标不丢精度的。
+    DECIMAL comes back from pymysql as `Decimal`; converted to float here: it is
+    declared `Optional[float]`, keeping Decimal adds a conversion layer in pydantic
+    serialization, and the value is already 6-decimal scaled without precision loss.
     """
     if not enzyme_ids:
         return {}
@@ -839,10 +863,11 @@ async def _load_gene_names(db: AsyncSession, enzyme_ids: Set[str]) -> Dict[str, 
 
 
 def _compound_to_card(c: Compound) -> CompoundCard:
-    # 委托给 app.utils.compound_card 里唯一的装配器, 别在这里重写一遍 ——
-    # 两份实现迟早会漂移 (曾经就是: routers/*.py 里有 4 份各自不同的写法)。
-    # 直接 import utils 而不是 entity_service: entity_service 要调 pathway_service,
-    # 而 pathway_service 调本模块, 走 entity_service 会成环。
+    # Delegate to the single assembler in app.utils.compound_card; do not rewrite
+    # it here -- two implementations drift (it has before: routers/*.py held 4
+    # different versions). Import utils directly, not entity_service:
+    # entity_service calls pathway_service, which calls this module, so going
+    # through entity_service creates a cycle.
     return compound_to_card(c)
 
 
@@ -974,11 +999,14 @@ async def expand_edge_group(
 ) -> List[ReactionEdge]:
     """Expand an edge group: return individual ReactionEdge cards from the edge IDs.
 
-    ``source_types``/``review_statuses`` 是**搜索集**: 必须在这里也过滤, 否则
-    「图按搜索集圈定了、一展开又漏回全库」—— 页面上看到的边数会与展开出来的对不上。
-    这里用 ``EnzymeReactionEdge.source_type``, 与同文件其它圈定点(:280/:326/:406/
-    :617/:660/:1258)一致; 本函数只处理**有边的酶**, 而两列对有边的酶实测零处不一致
-    (见 ``search_service._aggregate_table_cards`` 的说明), 所以此处两者等价。
+    ``source_types``/``review_statuses`` are the **search set**: they must be
+    filtered here too, or "the graph is scoped by the search set, but expanding it
+    leaks back to the whole database" -- the edge count on the page will not match
+    what expands out. This uses ``EnzymeReactionEdge.source_type``, consistent with
+    the other scope points in this file (:280/:326/:406/:617/:660/:1258); this
+    function only handles **enzymes with edges**, and the two columns differ in
+    zero places for such enzymes (see ``search_service._aggregate_table_cards``),
+    so the two are equivalent here.
     """
 
     parts = edge_group_id.split("_", 2)
@@ -1545,11 +1573,14 @@ async def select_scope_enzymes(
     if not cards:
         return [], 0
 
-    # 图的这一层只用**有反应注释**的酶 —— 没有反应边的酶在图上无处可画。
-    # 不能靠下游的 JOIN 兜住这一步: 无边酶在下面的 dedupe 里 (EC, 产物) 键都是 ("", ""),
-    # 会被折成 1 个代表白占一个 top_n 名额, 也让 ``candidate_count`` 虚高。
-    # 判定用 ``card.edge_id`` —— ``_fetch_cards`` 只在真有反应边时才填它。
-    # 注意这与 table/blast 的全量域不冲突: 那是另外两个表面, 分层可见性使然。
+    # This layer of the graph uses only enzymes **with a reaction annotation** --
+    # an enzyme with no reaction edge has nowhere to be drawn on the graph.
+    # A downstream JOIN cannot cover this step: a no-edge enzyme keys to ("", "") in
+    # the dedupe below, collapses to one representative that wastes a top_n slot,
+    # and inflates ``candidate_count``. The test is ``card.edge_id`` --
+    # ``_fetch_cards`` fills it only when a reaction edge really exists.
+    # Note this does not conflict with the full domain of table/blast: those are
+    # other surfaces, a matter of layered visibility.
     cards = [card for card in cards if card.edge_id]
     if not cards:
         return [], 0

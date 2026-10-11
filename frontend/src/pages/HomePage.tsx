@@ -45,15 +45,16 @@ export function HomePage({
   onOpenBlast: () => void
   onOpenBlastTable: () => void
   onToggleQueue: (entry: string | Entity) => void
-  /** 批量入队（合并抽屉的「Queue all」）。 */
+  /** Bulk enqueue (the merge drawer's "Queue all"). */
   onQueueMany: (entries: Entity[]) => void
   openRecord: (entity: Entity) => void
   isQueued: (id: string) => boolean
-  /** URL 上的检索规格 (`undefined` = 不在首页, 无信号; `null` = 裸首页)。 */
+  /** The search spec on the URL (`undefined` = not home, no signal; `null` = bare home). */
   mapSearch?: MapSearchRoute | null
-  /** 同一个规格再提交一次时递增; 只由它触发重跑。 */
+  /** Bumped when the same spec is submitted again; only it triggers a re-run. */
   mapSearchNonce?: number
-  /** 地图请求把一次检索写进 URL (App 负责导航, 地图只消费结果)。 */
+  /** The map asks to write a search into the URL (App navigates; the map only
+   *  consumes the result). */
   onMapSearch?: (spec: MapSearchRoute | null) => void
   /** Last completed BLAST run; lets the map render the hit enzymes as a scope subgraph. */
   blastSession?: BlastSession | null
@@ -61,7 +62,7 @@ export function HomePage({
   onAutoBlastScopeConsumed?: () => void
   /** Brand click → reset any app-wide search state and head back to home. */
   onResetHome?: () => void
-  /** 搜索集（检索范围）。空数组 = 全部。 */
+  /** Search set (the search scope). Empty array = all. */
   searchSet: string[]
   onSearchSetChange: (next: string[]) => void
 }) {

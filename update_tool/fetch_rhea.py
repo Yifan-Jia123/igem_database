@@ -14,7 +14,7 @@ import requests
 import sys
 import time
 
-# 用法: python fetch_rhea.py [输入原始TSV含Catalytic activity] [chebi_smiles.tsv] [输出文件]
+# Usage: python fetch_rhea.py [input raw TSV with Catalytic activity] [chebi_smiles.tsv] [output file]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else '../uniprotkb_TERPENE_AND_reviewed_true_2026_07_12.tsv'
 CHEBI_SMILES_FILE = sys.argv[2] if len(sys.argv) > 2 else 'chebi_data/chebi_smiles.tsv'
 OUTPUT = sys.argv[3] if len(sys.argv) > 3 else 'output_rhea.tsv'
@@ -25,32 +25,34 @@ SPARQL_DELAY = 0.3
 
 
 # ---- Step 1: parse Catalytic activity from 0712 raw TSV ----
-# 每个 CATALYTIC ACTIVITY 单元: Reaction=...; Xref=Rhea:RHEA:xxxxx, ChEBI:...; EC=...; Evidence=...
+# Each CATALYTIC ACTIVITY unit: Reaction=...; Xref=Rhea:RHEA:xxxxx, ChEBI:...; EC=...; Evidence=...
 #                          [PhysiologicalDirection=...; Xref=Rhea:RHEA:yyyyy; Evidence=...]
-# 一个 Reaction 块 = 子表一行。Direction 取该块后紧邻的 PhysiologicalDirection(如有)，否则 'not specified'
-# 重要不变量: 一个反应在 UniProt CC 里会挂多个 Rhea ID —— Reaction 行上的 RHEA:xxxxx 是通用式
-#             (无向主反应)，PhysiologicalDirection 行上的 RHEA:yyyyy 是方向特异式。我们只取通用式
-#             (该块第一个 Xref=Rhea:)，即 Rhea ID 列 = 通用式 ID。
+# One Reaction block = one child-table row. Direction is the block's immediately following
+# PhysiologicalDirection (if any), else 'not specified'.
+# Key invariant: one reaction in UniProt CC carries several Rhea IDs -- the RHEA:xxxxx on the
+#                Reaction line is the generic form (undirected main reaction), the RHEA:yyyyy on
+#                the PhysiologicalDirection line is the direction-specific form. We take only the
+#                generic form (the block's first Xref=Rhea:), i.e. the Rhea ID column = generic ID.
 def parse_catalytic_activity(cat):
     """Return list of (rhea_id, equation, direction, ec) per reaction block."""
     reactions = []
     for part in cat.split('Reaction=')[1:]:
-        # 通用式 Rhea ID: 该块内第一个 Xref=Rhea: (Reaction 行上的主反应)
+        # Generic-form Rhea ID: the block's first Xref=Rhea: (the main reaction on the Reaction line)
         m = re.search(r'Xref=Rhea:RHEA:(\d+)', part)
         if not m:
             continue
         rid = f'RHEA:{m.group(1)}'
 
-        # Equation: Reaction= 到第一个 ';' 之间
+        # Equation: from Reaction= up to the first ';'
         eq = part.split(';')[0].strip()
 
-        # EC: EC= 到下一个 ';' 之间
+        # EC: from EC= up to the next ';'
         ec = ''
         m_ec = re.search(r'EC=([^;]+)', part)
         if m_ec:
             ec = m_ec.group(1).strip()
 
-        # Direction: 紧邻本块的第一个 PhysiologicalDirection
+        # Direction: the first PhysiologicalDirection immediately after this block
         direction = 'not specified'
         m_dir = re.search(r'PhysiologicalDirection=([a-z-]+)', part)
         if m_dir:
@@ -61,7 +63,7 @@ def parse_catalytic_activity(cat):
     return reactions
 
 def normalize_ec(ec):
-    """EC 归一化：去除 Rhea/UniProt 的 n 级占位后缀（如 1.1.1.n4 -> 1.1.1.），缺失时 '--'。"""
+    """EC normalization: strip Rhea/UniProt n-level placeholder suffixes (e.g. 1.1.1.n4 -> 1.1.1.); '--' if missing."""
     if not ec:
         return '--'
     return re.sub(r'n\d+$', '', ec)
@@ -82,7 +84,8 @@ print(f'  Reactions parsed: {len(rows)}  (unique Rhea IDs: {len(all_rhea)})')
 
 
 # ---- Step 2: fetch ChEBI equation-order + EC via Rhea SPARQL ----
-# 每个反应返回 (side, name, chebi) 侧别 + ec（Rhea 反应关联的 EC，用于 0712 块里缺 EC 时兜底）
+# Each reaction returns (side, name, chebi) per side + ec (the Rhea reaction's EC, a fallback when
+# a 0712 block lacks an EC)
 def batch_query_sparql(ids):
     values = ' '.join(f'rhea:{rid.split(":")[1]}' for rid in ids)
     query = f'''
@@ -108,14 +111,14 @@ def batch_query_sparql(ids):
         rid = 'RHEA:' + b['reaction']['value'].rstrip('/').split('/')[-1]
         side = b['side']['value'].rstrip('/').split('/')[-1]  # e.g. 54512_L
         item = (side, b['name']['value'], b['chebi']['value'])
-        # OPTIONAL ?ec 会让每行绑定重复；按 (rid, side, name, chebi) 去重
+        # OPTIONAL ?ec duplicates each row's bindings; de-duplicate by (rid, side, name, chebi)
         seen.setdefault(rid, set())
         if item not in seen[rid]:
             seen[rid].add(item)
             out.setdefault(rid, {'items': [], 'ec': ''})
             out[rid]['items'].append(item)
         if 'ec' in b and not out.get(rid, {}).get('ec'):
-            # rhea:ec 值如 http://purl.uniprot.org/enzyme/4.2.3.228
+            # rhea:ec values look like http://purl.uniprot.org/enzyme/4.2.3.228
             out.setdefault(rid, {'items': [], 'ec': ''})
             out[rid]['ec'] = b['ec']['value'].rstrip('/').split('/')[-1]
     return out
@@ -148,7 +151,7 @@ for batch_start in range(0, len(rhea_list), SPARQL_BATCH):
 
 
 def get_sides(rid):
-    """Return (left_list, right_list) of ChEBI IDs in SPARQL return order (side内保持返回顺序)."""
+    """Return (left_list, right_list) of ChEBI IDs in SPARQL return order (order within a side preserved)."""
     sides = rhea_side.get(rid)
     if not sides:
         return [], []
@@ -169,15 +172,15 @@ print(f'  Loaded {len(chebi_smiles)} ChEBI SMILES')
 
 
 # ---- Step 4: assemble ChEBI order + reaction SMILES (direction-aware) ----
-# ChEBI order 列 = 底物;... | 产物;...（跟随 Direction 列，而非方程式文本）。
-# 侧内顺序 = Rhea SPARQL 侧别返回顺序（含 GENERIC 大分子化合物）。
+# The ChEBI order column = substrates;... | products;... (follows the Direction column, not the equation text).
+# Order within a side = the Rhea SPARQL side return order (includes GENERIC macromolecule compounds).
 print('Step 4: assembling ChEBI order + reaction SMILES...')
 smiles_hit = 0
 chebi_hit = 0
 for i, (entry, rid, equation, direction, ec, src) in enumerate(rows):
     left_c, right_c = get_sides(rid)
 
-    # SMILES 底物/产物跟随 Direction 列
+    # SMILES substrates/products follow the Direction column
     if direction == 'right-to-left':
         sub_c, prod_c = right_c, left_c
     else:  # left-to-right / not specified
@@ -195,7 +198,8 @@ for i, (entry, rid, equation, direction, ec, src) in enumerate(rows):
     if rxn_smiles:
         smiles_hit += 1
 
-    # EC: 0712 块的 EC= 优先，缺失时用 Rhea 反应的 EC，仍缺失则 '--'；统一去 n 后缀
+    # EC: the 0712 block's EC= wins; if missing, use the Rhea reaction's EC; if still missing, '--';
+    # strip the n suffix uniformly
     if not ec:
         ec = rhea_side.get(rid, {}).get('ec', '')
     ec = normalize_ec(ec)

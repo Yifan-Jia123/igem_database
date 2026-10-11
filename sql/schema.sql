@@ -14,9 +14,11 @@ CREATE TABLE IF NOT EXISTS compound (
     smiles TEXT,
     inchi TEXT,
     inchi_key VARCHAR(100),
-    -- 第二个 InChI Key (RDKit 从 smiles 现算)。只给 /ketcher/search 做匹配兜底,
-    -- 不出现在任何 API 响应里。inchi_key 是 ChEBI 官方权威值。
-    -- 既有库要手工补这一列与索引 (etl_compounds._ensure_columns 只加列不建索引):
+    -- Second InChI Key (RDKit computes it from smiles on the fly). Used only as a
+    -- match fallback for /ketcher/search, never appears in any API response.
+    -- inchi_key is the authoritative ChEBI value.
+    -- Existing databases must add this column and index by hand
+    -- (etl_compounds._ensure_columns adds columns only, it does not build indexes):
     --   ALTER TABLE compound
     --     ADD COLUMN inchi_key_derived VARCHAR(100) NULL AFTER inchi_key,
     --     ADD INDEX idx_compound_inchi_key_derived (inchi_key_derived);
@@ -184,15 +186,18 @@ CREATE TABLE IF NOT EXISTS enzyme_isoform (
         FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 每酶的模型参考分 + 膜注释。粒度: isoform_id IS NULL 的行为 canonical 序列的分,
--- isoform_id 非空的行为该变体自己的分。
+-- Per-enzyme model reference score + membrane annotation. Granularity: rows with
+-- isoform_id IS NULL are the canonical sequence's score, rows with a non-null
+-- isoform_id are that variant's own score.
 --
--- 为什么独立成表: 序列是共享的(没有同序列不同分的真变体),
--- 放在 enzyme 上会让热表为一次模型重跑而改动。
+-- Why a separate table: sequences are shared (no true variant differs only in its
+-- score), so putting these columns on `enzyme` would rewrite the hot table every
+-- time the model is re-run.
 --
--- evidence 列宽 1024 是量出来的: Membrane Evidence 实测最长 530 字符
--- (18,616 行非空), 照抄 enzyme_go.go_term 的 500 会截断。
--- deep_solnet_score DECIMAL(7,6): 实测最长 8 字符、6 位小数, 刚好不丢精度。
+-- evidence column width 1024 is measured: Membrane Evidence maxes out at 530 chars
+-- (18,616 non-null rows), so copying enzyme_go.go_term's 500 would truncate.
+-- deep_solnet_score DECIMAL(7,6): longest measured value is 8 chars with 6 decimals,
+-- just enough to lose no precision.
 CREATE TABLE IF NOT EXISTS enzyme_solubility_score (
     solubility_record_id INT AUTO_INCREMENT PRIMARY KEY,
     enzyme_id VARCHAR(20) NOT NULL,
@@ -236,34 +241,40 @@ CREATE TABLE IF NOT EXISTS search_index (
     INDEX idx_search_index_enzyme (enzyme_id),
     INDEX idx_search_index_field (field_name),
     INDEX idx_search_index_hash (field_value_hash),
-    -- 前缀段查询 (field_value LIKE 'abc%') 的唯一可用索引。没有它时该段是全表扫,
-    -- 全量库实测 6.6-7.1s 只为返回 2-192 行; 加上后 0.013-0.098s, 结果逐行相同。
-    -- 前缀长度 64 字符: 索引 49 B/行 (~177MB / 376 万行), 比 field_value 全长的
-    -- B-tree 代价低得多, 而对 LIKE 'x%' 的定位只需前 64 字符。
-    -- 注意 '%x%'(包含段) 无法用任何 B-tree, 仍是全表扫 —— 那是另一件事, 见 search_service。
+    -- The only usable index for prefix-segment queries (field_value LIKE 'abc%'). Without
+    -- it that segment is a full scan -- measured on the full database at 6.6-7.1s to
+    -- return 2-192 rows; with it, 0.013-0.098s, row-for-row identical results.
+    -- Prefix length 64 chars: the index is 49 B/row (~177MB / 3.76M rows), far cheaper
+    -- than a B-tree over the full field_value, while locating a LIKE 'x%' needs only the
+    -- first 64 chars.
+    -- Note '%x%' (contains segment) cannot use any B-tree and is still a full scan --
+    -- that is a separate matter, see search_service.
     INDEX idx_search_index_value_prefix (field_value(64)),
     CONSTRAINT fk_search_index_enzyme
         FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
--- 编号持久化。生命周期与上面所有表相反: 本表只增不删,
--- 永不参与任何 DELETE / TRUNCATE —— 它是「已有酶的编号永远不变」的唯一依据。
+-- ID persistence. Its lifecycle is the opposite of every table above: this table is
+-- append-only, never part of any DELETE / TRUNCATE -- it is the only basis for
+-- "an existing enzyme's ID never changes".
 --
--- 刻意不加 FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id):
--- 条目从新版本 UniProt 消失时, enzyme 行会被按来源替换删掉,
--- 但映射行必须活下来, 否则该编号会被重新分配给别的条目。
+-- Deliberately no FOREIGN KEY (enzyme_id) REFERENCES enzyme(enzyme_id):
+-- when an entry disappears from a new UniProt release, its enzyme row is deleted by
+-- source replacement, but the mapping row must survive, or that ID would be
+-- reassigned to a different entry.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS enzyme_id_map (
     uniprot_id VARCHAR(20) PRIMARY KEY,
     enzyme_id VARCHAR(20) NOT NULL UNIQUE,
     first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    retired_at DATETIME NULL,          -- 条目从数据中消失时打标, 编号不回收
+    retired_at DATETIME NULL,          -- marked when the entry vanishes from the data; the ID is not recycled
     INDEX idx_enzyme_id_map_enzyme (enzyme_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- UniProt 条目合并时旧 accession 降为 secondary。靠这张表把编号接续过去,
--- 避免同一个生物学实体因为改号而被当成新酶发一个新号。
+-- When UniProt entries merge, the old accession is demoted to secondary. This table
+-- carries the ID across, so the same biological entity is not treated as a new enzyme
+-- and issued a new ID just because its accession changed.
 CREATE TABLE IF NOT EXISTS enzyme_alias_map (
     secondary_accession VARCHAR(20) PRIMARY KEY,
     enzyme_id VARCHAR(20) NOT NULL,

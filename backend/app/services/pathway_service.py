@@ -46,11 +46,12 @@ from app.services.graph_service import (
 # away. Curated DBs stay far below this.
 _MAX_COLLECT = 800
 
-#: `pathway_id` 的前缀。生成在 `_assemble_card`, 解析在 `parse_pathway_id` —— 一对,
-#: 改一个必须改另一个。
+#: The `pathway_id` prefix. Generated in `_assemble_card`, parsed in
+#: `parse_pathway_id` -- a pair; changing one requires changing the other.
 PATHWAY_ID_PREFIX = "PATH_"
 
-# `load_pathway_by_chain` 的失败原因, 由 `/bundle` 端点翻译成 error.code。
+# `load_pathway_by_chain` failure reasons, translated to error.code by the
+# `/bundle` endpoint.
 PATHWAY_BAD_ID = "BAD_ID"
 PATHWAY_UNKNOWN_COMPOUND = "UNKNOWN_COMPOUND"
 PATHWAY_NOT_REACHABLE = "NOT_REACHABLE"
@@ -451,11 +452,12 @@ def _assemble_card(
 
 
 def parse_pathway_id(pathway_id: str) -> Optional[List[str]]:
-    """``PATH_A_B_C`` -> ``[A, B, C]``；不合法返回 None。
+    """``PATH_A_B_C`` -> ``[A, B, C]``; None when malformed.
 
-    分隔符 ``_`` 是安全的：全库 734 个 compound_id 没有一个含下划线（最长 13 字符），
-    所以 ``"_".join(chain)`` 能无损拆回来。这与 ``_assemble_card`` 里生成 id 的那行
-    是一对，改格式必须两处一起改。
+    The ``_`` separator is safe: none of the 734 compound_ids in the database
+    contains an underscore (longest is 13 chars), so ``"_".join(chain)`` splits back
+    losslessly. This pairs with the line that generates the id in ``_assemble_card``;
+    a format change must touch both.
     """
     if not pathway_id or not pathway_id.startswith(PATHWAY_ID_PREFIX):
         return None
@@ -471,15 +473,19 @@ async def load_pathway_by_chain(
     source_types: Optional[List[str]] = None,
     review_statuses: Optional[List[str]] = None,
 ) -> Tuple[Optional[PathwayCard], Optional[str]]:
-    """把一条**已知**的化合物链还原成 PathwayCard，返回 ``(card, failure)``。
+    """Rebuild a **known** compound chain into a PathwayCard, returning
+    ``(card, failure)``.
 
-    与 ``search_pathways`` 的区别是它不做枚举 —— 链是给定的，只要按相邻对查边，
-    所以比搜索便宜。代价是 id 只编码了化合物链、**没编码筛选条件**：同一个 id 在不同
-    ``source_types`` / ``review_statuses`` 下可能给出不同的 edgeId/edgeGroupId，
-    因此筛选必须透传进来，否则拿到的 segment 未必是调用方当初看到的那组。
+    Unlike ``search_pathways`` it does no enumeration -- the chain is given, so it
+    only looks up edges per adjacent pair and is cheaper than a search. The cost is
+    that the id encodes only the compound chain and **not the filter conditions**:
+    the same id may yield different edgeId/edgeGroupId under different
+    ``source_types`` / ``review_statuses``, so filters must be forwarded, or the
+    segments returned may not be the set the caller originally saw.
 
-    ``card.graph`` 只含**这一条链**的边 —— 搜索接口里那张是所有返回通路的并集，
-    单取一条时"并集"没有意义。
+    ``card.graph`` holds only **this chain's** edges -- the one from the search
+    endpoint is the union of all returned pathways, and "union" is meaningless for
+    a single chain.
     """
     if len(chain) < 2:
         return None, PATHWAY_BAD_ID

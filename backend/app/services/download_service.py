@@ -93,7 +93,8 @@ FIELD_MAP: Dict[str, dict] = {
     "pubmedId":          {"table": "evidence", "column": "pubmed_id",       "label": "PubMed ID"},
     "referenceUrl":      {"table": "evidence", "column": "url",             "label": "Reference URL"},
     # --- solubility (model score) -----------------------------------------
-    # ⚠️ 这是**模型参考分**, 不是可溶性标签, 也不是校准过的概率 —— 表头别写成 "Solubility"。
+    # ⚠️ This is the **model reference score**, not a solubility label, and not a
+    # calibrated probability -- do not label the column "Solubility".
     "deepSolNetScore":   {"table": "solubility", "column": "deep_solnet_score", "label": "DeepSolNet Score"},
     "membrane":          {"table": "solubility", "column": "membrane",          "label": "Membrane"},
 }
@@ -339,7 +340,8 @@ async def _fetch_enzyme_rows(
     score_result = await db.execute(
         select(EnzymeSolubilityScore)
         .where(EnzymeSolubilityScore.enzyme_id.in_(ids))
-        # 只取 canonical 行 —— 变体分经 `isoform_id IS NULL` 剔除后不会串到酶级字段上。
+        # Take only canonical rows -- variants filtered by `isoform_id IS NULL`
+        # cannot leak into the enzyme-level fields.
         .where(EnzymeSolubilityScore.isoform_id.is_(None))
         .order_by(EnzymeSolubilityScore.enzyme_id)
     )
@@ -390,7 +392,8 @@ async def _fetch_enzyme_rows(
             elif table == "evidence":
                 row[field] = _joined(getattr(e, column, None) for e in enzyme_evidence)
             elif table == "solubility":
-                # 一酶一行(canonical), 所以是取值不是 _joined。缺行的酶留空。
+                # One row per enzyme (canonical), so take the value rather than
+                # _joined. An enzyme with no row stays empty.
                 row[field] = _val(getattr(enzyme_score, column, None)) if enzyme_score else ""
             else:  # pragma: no cover - FIELD_MAP only names the six tables above
                 row[field] = ""

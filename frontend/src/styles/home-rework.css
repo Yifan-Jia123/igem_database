@@ -6,6 +6,25 @@
 /* ---------- Structure search drawer (compound dictionary) ---------- */
 
 .structure-drawer-layer {
+  /* Celestial palette — aligned with the home page's .home-map-page. The drawer
+     portals to document.body and cannot reach the --graph-* defined there, so it
+     re-declares a local copy on its own root class (the BLAST drawer has the same
+     copy, see blast.css). */
+  --cel-gold: #ede3af;
+  --cel-gold-strong: #f0e5b2;
+  --cel-navy: #081a3a;
+  --cel-navy-2: #102b55;
+  --cel-surface: #0b1f3d;
+  --cel-deep: #06132b;
+  --cel-card: rgba(16, 43, 85, 0.55);
+  --cel-head: rgba(8, 26, 58, 0.85);
+  --cel-ink: #f8fbff;
+  --cel-ink-muted: rgba(248, 251, 255, 0.62);
+  --cel-line: rgba(255, 255, 255, 0.12);
+  --cel-line-strong: rgba(255, 255, 255, 0.26);
+  --cel-cyan: #7ad4ff;
+  --cel-coral: #ff8f8f;
+
   position: fixed;
   inset: 0;
   z-index: 1200;
@@ -21,7 +40,7 @@
 .structure-drawer-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(3, 9, 15, 0.62);
+  background: rgba(8, 26, 58, 0.55);
   opacity: 0;
   transition: opacity 0.24s ease;
 }
@@ -38,9 +57,9 @@
   width: min(580px, 94vw);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0c1825 0%, #0a141f 100%);
-  border-left: 1px solid var(--line);
-  box-shadow: var(--shadow);
+  background: linear-gradient(180deg, var(--cel-surface) 0%, var(--cel-navy) 100%);
+  border-left: 1px solid var(--cel-line-strong);
+  box-shadow: 0 22px 50px rgba(8, 26, 58, 0.22);
   transform: translateX(105%);
   transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -55,8 +74,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(16, 31, 45, 0.7);
+  border-bottom: 1px solid var(--cel-line);
+  background: var(--cel-head);
   flex: 0 0 auto;
 }
 
@@ -73,22 +92,22 @@
   border-radius: 10px;
   display: grid;
   place-items: center;
-  color: var(--teal);
-  background: rgba(114, 224, 196, 0.12);
-  border: 1px solid rgba(114, 224, 196, 0.28);
+  color: var(--cel-gold);
+  background: rgba(237, 227, 175, 0.12);
+  border: 1px solid rgba(237, 227, 175, 0.28);
 }
 
 .structure-drawer-kicker {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
 }
 
 .structure-drawer-title h2 {
   margin: 2px 0 0;
   font-size: 16px;
-  color: var(--ink);
+  color: var(--cel-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -101,14 +120,14 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--cel-line);
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
 }
 
 .structure-drawer-close:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
+  color: var(--cel-ink);
+  border-color: var(--cel-line-strong);
 }
 
 .structure-drawer-body {
@@ -122,24 +141,27 @@
 
 .structure-drawer-status {
   font-size: 12px;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
   padding: 8px 10px;
   border-radius: 8px;
+  /* The status bar is cyan (informational), kept apart from the gold primary button. */
   background: rgba(122, 212, 255, 0.06);
   border: 1px solid rgba(122, 212, 255, 0.14);
 }
 
 .structure-drawer-status.is-error {
-  color: var(--coral);
+  color: var(--cel-coral);
   border-color: rgba(255, 143, 143, 0.3);
   background: rgba(255, 143, 143, 0.07);
 }
 
 .structure-editor-block {
-  border: 1px solid var(--line);
+  border: 1px solid var(--cel-line);
   border-radius: 12px;
   overflow: hidden;
-  background: #0a1420;
+  /* Affects only the recess around the iframe; the Ketcher editor inside is a
+     prebuilt bundle that styles cannot reach. */
+  background: var(--cel-deep);
 }
 
 .structure-editor-block iframe {
@@ -161,25 +183,26 @@
   padding: 8px 12px;
   border-radius: 9px;
   font-size: 13px;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--ink);
+  border: 1px solid var(--cel-line);
+  background: rgba(16, 43, 85, 0.65);
+  color: var(--cel-ink);
 }
 
 .structure-drawer-btn:hover {
-  border-color: var(--line-strong);
+  border-color: var(--cel-line-strong);
 }
 
 .structure-drawer-btn.ghost {
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
 }
 
+/* Primary button matches the home page's gold CTA: gold fill + navy text. */
 .structure-drawer-btn.primary {
   margin-left: auto;
   border-color: transparent;
-  background: linear-gradient(135deg, #1b90c4, #1f6fb8);
-  color: #fff;
+  background: linear-gradient(135deg, #ede3af, #d8c877);
+  color: #081a3a;
 }
 
 .structure-drawer-btn.primary:disabled {
@@ -204,18 +227,18 @@
 }
 
 .structure-result-field span {
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
 }
 
 .structure-result-field strong {
-  color: var(--ink);
+  color: var(--cel-ink);
   word-break: break-all;
   font-weight: 500;
 }
 
 .structure-drawer-alert {
   font-size: 12.5px;
-  color: var(--coral);
+  color: var(--cel-coral);
   padding: 8px 10px;
   border-radius: 8px;
   background: rgba(255, 143, 143, 0.07);
@@ -223,7 +246,7 @@
 }
 
 .structure-drawer-section {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--cel-line);
   padding-top: 12px;
   display: flex;
   flex-direction: column;
@@ -239,13 +262,13 @@
 .structure-drawer-section-head h3 {
   margin: 0;
   font-size: 13.5px;
-  color: var(--ink);
+  color: var(--cel-ink);
 }
 
 .structure-drawer-section-head span {
   font-size: 12px;
-  color: var(--ink-muted);
-  background: rgba(173, 205, 234, 0.1);
+  color: rgba(237, 227, 175, 0.85);
+  background: rgba(237, 227, 175, 0.12);
   border-radius: 20px;
   padding: 2px 9px;
 }
@@ -261,9 +284,9 @@
   align-items: center;
   gap: 12px;
   padding: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--cel-line);
   border-radius: 12px;
-  background: rgba(16, 31, 45, 0.55);
+  background: var(--cel-card);
 }
 
 .structure-drawer-hit-img {
@@ -273,9 +296,9 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #0a1420;
-  border: 1px solid var(--line);
-  color: var(--teal);
+  background: var(--cel-deep);
+  border: 1px solid var(--cel-line);
+  color: var(--cel-gold);
   overflow: hidden;
 }
 
@@ -295,18 +318,18 @@
 
 .structure-drawer-hit-main strong {
   font-size: 13px;
-  color: var(--ink);
+  color: var(--cel-ink);
   line-height: 1.3;
 }
 
 .structure-drawer-hit-main span {
   font-size: 11px;
-  color: var(--cyan);
+  color: var(--cel-cyan);
 }
 
 .structure-drawer-hit-main small {
   font-size: 11px;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -319,13 +342,13 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: var(--ink-muted);
-  border: 1px solid var(--line);
+  color: var(--cel-ink-muted);
+  border: 1px solid var(--cel-line);
   background: transparent;
 }
 
 .structure-drawer-hit-link:hover {
-  color: var(--cyan);
+  color: var(--cel-cyan);
   border-color: rgba(122, 212, 255, 0.4);
 }
 
@@ -343,24 +366,24 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: var(--teal);
-  border: 1px solid rgba(114, 224, 196, 0.35);
-  background: rgba(114, 224, 196, 0.08);
+  color: var(--cel-gold);
+  border: 1px solid rgba(237, 227, 175, 0.35);
+  background: rgba(237, 227, 175, 0.08);
   cursor: pointer;
 }
 
 .structure-drawer-hit-transfer:hover {
-  color: #d9f7ec;
-  border-color: rgba(114, 224, 196, 0.65);
-  background: rgba(114, 224, 196, 0.22);
+  color: var(--cel-gold-strong);
+  border-color: rgba(237, 227, 175, 0.65);
+  background: rgba(237, 227, 175, 0.22);
 }
 
 .structure-drawer-empty {
   font-size: 12.5px;
-  color: var(--ink-muted);
+  color: var(--cel-ink-muted);
   padding: 18px;
   text-align: center;
-  border: 1px dashed var(--line);
+  border: 1px dashed var(--cel-line);
   border-radius: 10px;
 }
 
@@ -373,28 +396,47 @@
 
 /* ---------- Home filter sidebar (organism + data source) ---------- */
 
-/* 侧栏内容固定约 620px，窗口矮于 ~860px 就装不下。基础样式给的是 `overflow: visible`
-   和可压缩的网格行，结果是「Graph controls」那一行（它的 min-height 被重置成 0）被压成
-   0 高、里面 40px 的按钮溢出去盖在「Clear selection」上 —— 1280×800 实测如此，
-   1400×900 才正常。改成滚动，并且把行高钉住不让它压扁。 */
+/* Sidebar content is a fixed ~620px, which no longer fits once the window is
+   shorter than ~860px. The base styles give `overflow: visible` and compressible
+   grid rows, so the "Graph controls" row (its min-height reset to 0) is crushed to
+   0 height and its 40px button overflows onto "Clear selection" -- measured at
+   1280×800; only 1400×900 is fine. Switch to scrolling and pin the row height so it
+   cannot be squashed. */
 .home-map-page .graph-filter-sidebar {
   width: 216px;
+  /* The column width must be explicitly pinned to minmax(0,1fr). The default auto
+     column sizes to max-content and never shrinks below the available width --
+     measured, this column resolves to 207.141px while the content box is only 204px
+     (border-box 216 - 2 borders - 10 scrollbar), leaving a permanent 3.1px
+     horizontal scroll remainder. `overflow-x: hidden` only stops the user dragging,
+     not programmatic scrolling: whenever an element crosses the clip edge and takes
+     focus, the browser scrolls the sidebar and the whole content shifts sideways.
+     With min 0 the column width = available width, the horizontal remainder goes to
+     zero, and that path is closed. (Do not switch to `overflow-x: clip`: with the
+     other axis as auto, clip's computed value degrades to hidden -- no change.) */
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden auto;
   scrollbar-width: thin;
-  /* 展开方向:visibility 立刻恢复可见(延迟 0),否则往回划的那 220ms 里整块不可见。 */
+  /* Expand direction: visibility restores immediately (0 delay), otherwise the block
+     stays invisible during the 220ms it slides back. */
   transition:
     transform var(--graph-sidebar-ease),
     opacity var(--graph-sidebar-ease),
     visibility 0s linear 0s;
 }
 
-/* 收起态。侧栏是浮在地图上的图层 —— SVG 从 150px 起，侧栏占 18..234，两者本来就重叠
-   84px，所以隐藏侧栏只是把已经被盖住的那段图露出来。地图几何一个字不动，节点位置不会
-   因开合而跳动。DOM 留着不卸载，筛选项菜单的开合状态不丢。
-   这里用「平移 + 淡出」而不是 display:none —— 后者不可过渡，收起是一帧闪没的。
-   visibility 必须带上「延迟到动画结束」的写法:它本身不能被平滑插值,靠 transition-delay
-   把翻成 hidden 的时刻推到位移走完之后,这样既划得动、划完又真正从 tab 顺序和无障碍树里
-   摘掉(否则键盘 Tab 会停在一堆看不见的按钮上)。 */
+/* Collapsed state. The sidebar floats over the map -- it occupies 18..234 while the
+   canvas starts at 0 (see `.home-live-map` in app.css), so they overlap by 234px;
+   hiding the sidebar just reveals the slice of map already covered. The canvas box
+   is literally identical in both states, so the camera does not recompute and node
+   positions do not jump on toggle. The DOM stays mounted, so the filter menus keep
+   their open/closed state.
+   This uses "translate + fade" rather than display:none -- the latter cannot
+   transition, so collapsing would flash off in one frame. visibility must carry the
+   "delay to the end of the animation" form: it cannot be smoothly interpolated, so
+   transition-delay pushes the flip to hidden until after the slide finishes, letting
+   it slide out yet still dropping it from tab order and the accessibility tree (else
+   keyboard Tab lands on a pile of invisible buttons). */
 .home-map-page .graph-filter-sidebar.is-collapsed {
   transform: translateX(var(--graph-sidebar-slide));
   opacity: 0;
@@ -406,9 +448,12 @@
     visibility 0s linear 220ms;
 }
 
-/* 收起后的展开键：与收起把手同款竖版小块，只是贴在屏幕左边缘(侧栏原来的位置已经空了,
-   把手留在 234px 会孤零零悬在地图中间)。因此无字、无内边距，左右边框随边缘取舍 ——
-   贴左边缘 => 左边不描边、只圆右侧。位置用与把手完全相同的中线表达式，y 不跳。 */
+/* Reopen key after collapse: the same vertical tab as the collapse handle, only
+   pinned to the screen's left edge (the sidebar's old slot is now empty, and leaving
+   the handle at 234px would strand it alone in the middle of the map). Hence no text,
+   no padding, and borders chosen by the edge -- flush left => no left border, only the
+   right side rounded. Positioned with the exact same midline expression as the handle,
+   so y does not jump. */
 .home-map-page .home-sidebar-reopen {
   position: absolute;
   left: 0;
@@ -439,9 +484,10 @@
   color: #fff;
 }
 
-/* 两个按钮的隐藏态是同一套写法,分开写只是为了各自补自己的位移:
-   展开键往左退 24px(块只有 18px 宽,退这点就完全出屏),
-   收起把手跟着侧栏一起左移 --graph-sidebar-slide,和面板同步出场。 */
+/* The two buttons' hidden states use the same recipe; they are split only so each
+   adds its own offset: the reopen key retreats 24px left (the tab is just 18px wide,
+   enough to leave the screen), and the collapse handle shifts left with the sidebar
+   by --graph-sidebar-slide, exiting in sync with the panel. */
 .home-map-page .home-sidebar-collapse.is-hidden,
 .home-map-page .home-sidebar-reopen.is-hidden {
   opacity: 0;
@@ -457,8 +503,9 @@
   transform: translateY(-50%) translateX(-24px);
 }
 
-/* 收起时若还有筛选在生效，点一个小点 —— 无字之后没有别的地方能提示这件事。
-   竖版块只有 18px 宽，所以绝对定位顶在上沿，不跟箭头挤一行。 */
+/* If a filter is still active when collapsed, show a small dot -- with no text there
+   is nowhere else to signal this. The vertical tab is only 18px wide, so it is
+   absolutely positioned at the top edge rather than squeezed onto the arrow's row. */
 .home-sidebar-reopen-dot {
   position: absolute;
   top: 6px;
@@ -474,12 +521,15 @@
   min-height: 40px;
 }
 
-/* 「Graph controls」的菜单。app.css 给的是 `left: calc(100% + 8px)` —— 从 pill 向**右**
-   弹 230px。但侧栏容器是 `overflow: hidden auto`(横向 hidden)，裁剪框右边界就是侧栏右边缘，
-   菜单的可见宽度实测是 **0px** —— 点了等于没反应。
-   菜单只有留在裁剪框内才看得见，而 230px 装不进 204px 的内容宽，所以不能再往右弹。
-   改成在 pill 正**上方**展开、宽度贴合侧栏：上方到侧栏顶有 ~340px，容得下 230px 的菜单。
-   底边留 4px 缝，pill 上的「Graph controls」按钮仍可点(菜单不会盖住它，否则关不掉)。 */
+/* The "Graph controls" menu. app.css gives `left: calc(100% + 8px)` -- popping
+   230px to the **right** of the pill. But the sidebar container is horizontally
+   hidden (the clip box's right edge is the sidebar's right edge), so the menu's
+   measured visible width is **0px** -- clicking does nothing. It is only visible
+   while inside the clip box, and 230px does not fit the 204px content width, so it
+   cannot pop right. Switch to opening directly **above** the pill, width hugging the
+   sidebar: there is ~340px up to the sidebar top, enough for the 230px menu. Leave a
+   4px gap at the bottom so the "Graph controls" button stays clickable (the menu
+   must not cover it, or it cannot be closed). */
 .home-map-page .graph-filter-sidebar .control-home-menu {
   left: 0;
   right: 0;
@@ -488,16 +538,36 @@
   width: auto;
 }
 
-/* 纵向节奏：分隔线是 .home-filter-group 自己的 border-bottom，线**上方**的留白来自
-   它自己的 padding-bottom(10px)，线**下方**却是「本组 margin-bottom + grid gap 2px +
-   下一块 margin-top」推出来的 —— 原来 7+2+7=16px，比线上方宽了六成，看着头轻脚重。
-   这里把组间距收到 4px，线下方落到 4+2+4=10px，与线上方齐平。
-   菜单列表内部仍保持 2px 的紧排。 */
+/* The organism dropdown (`.home-filter-menu`). The base rule says `left:0 +
+   width:100%`, meaning "same width as the control above it, do not poke out of the
+   sidebar", but it also carries a `min-width: 210px` written for a wider sidebar.
+   In this 216px sidebar `.home-filter-group` is only 187px wide, so min-width pushes
+   the menu 23px outside the group and 6px past the sidebar's clip box: the menu's own
+   right border gets cut off. Worse, it **moves the whole sidebar**: the menu's search
+   input has autoFocus, so to reveal this just-clipped element the browser scrolls the
+   nearest scrollable ancestor -- the sidebar. Measured scrollLeft 0→5, and every
+   row's left in the sidebar drops by 5 (title 19→14, chip 29→24) -- this is the
+   "popup shifts the content". Drop back to `width:100%` (the dropdown matches its
+   trigger's width), the overrun disappears, and the search input has nothing to
+   scroll. The sidebar has another same-root horizontal remainder (see
+   `.graph-filter-sidebar`'s grid-template-columns). */
+.home-map-page .graph-filter-sidebar .home-filter-menu {
+  min-width: 0;
+}
+
+/* Vertical rhythm: the divider is `.home-filter-group`'s own border-bottom; the
+   whitespace **above** the line comes from its own padding-bottom (10px), while the
+   space **below** the line is produced by "this group's margin-bottom + grid gap 2px
+   + next block's margin-top" -- originally 7+2+7=16px, 60% wider than above the line,
+   so it looked top-light and bottom-heavy. Tighten the group spacing to 4px here and
+   the space below the line lands at 4+2+4=10px, level with the space above. The menu
+   list keeps its tight 2px internal packing. */
 .home-map-page .graph-filter-sidebar .home-filter-group {
   margin: 4px 10px;
 }
 
-/* 标题下面那一组(Organism)紧挨着标题,不吃 4px 的组间距 —— 组与组之间仍是 4px。 */
+/* The group right under the title (Organism) hugs the title and does not take the
+   4px group spacing -- group-to-group stays 4px. */
 .home-map-page .graph-filter-sidebar .home-filter-head + .home-filter-group {
   margin-top: 3px;
 }
@@ -525,8 +595,9 @@
   flex: 1 1 auto;
   border-bottom: 0;
   background: transparent;
-  /* 基础规则是 12px / 盒子高 34px。首页这条标题抬到 15px,盒子压到 26px ——
-     盒子一矮,「Filters」到下一行的间距跟着缩,不必再动下面的 margin。 */
+  /* Base rule is 12px / box height 34px. This home title raises to 15px and compresses
+     the box to 26px -- a shorter box tightens the gap from "Filters" to the next row,
+     so the margins below need not move. */
   font-size: 15px;
   min-height: 26px;
 }
@@ -547,15 +618,19 @@
   background: rgba(237, 227, 175, 0.2);
 }
 
-/* 收起按钮 = 侧栏右边缘外侧的一小片「抽屉把手」。必须是 aside 的**兄弟**节点而不能是
-   子节点：侧栏自己有 `overflow: hidden auto`，挂在里面的把手会被裁掉。
-   左坐标 = 侧栏左 18 + 宽 216，去掉左边框、只圆右侧，看起来像是从侧栏长出来的。 */
+/* Collapse button = a small "drawer handle" just outside the sidebar's right edge.
+   It must be a **sibling** of the aside, not a child: the sidebar itself has
+   `overflow: hidden auto`, so a handle inside it would be clipped. Left coordinate =
+   sidebar left 18 + width 216; no left border, only the right side rounded, so it
+   looks like it grows out of the sidebar. */
 .home-map-page .home-sidebar-collapse {
   position: absolute;
   left: 234px;
-  /* 竖直居中于侧栏。把手是侧栏的兄弟节点，`100%` 算的是**父容器**高度而不是侧栏高度,
-     所以不能直接写 50% —— 得用侧栏自己的两条边(上边 var(--graph-band-gap)、
-     下边 100% - 72px,与 .graph-filter-sidebar 的 top/bottom 同源)取中点。 */
+  /* Vertically centered on the sidebar. The handle is a sibling of the sidebar, so
+     `100%` resolves against the **parent** height, not the sidebar's; it cannot be
+     just 50% -- take the midpoint of the sidebar's own two edges (top
+     var(--graph-band-gap), bottom 100% - 72px, same source as `.graph-filter-sidebar`'s
+     top/bottom). */
   top: calc((var(--graph-band-gap) + 100% - 72px) / 2);
   transform: translateY(-50%);
   z-index: 6;
@@ -586,8 +661,9 @@
   color: #fff;
 }
 
-/* 系统开了「减少动态效果」就直接切,不做位移。必须把六个选择器都列上:
-   收起/展开两个方向各自读的是不同规则里的 transition,只覆盖一半会出现「收得动、弹不动」。 */
+/* When the OS enables "reduce motion", switch instantly with no offset. All six
+   selectors must be listed: the collapse/expand directions each read the transition
+   from a different rule, so covering only half yields "collapses but will not pop". */
 @media (prefers-reduced-motion: reduce) {
   .home-map-page .graph-filter-sidebar,
   .home-map-page .graph-filter-sidebar.is-collapsed,
@@ -617,9 +693,11 @@
   letter-spacing: 0.06em;
 }
 
-/* 筛选器里的说明行。`.home-filter-empty` 是居中的「没数据」占位，语义和留白都不对，
-   所以这里单开一条 —— 膜豁免是**行为上的意外**（阈值拉到 0.9 仍看得见 0.28 的蛋白），
-   必须写在屏幕上，不能只挂在 title 里。 */
+/* The explanatory line inside the filter. `.home-filter-empty` is a centered "no
+   data" placeholder -- wrong semantics and whitespace -- so this is its own rule: the
+   membrane exemption is a **behavioral surprise** (with the threshold pushed to 0.9 a
+   protein at 0.28 still shows), which must be stated on screen, not left only in a
+   title. */
 .home-filter-hint {
   margin: 0;
   font-size: 11px;
@@ -627,9 +705,10 @@
   color: rgba(248, 251, 255, 0.48);
 }
 
-/* 「Solubility score」标签 + 旁边那个问号。标签本身是 uppercase 11px，换成这句话后
-   比原来的 "Membrane" 宽约 55px，加上问号仍在 196px 内容宽里（实测见下），所以两件
-   事共用一行、不换行。 */
+/* The "Solubility score" label + the question mark beside it. The label itself is
+   uppercase 11px; after this wording change it is ~55px wider than the old "Membrane",
+   and with the question mark it still fits the 196px content width (measurements
+   below), so the two share one row, unwrapped. */
 .home-filter-label-row {
   position: relative;
   display: flex;
@@ -661,10 +740,11 @@
   color: var(--teal);
 }
 
-/* 说明卡片。**不能探出侧栏**：`.home-map-page .graph-filter-sidebar` 是
-   `overflow: hidden auto`，超出右边的部分会被直接裁掉，连滚都滚不到。所以和同组的
-   `.home-filter-menu` 用同一套定位 —— absolute + left:0 + width:100%，盖在下面
-   的 chip 上，而不是把侧栏撑宽。 */
+/* Help card. It **must not poke out of the sidebar**: `.home-map-page
+   .graph-filter-sidebar` is horizontally hidden, so anything past the right is
+   clipped outright, not even scrollable. So it uses the same positioning as the
+   sibling `.home-filter-menu` -- absolute + left:0 + width:100%, overlaying the chip
+   below rather than widening the sidebar. */
 .home-filter-help-card {
   position: absolute;
   top: calc(100% + 6px);
@@ -692,26 +772,30 @@
   color: rgba(248, 251, 255, 0.68);
 }
 
-/* 膜蛋白 / 非膜蛋白两档。侧栏写死 216px、内容宽只有 194px，两个 chip 并排要 209px
-   —— 放不下，会被挤成参差的两行。所以竖排铺满，与上面的物种 chip 同一套排法
-   （.home-species-chips 就是这么做的）。 */
+/* The membrane / non-membrane tiers. The sidebar is a fixed 216px and the content
+   width only 194px, while the two chips side by side need 209px -- they do not fit
+   and would be crushed into two ragged rows. So stack them full-width, the same
+   layout as the organism chips above (which is exactly what .home-species-chips
+   does). */
 .home-membrane-chips {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
 }
 
-/* 「Non-membrane」这一支：chip 在上、它的从属层（分数滑块）在下，所以这一支自己
-   是一个纵向列。和另一支「Membrane」并列为兄弟。 */
+/* The "Non-membrane" branch: its chip on top, its dependent layer (the score slider)
+   below, so this branch is itself a vertical column, a sibling of the "Membrane"
+   branch. */
 .home-membrane-branch {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-/* 「Non-membrane」那一档的从属层（分数滑块挂在这里）。做成有底色的子面板，而不是
-   只画一条淡竖线 —— 竖线在这个宽度里太轻，读不出从属关系，用户会以为滑块对两档
-   都生效，然后奇怪为什么膜蛋白筛不掉。 */
+/* The dependent layer of the "Non-membrane" tier (the score slider lives here). Made
+   a tinted sub-panel rather than just a faint vertical line -- the line is too light
+   at this width to read as subordination, and users would think the slider applies to
+   both tiers, then wonder why membrane proteins are not filtered out. */
 .home-filter-subgroup {
   display: flex;
   flex-direction: column;
@@ -724,7 +808,8 @@
   background: rgba(255, 255, 255, 0.045);
 }
 
-/* 「Non-membrane」没点亮时滑块没有作用对象 —— 置灰停用，别让它看起来还能拖。 */
+/* With "Non-membrane" unlit the slider has no target -- grey it out and disable it,
+   so it does not look draggable. */
 .home-filter-subgroup.is-disabled {
   opacity: 0.45;
 }
@@ -967,8 +1052,9 @@
 
 .home-map-page .home-scope-feedback {
   position: absolute;
-  /* 原值 126px 比旧标题带底(142)还高 16px,是压着标题带画的;现在改成跟着
-     标题带底走(+4 的余量),桌面端渲染值不变,窄屏由下面的媒体查询接管。 */
+  /* The old value 126px was 16px above the old title-band bottom (142), drawn on top
+     of the band; now it follows the band bottom (+4 margin). The desktop render value
+     is unchanged; narrow screens are handled by the media query below. */
   top: calc(var(--graph-band-bottom) + 4px);
   left: 50%;
   z-index: 8;
@@ -1078,19 +1164,21 @@
   color: var(--graph-navy, #081a3a);
   font-weight: 700;
   letter-spacing: 0.02em;
-  /* ⚠️ 这一格**不能是 flex**。app.css 给 `.home-map-stats span` 配了
-     `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`, 但
-     `text-overflow` 对 **flex 容器**不生效 —— 一 flex, 文本就成了匿名 flex item,
-     省略号不再作用到它身上, 长 query 被硬切在列边界(没有 `…`), 看起来像被遮挡。
-     实测(2026-10-01): 通路查询那一格内容 606px 塞进 276px 的列, 截断但无省略号。
-     改回文档流后省略号才会出现, 所以这里用 `display:block` + 下面 ::before 的
-     inline-block 对齐, 而不是 flex + align-items。 */
+  /* ⚠️ This cell **must not be flex**. app.css pairs `.home-map-stats span` with
+     `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`, but
+     `text-overflow` does not apply to a **flex container** -- once flex, the text
+     becomes an anonymous flex item, the ellipsis no longer reaches it, and a long
+     query is hard-cut at the column boundary (no `…`), looking like it is being
+     covered. Measured (2026-10-01): the pathway-query cell's 606px content in a 276px
+     column is truncated without an ellipsis. Only back in normal flow does the
+     ellipsis appear, so this uses `display:block` + the inline-block alignment of the
+     ::before below, not flex + align-items. */
   display: block;
 }
 
 .home-map-page .home-map-stats .home-stats-scope::before {
   content: '';
-  /* 非 flex 布局下, 这个圆点靠 inline-block + vertical-align 与文字对齐 */
+  /* Under non-flex layout, this dot aligns to the text via inline-block + vertical-align */
   display: inline-block;
   width: 9px;
   height: 9px;
@@ -1101,15 +1189,18 @@
   box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18);
 }
 
-/* 四个 scope 分支都只渲染 **3 个 span**(查看 graphExperience.tsx:2971/2977/2983/2994),
-   且 `.home-stats-scope` 恒为第一个; 只有不带 scope 的默认分支是 4 个 span, 也没有这个类。
-   所以 `:has(.home-stats-scope)` 精确等价于「这一排是 3 格」, 不会误伤默认分支。
-   而 app.css 的轨道是 `repeat(4, ...)` —— 通路分支那第 4 格**永远是空的**,
-   第 1 格却在截断。实测(2026-10-01, 1366 视口): 4 等分每格 276px, 而真实 query
-   `Pathways · "CHEBI:60374 → CHEBI:15440"` 要 406px, 长 query 要 586px —— 都在硬切。
-   改成「第 1 格吃掉剩余, 两格计数各按内容宽」后, 第 1 格 754px(够装 586px),
-   两格计数仍是各自需要的 181 / 187px, 三格全不截断。
-   `auto` 轨道的尺寸由内容决定, 长 query 只会挤压自己那一格, 不会把计数挤没。 */
+/* All four scope branches render only **3 spans** (see graphExperience.tsx:2971/2977/2983/2994),
+   and `.home-stats-scope` is always the first; only the default branch without scope
+   has 4 spans and lacks this class. So `:has(.home-stats-scope)` is exactly equivalent
+   to "this row has 3 cells" and will not falsely hit the default branch. But app.css's
+   track is `repeat(4, ...)` -- the pathway branch's 4th cell is **always empty** while
+   the 1st is truncating. Measured (2026-10-01, 1366 viewport): four equal parts at
+   276px each, while a real query `Pathways · "CHEBI:60374 → CHEBI:15440"` needs 406px
+   and a long query 586px -- both are hard-cut. After switching to "the 1st cell eats
+   the remainder, the two counts each size to content", the 1st cell is 754px (enough
+   for 586px) and the two counts stay at their needed 181 / 187px -- all three cells
+   untruncated. An `auto` track sizes to content, so a long query only squeezes its own
+   cell, never the counts. */
 @media (min-width: 761px) {
   .home-map-page .home-map-stats:has(.home-stats-scope) {
     grid-template-columns: minmax(0, 2fr) auto auto;
@@ -1146,7 +1237,8 @@
   align-items: center;
   width: fit-content;
   margin: 0 0 6px;
-  /* 1px 6px, 不是 1px 8px —— 见下面 score chip 的注释, 两个 chip 同款必须同 padding。 */
+  /* 1px 6px, not 1px 8px -- see the score chip comment below; the two chips share one
+     style and must share padding. */
   padding: 1px 6px;
   border: 1px solid rgba(114, 224, 196, 0.45);
   border-radius: 999px;
@@ -1157,25 +1249,28 @@
   white-space: nowrap;
 }
 
-/* 模型参考分 chip。和上面的 E-value chip 同款，只是挂甲色以便和 E-value 区分开
-   （两个 chip 会在同一条卡片上同时出现）。膜蛋白在文案里加 `· membrane` ——
-   卡片上要说明的正是「它为什么没被阈值筛掉」。
+/* Model reference-score chip. Same style as the E-value chip above, just in gold to
+   tell it apart from E-value (both chips appear on the same card together). For a
+   membrane protein the label adds `· membrane` -- what the card needs to explain is
+   exactly "why it was not filtered by the threshold".
 
-   ⚠️ 宽度是**在浏览器里量出来的**，别随手改 padding / 文案 / letter-spacing。
-   卡片栈 `min(430px, 100vw-210px)` 下有个真实卡片量得：**文案列只有 202px**
-   （按 CSS 手算会得到 204，差 2px，别信手算）。卡片上最长的那条
-   `DeepSolNet Score 0.991 · membrane` 在本机字体下量得：
+   ⚠️ The width is **measured in the browser**; do not casually change padding / label
+   / letter-spacing. Under the card stack `min(430px, 100vw-210px)` a real card
+   measured: **the label column is only 202px** (hand-computing from CSS gives 204,
+   2px off -- do not trust hand math). The card's longest line
+   `DeepSolNet Score 0.991 · membrane` measured under local fonts:
 
-     1px 8px + 0.01em  = 207.5px   超 5.5px
-     1px 6px + 0.01em  = 203.5px   超 1.5px
-     1px 6px + 0     = 200.4px   装得下, 余 1.6px   ← 现在这组
+     1px 8px + 0.01em  = 207.5px   over by 5.5px
+     1px 6px + 0.01em  = 203.5px   over by 1.5px
+     1px 6px + 0     = 200.4px   fits, 1.6px spare   ← the current set
 
-   本机实测**装了 Inter**（`document.fonts.check` = true），且 Inter 比 Segoe UI /
-   Arial 都宽（189.5 vs 170 / 174），所以上面是最大情形，换台机器只会更窄。
-   超出的后果不是溢出可见，而是被 `.enzyme-card-copy > span` 的
-   `word-break: break-word` 在词中间折断，变成两行胶囊 —— 所以
-   `white-space: nowrap` 是必须的：万一还差几 px，它顶进旁边 12px 的列间距里（看不出来），
-   而不是把 `membrane` 折成 `membra` / `ne`。 */
+   Locally **Inter is installed** (`document.fonts.check` = true), and Inter is wider
+   than Segoe UI / Arial (189.5 vs 170 / 174), so the above is the worst case; another
+   machine is only narrower. The consequence of overflow is not visible spill but
+   `.enzyme-card-copy > span`'s `word-break: break-word` breaking mid-word into a
+   two-line capsule -- so `white-space: nowrap` is required: if a few px are still
+   short it pushes into the adjacent 12px column gap (invisible), rather than folding
+   `membrane` into `membra` / `ne`. */
 .home-map-page .enzyme-card .enzyme-card-score-chip {
   display: inline-flex;
   align-items: center;
@@ -1220,7 +1315,7 @@
   opacity: 0.9;
 }
 /* ---------------------------------------------------------------------------
- * Clickable brand ("Starase Atlas") — home control on both top bars.
+ * Clickable brand ("Atlas EDGE") — home control on both top bars.
  * The brand used to be inert text; now it navigates home + clears the search
  * state. Strip the native button chrome while keeping the existing brand look,
  * then give it a subtle hover/focus affordance. Both pages mount the brand
@@ -1243,11 +1338,12 @@
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 
-/* 品牌图标换成了真正的 logo（`frontend/public/starase-atlas-logo.png`）。
-   该文件是透明底的，图案自带 4 个内边距，所以给 3px 的 padding 让它别贴着
-   `.atlas-logo` 那圈金色描边；`object-fit: contain` 保证 30px（首页地图）
-   和 36px（其它页顶栏）两个尺寸下都不变形。
-   外框（金边 + 淡金底）和 hover 态都沿用原来的 `.atlas-logo`，没有另起一套。 */
+/* The brand icon was swapped for the real logo (`frontend/public/starase-atlas-logo.png`).
+   That file has a transparent background and the artwork carries its own inset on all
+   four sides, so a 3px padding keeps it off `.atlas-logo`'s gold ring; `object-fit:
+   contain` keeps it undistorted at both 30px (home map) and 36px (other pages' top
+   bar). The frame (gold border + pale gold fill) and hover state reuse the original
+   `.atlas-logo`; no separate set was started. */
 .atlas-logo-mark {
   display: block;
   width: 100%;
@@ -1507,9 +1603,10 @@
   border-color: rgba(237, 227, 175, 0.9);
 }
 
-/* Start ⇄ End 互换。挨着 End 胶囊而不是放进下面的 actions 行 —— 互换属于这对
-   端点，不属于「Add via / Find pathways」那组动作。尺寸与 `.pw-slot-chip` 同高，
-   两种状态共 30/32px 会让这一行参差。 */
+/* Start ⇄ End swap. Sits next to the End capsule rather than in the actions row
+   below -- swapping belongs to this pair of endpoints, not to the "Add via / Find
+   pathways" group. Its height matches `.pw-slot-chip`; two states at 30/32px would
+   make this row ragged. */
 .pw-swap-ends {
   display: inline-flex;
   align-items: center;
@@ -1531,7 +1628,8 @@
   background: rgba(237, 227, 175, 0.16);
 }
 
-/* 两端都空时互换是空操作 —— 置灰而不是让它无声地什么都不做。只填了一端仍然可用。 */
+/* With both ends empty the swap is a no-op -- grey it out rather than let it
+   silently do nothing. With only one end filled it stays usable. */
 .pw-swap-ends:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -1594,7 +1692,8 @@
   left: auto;
   width: min(470px, calc(100vw - 340px));
   max-height: calc(100vh - 298px);
-  /* 与 `.home-map-page .live-*` 一致：标题栏走普通流，不再为它预留顶部内边距。 */
+  /* Consistent with `.home-map-page .live-*`: the heading is in normal flow, no top
+     padding reserved for it anymore. */
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -1689,9 +1788,10 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  /* 原来是 85% 透明度的藏青 + 淡金 11px：白卡片透上来后圆底被冲淡成蓝灰，
-     金字压在上面就发闷、看不出是「第几步」。改成实底藏青 + 满不透明度淡金、
-     字号提到 12px —— 同一套色板，只是不再透。对比度 13.3:1。 */
+  /* Originally 85%-opacity navy + pale gold 11px: with the white card showing through,
+     the circle washed out to blue-grey and the gold text on it looked muddy, hard to
+     read as "which step". Changed to solid navy + full-opacity pale gold, size up to
+     12px -- same palette, just no longer translucent. Contrast 13.3:1. */
   background: var(--graph-navy, #081a3a);
   color: var(--graph-gold, #f0e5b2);
   font: 700 12px/1 Inter, ui-sans-serif, system-ui, sans-serif;
@@ -1775,8 +1875,8 @@
 }
 
 /* ---------------------------------------------------------------------------
- * 连星 ("trace a route"): pick the map's compounds one hop at a time from the
- * session start compound to its end, then return the traced chain as a card.
+ * Trace a route: pick the map's compounds one hop at a time from the session
+ * start compound to its end, then return the traced chain as a card.
  * ------------------------------------------------------------------------- */
 
 /* Results-header actions (currently just the close button). */
@@ -1787,9 +1887,10 @@
   flex: 0 0 auto;
 }
 
-/* Floating 连星 pill, parked directly beneath the composer/launcher capsule so
-   it never overlaps the pathway card list on the right. 原值是 196px,那等于
-   「标题带底 142 + 54」;标题带降到 64px 后跟着走,由变量推出,别再写死。 */
+/* Floating "trace a route" pill, parked directly beneath the composer/launcher
+   capsule so it never overlaps the pathway card list on the right. The old value was
+   196px, which was "title-band bottom 142 + 54"; after the title band dropped to 64px
+   it follows the variable, so do not hardcode it again. */
 .home-map-page .trace-start-button {
   position: absolute;
   top: calc(var(--graph-band-bottom) + 54px);
@@ -1972,7 +2073,7 @@
    Pathway detail sub-view (single-route map view) + per-step enzyme picker.
    ========================================================================== */
 
-/* “详情” at the far right of each pathway result row — navy/gold round button
+/* "Detail" at the far right of each pathway result row — navy/gold round button
    matching the queue toggle's visual language (a flex third child). */
 .home-map-page .pathway-detail-button {
   flex: 0 0 auto;
@@ -2094,8 +2195,8 @@
 /* Per-step enzyme picker: NON-blocking right slide-in drawer (navy header + gold
  * CTA). There is deliberately no full-viewport layer/backdrop and no backdrop
  * click-to-close: the detail map stays fully operable behind the panel and map
- * interaction never closes it (only its own 关闭 button / 加入下载表 do). The body
- * shows ONE current step at a time under a step-bar of chips. */
+ * interaction never closes it (only its own Close button / Add to download table
+ * do). The body shows ONE current step at a time under a step-bar of chips. */
 .pw-enzyme-drawer {
   position: absolute;
   top: 0;
@@ -2265,8 +2366,9 @@
   font: 600 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
   color: #0e1726;
   min-width: 0;
-  /* 「A → B」两端的化合物名。含空格的常规名字本身就会折行，这两行是兜底：
-     整串没有可断点的名字（连字符/空格都没有时）不至于横向顶到「已选 N」上。 */
+  /* The compound names at both ends of "A → B". Ordinary names with spaces wrap on
+     their own; these two lines are the fallback: a name with no break point at all
+     (no hyphen or space) should not push sideways into "N selected". */
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2317,7 +2419,7 @@
 
 /* Candidate card: UniProt entry (accession) is the PRIMARY label; the enzyme
  * name (when present and different) sits beneath it, then organism + source.
- * The row = a click-to-toggle label (checkbox + copy) plus a trailing 详情
+ * The row = a click-to-toggle label (checkbox + copy) plus a trailing Detail
  * button that opens the app-wide enzyme detail page for that library enzyme. */
 .pw-drawer-candidate {
   display: flex;
@@ -2338,7 +2440,7 @@
   background: rgba(237, 227, 175, 0.28);
 }
 
-/* Clickable part: checkbox + copy block (NOT the trailing 详情 button). */
+/* Clickable part: checkbox + copy block (NOT the trailing Detail button). */
 .pw-drawer-candidate-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -2473,15 +2575,18 @@
 }
 
 /* ---------------------------------------------------------------------------
-   合并抽屉（`.merged-enzyme-drawer`）：点合并卡 / 合并线后，逐条列出被折起来的酶。
-   复用 `.pw-enzyme-drawer` 的整套骨架与 `.pw-drawer-candidate*` 行样式（同一个视觉
-   语言），这里只补它多出来的三件东西：筛选栏、条数说明、「Show more」。
+   Merged drawer (`.merged-enzyme-drawer`): after clicking a merged card / merged
+   line, list the folded-together enzymes one per row. Reuses the whole skeleton of
+   `.pw-enzyme-drawer` and the `.pw-drawer-candidate*` row styles (the same visual
+   language); this adds only its three extra things: the filter bar, the count note,
+   and "Show more".
    --------------------------------------------------------------------------- */
 .merged-enzyme-drawer {
   width: min(460px, 94vw);
 }
 
-/* 筛选栏：钉在头部与列表之间。3,595 条的列表靠滚动看，筛选框必须始终可达。 */
+/* Filter bar: pinned between the header and the list. A 3,595-row list is browsed by
+   scrolling, so the filter box must stay reachable at all times. */
 .merged-drawer-bar {
   flex: 0 0 auto;
   padding: 10px 16px 8px;
@@ -2533,7 +2638,8 @@
   background: rgba(8, 26, 58, 0.08);
 }
 
-/* 合并抽屉的头部把来源与化合物对分行写：化合物对可能很长。 */
+/* The merged drawer's header puts source and compound pair on separate lines: the
+   compound pair can be long. */
 .merged-enzyme-drawer .pw-drawer-header > div {
   display: flex;
   flex-direction: column;
@@ -2548,8 +2654,9 @@
   font-weight: 600;
 }
 
-/* 「Show 100 more」：分批渲染的出口。数字写清楚，让用户知道还剩多少 ——
-   不这么写的话，看到 100 行会以为整组就只有 100 个酶。 */
+/* "Show 100 more": the escape hatch for batched rendering. Spell out the number so
+   users know how many remain -- otherwise, seeing 100 rows they would think the whole
+   group is only 100 enzymes. */
 .merged-drawer-more {
   align-self: center;
   display: inline-flex;
@@ -2575,13 +2682,16 @@
 }
 
 /* ---------------------------------------------------------------------------
-   首页地图常驻。地图在整个会话里都挂载着, 离开首页只是把它移出布局 ——
-   这样从酶详情页/检索页回来时, 通路结果、相机、选中、筛选全都还在。
-   ⚠️ 必须是 `display: none`, 不能用 `visibility: hidden` 或挪到屏幕外:
-   根节点被 app.css 钉了 `height: 100vh`, 那两种写法会留下一个占满视口
-   但看不见的块, 把内页顶下去。`display: none` 才真正把它从布局里拿掉。
-   加 `!important` 是因为后面还有 table-results.css / enzyme-atlas.css 两层,
-   将来谁给 `.home-map-page` 写一条 `display` 都不该把隐藏顶掉。
+   The home map is resident. The map stays mounted for the whole session; leaving
+   the home page only takes it out of layout -- so returning from the enzyme detail
+   page / search page finds pathway results, camera, selection, and filters all
+   still there.
+   ⚠️ It must be `display: none`, not `visibility: hidden` or moving it off-screen:
+   the root node is pinned to `height: 100vh` by app.css, so those two leave a
+   viewport-filling but invisible block that pushes inner pages down. Only
+   `display: none` truly removes it from layout.
+   `!important` is added because table-results.css / enzyme-atlas.css still follow;
+   whatever later writes a `display` for `.home-map-page` must not override the hide.
 --------------------------------------------------------------------------- */
 .home-map-page.map-hidden {
   display: none !important;

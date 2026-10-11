@@ -13,7 +13,7 @@ async def get_enzyme_detail(
     enzyme_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """装配在 `app.services.entity_service.load_enzyme_detail`，与 `/bundle` 共用。"""
+    """Assembled in `app.services.entity_service.load_enzyme_detail`, shared with `/bundle`."""
     detail = await load_enzyme_detail(db, enzyme_id)
     if detail is None:
         return ApiResponse(success=False, error={"code": "NOT_FOUND", "message": f"Enzyme {enzyme_id} not found"})

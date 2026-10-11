@@ -8,7 +8,8 @@ from app.schemas.common import ApiResponse
 
 router = APIRouter()
 
-# 这些模块的取值域是**全量**酶 (table 检索 / BLAST 结果表 / 下载)
+# These modules are scoped to the **full** set of enzymes
+# (table search / BLAST results table / download)
 _FULL_DOMAIN_MODULES = {"table", "blast", "enzyme_table", "download"}
 
 
@@ -17,11 +18,14 @@ async def get_filter_options(
     module: str = Query(None, description="当前模块"),
     db: AsyncSession = Depends(get_db),
 ):
-    """各筛选器的可选值。``organisms`` 的取值域随 ``module`` 变。
+    """Allowed values for each filter. ``organisms``'s domain varies by ``module``.
 
-    图 / 首页只用有反应注释的酶 (见 ``graph_service``), 所以它的物种下拉必须收窄到
-    同一批酶 —— 否则下拉里会出现一个"选了图就空"的物种: 全量库里 96k 个酶有一万多个
-    物种, 而能进图的只有一小部分。table / blast 的结果表是全量域, 保持全量物种。
+    Graph / home use only enzymes with a reaction annotation (see
+    ``graph_service``), so its species dropdown must be narrowed to that same
+    batch of enzymes -- otherwise the dropdown would show a species that "is
+    empty once the graph is picked": the full database's 96k enzymes span more
+    than ten thousand species, while only a small part can enter the graph. The
+    table / blast results tables are the full domain, so they keep all species.
     """
     organism_query = select(distinct(Enzyme.organism_name)).where(
         Enzyme.organism_name.isnot(None)
@@ -33,11 +37,14 @@ async def get_filter_options(
     result = await db.execute(organism_query)
     organisms = sorted([r[0] for r in result.all()])
 
-    # 搜索集的候选项 = **真的有行的**来源 + 各自条数。
-    # 选择器不能列出 0 行的集合: 选中就是空结果, 而用户看不出那是自己选的。
-    # 今天恰好是 swiss_prot / trembl (另两个枚举值 0 行); 以后真有 ai_literature
-    # 数据时会自动出现, 前端不必改。计数顺带喂给常驻指示模块显示成 "TrEMBL (94,334)"。
-    # 走 idx_enzyme_source_review (source_type, review_status) 的前导列, 索引覆盖。
+    # Search-set candidates = sources that **actually have rows**, plus each count.
+    # The selector must not list a 0-row set: picking it gives an empty result,
+    # and the user can't tell that was their own choice. Today that's exactly
+    # swiss_prot / trembl (the other two enum values have 0 rows); if
+    # ai_literature data ever exists it will appear automatically, no frontend
+    # change needed. The counts are also fed to the resident indicator module and
+    # shown as "TrEMBL (94,334)". Hits idx_enzyme_source_review's leading column
+    # (source_type, review_status), index-covered.
     source_rows = await db.execute(
         select(Enzyme.source_type, func.count()).group_by(Enzyme.source_type)
     )

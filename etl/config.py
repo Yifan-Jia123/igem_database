@@ -1,8 +1,10 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# IGEM_DATA_DIR 用于沙箱: 让 ETL 读另一份 for_* (如 _sandbox/), 而不是真实数据目录。
-# 没有它就无法在动真库之前验证「幂等 / 编号不变」这些不变量。
+# IGEM_DATA_DIR is for the sandbox: it points the ETL at another for_* set
+# (e.g. _sandbox/) instead of the real data directory.
+# Without it, invariants like "idempotent / stable numbering" cannot be checked
+# before touching the real database.
 DATA_DIR = os.getenv("IGEM_DATA_DIR") or os.path.dirname(BASE_DIR)
 
 DB_CONFIG = {

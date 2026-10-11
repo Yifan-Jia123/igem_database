@@ -1,56 +1,68 @@
-"""ETL Step 6: 从所有 TSV 来源构建宽表检索索引。
+"""ETL Step 6: build the wide-table search index from all TSV sources.
 
-## 这张表同时有 B 类和 C 类的行 —— 必须拆开处理
+## This table holds both class B and class C rows -- they must be handled separately
 
-判据是 `enzyme_id` 是否为空(`enzyme_id` 有 FK 指向 enzyme):
+The criterion is whether `enzyme_id` is null (`enzyme_id` has an FK to enzyme):
 
-| 行 | 来源 | 处理 |
+| Row | Source | Handling |
 |---|---|---|
-| `enzyme_id IS NULL` | 只由 `_add_compounds` 产生: 化合物**实体本身**的行 | **B 类**: 与来源无关, 由全局文件完整重建 |
-| `enzyme_id IS NOT NULL` | 酶/反应/GO/文献/序列链接/isoform/化合物-酶关联 | **C 类**: 按来源替换 |
+| `enzyme_id IS NULL` | produced only by `_add_compounds`: the compound **entity itself** | **class B**: source-independent, fully rebuilt from global files |
+| `enzyme_id IS NOT NULL` | enzyme/reaction/GO/reference/sequence link/isoform/compound-enzyme association | **class C**: replaced by source |
 
-⚠️ 整表归 C 是**错的**: `WHERE enzyme_id IN (SELECT ... WHERE source_type=<s>)`
-永远匹配不上 NULL 行, 于是这些行每次刷新都**再插一份**, 单调增长。
-反过来整表 truncate 又破坏来源隔离(刷新 TrEMBL 会把 SwissProt 的索引行清掉)。
-所以 `_clear_index()` 分两段清。
+⚠️ Treating the whole table as class C is **wrong**: `WHERE enzyme_id IN (SELECT ...
+WHERE source_type=<s>)` never matches NULL rows, so on every refresh those rows are
+**inserted again**, growing monotonically. Conversely, truncating the whole table
+breaks source isolation (refreshing TrEMBL would wipe SwissProt's index rows). So
+`_clear_index()` clears in two parts.
 
-**为什么 B 类可以整段清掉重建**: 它们只读 `for_compound_card/...terpene_compounds.tsv`
-和 `for_graph/all_nodes.tsv` 这两张**汇合表**(无后缀、与来源无关), 两种模式下读到的东西
-完全一样 —— 所以清掉再建既不破坏隔离, 也不会因为「只刷新一个来源」而少数据。
-而「值变了要反映出来」要求清: 索引行的身份是 (实体, 字段, 值), 化合物 SMILES 变了
-就是换了一行, 旧行不再为真, 留着就是脏数据。
+**Why class B can be cleared and rebuilt wholesale**: they read only the
+`for_compound_card/...terpene_compounds.tsv` and `for_graph/all_nodes.tsv` **hand-off
+tables** (no suffix, source-independent), and both modes read exactly the same thing
+-- so clearing and rebuilding breaks neither isolation nor data when "only one source
+is refreshed". And "a changed value must be reflected" requires the clear: an index
+row's identity is (entity, field, value), so a changed compound SMILES is a different
+row, the old row is no longer true, and keeping it is dirty data.
 
-## 列宽不写死
+## Column width is not hard-coded
 
-`_add_sequence_links` 原先把宽度写死成 `range(1, 25)` / `range(1, 12)`。
-实测现表 `INSDC_Nuc_ID_24` 与 `RefSeq_Prot_ID_11` **各有 1 条真实数据** ——
-零余量, 再出现一个 25 段链接的条目就会被静默丢掉。改成像 `Enzyme_N` 一样按列头推导。
+`_add_sequence_links` used to hard-code the width as `range(1, 25)` / `range(1, 12)`.
+Measured on the current table, `INSDC_Nuc_ID_24` and `RefSeq_Prot_ID_11` **each have
+exactly 1 real row** -- zero slack, so one more entry with a 25-segment link would be
+silently dropped. Changed to derive it from the column header, like `Enzyme_N`.
 
-## 边生成边写(方案 Phase 3.1)
+## Generate-and-write streaming (plan Phase 3.1)
 
-原来是「把全部行攒进 `list[dict]` -> `pd.DataFrame(rows)` 再复制一份 ->
-`drop_duplicates` 建一次全量哈希 -> 一次 `to_sql`」—— 三重峰值。
-996 个酶时 13.8 万行还好, 96k 酶下实测每酶 34–90 行(见下), 即 **330 万–870 万行**,
-峰值会到 GB 级。现在改为**逐表逐切片**生成、去重、落库, 峰值与总行数无关。
+Previously it was "accumulate all rows into `list[dict]` -> `pd.DataFrame(rows)` then
+copy once more -> `drop_duplicates` building one full-database hash -> one `to_sql`" --
+a triple peak. At 996 enzymes 138k rows was fine, but at 96k enzymes the measured
+34-90 rows per enzyme (see below) means **3.3M-8.7M rows**, peaking at GB scale. Now it
+generates, de-duplicates and writes **per table, per slice**, so the peak is independent
+of the total row count.
 
-**与原来的行集合等价**, 论证分两步:
+**Equivalent to the original row set**, argued in two steps:
 
-1. 去重键 `DEDUPE_COLS` 里含 `source_file`, 而每个逻辑表各对应一个不同的 `source_file`
-   —— 所以「跨文件的重复」本来就不算重复(全量去重也不会合并它们),
-   逐表去重与全量去重等价;
-2. 同一文件内部的重复行, **全部来自单个输入行内部**(同一个值出现在多个列位, 例如
-   `Recommended name` 与 `Recommended Name` 两列同值、同一 INSDC 链接在多列重复出现),
-   而一个输入行整体落在同一个切片里 —— 所以逐切片去重也等价。
+1. The dedupe key `DEDUPE_COLS` includes `source_file`, and each logical table maps to
+   a different `source_file` -- so "cross-file duplicates" were never duplicates to
+   begin with (a full-database dedupe would not merge them either), and per-table dedupe
+   is equivalent to full dedupe;
+2. Duplicate rows within a single file **all come from inside a single input row** (the
+   same value appearing in several column positions, e.g. `Recommended name` and
+   `Recommended Name` holding the same value, or one INSDC link repeated across several
+   columns), and an input row falls entirely within one slice -- so per-slice dedupe is
+   equivalent too.
 
-第 2 条不是推断, 是**实测**的: 沙箱里全量去重共去掉 **1,474 / 166,655** 行(0.9%),
-按 `source_file` 分布为 rhea 128 / sequence_links 384 / rhea_summary 384 /
-terpene_only 350 / pairs 228, 且「按 6 列键去重」与「按全列去重」得到的行数**完全相同**
-(都是 165,181)—— 即被去掉的每一行都与另一行**逐列相同**, 没有一例是「键相同但内容不同」。
+Point 2 is not an inference, it is **measured**: a full-database dedupe in the sandbox
+removed **1,474 / 166,655** rows (0.9%), distributed by `source_file` as rhea 128 /
+sequence_links 384 / rhea_summary 384 / terpene_only 350 / pairs 228, and "dedupe by the
+6-column key" and "dedupe by all columns" give **exactly the same** row count (both
+165,181) -- i.e. every removed row was **column-for-column identical** to another, with
+no case of "same key but different content".
 
-> ⚠️ **残留**: 若某个源文件里出现了**完全重复的输入行**(源侧异常, 实测未出现),
-> 且这两行被切片边界分开, 逐片去重就会漏掉。所以落库后加了一句
-> 「重复事实检查」(按去重键 GROUP BY) 把它显式量出来 —— 计数不为 0 就会打印 WARN,
-> 而不是静默留下重复行。
+> ⚠️ **Residual risk**: if a source file contains a **fully duplicated input row** (a
+> source-side anomaly, not observed in practice) and the two rows straddle a slice
+> boundary, per-slice dedupe would miss it. So a "duplicate-fact check" (GROUP BY the
+> dedupe key) was added after the write to measure it explicitly -- a non-zero count
+> prints a WARN rather than silently leaving duplicate rows.
 """
 import hashlib
 import re
@@ -66,7 +78,8 @@ from sources import (columns_of, indexed_groups, indexed_width, read_merged,  # 
 
 engine = create_engine(DB_URL)
 
-# 分段表(11 张): 每个来源一份 for_*/<name>.<source>.tsv, 由 sources.read_segmented 取并集。
+# Source-segmented tables (11): one per source, for_*/<name>.<source>.tsv, unioned by
+# sources.read_segmented.
 TERPENE_ONLY_FILE = "for_graph/uniprotkb_terpene_only.tsv"
 RHEA_SUMMARY_FILE = "for_enzyme_reaction_card/uniprotkb_rhea_summary.tsv"
 ENZYME_MERGED_FILE = "for_enzyme_reaction_card/uniprotkb_enzyme_merged.tsv"
@@ -78,20 +91,23 @@ SEQ_LINKS_FILE = "for_enzyme_detail/child_tables/uniprotkb_sequence_links.tsv"
 GO_FILE = "for_enzyme_detail/child_tables/uniprotkb_go.tsv"
 ISOFORM_FILE = "for_enzyme_detail/child_tables/uniprotkb_isoform_sequences.tsv"
 
-# 汇合表(无后缀): 跨条目聚合, 与来源无关 —— 同一对底物-产物天然被两个来源的酶共享。
+# Hand-off tables (no suffix): aggregated across entries, source-independent -- the same
+# substrate-product pair is naturally shared by enzymes from both sources.
 COMPOUND_FILE = "for_compound_card/uniprotkb_terpene_compounds.tsv"
 ALL_NODES_FILE = "for_graph/all_nodes.tsv"
 TERPENE_PAIRS_FILE = "for_graph/uniprotkb_terpene_pairs.tsv"
 
 EXCLUDED_COMMON_COMPOUND_IDS = {"CHEBI:15377", "CHEBI:15378", "CHEBI:33019"}
 
-# ---- 分批参数(方案 Phase 3.1) ----
-# 按输入行数切片的粒度: 它决定单次「未去重行」的峰值。按实测每输入行产出的行数
-# (sequence_links 最宽: 每段链接约 20 行, 实测宽度上限 31 段)取, 2000 行 ≈ 4 万输出行。
+# ---- Batching parameters (plan Phase 3.1) ----
+# Slice granularity in input rows: it sets the peak of "undeduped rows" per pass. Derived
+# from the measured rows produced per input row (sequence_links is the widest: ~20 rows
+# per link segment, measured width cap 31 segments): 2000 rows -> ~40k output rows.
 INPUT_CHUNK = 2000
-# 攒够这么多**去重后**的行就落一次库。10 万行 ≈ 几十 MB, 与总量无关。
+# Flush to the database once this many **deduped** rows have accumulated. 100k rows ≈
+# tens of MB, independent of the total.
 FLUSH_ROWS = 100000
-# to_sql 每次提交的行数(在 FLUSH_ROWS 之后再切一层, 控制单个 INSERT 的大小)。
+# Rows per to_sql commit (one more layer under FLUSH_ROWS, to bound a single INSERT).
 INSERT_CHUNK = 10000
 
 
@@ -117,9 +133,10 @@ def _hash(value):
 
 
 def _add(rows, entity_type, entity_id, enzyme_id, source_file, field_name, value, weight):
-    """source_file 传**逻辑表名**(无后缀的 rel path), 不传磁盘上那份分段文件的路径 ——
-    否则同一张逻辑表在 SwissProt / TrEMBL 行上会写成两个不同的值。它只作描述用
-    (全仓库没有任何查询或 UI 读它), 保持稳定即可。"""
+    """source_file takes the **logical table name** (the unsuffixed rel path), not the
+    path of the on-disk segmented file -- otherwise the same logical table would be
+    written as two different values on SwissProt / TrEMBL rows. It is descriptive only
+    (no query or UI in the repo reads it), so it just needs to stay stable."""
     value = _clean(value)
     entity_id = _clean(entity_id)
     if not value or not entity_id:
@@ -161,8 +178,9 @@ def _filter_chebi_ids(value):
     return "; ".join(dict.fromkeys(ids)) if ids else None
 
 
-# 酶字段表: (源列名, 索引里的 field_name, 权重)。同一 field_name 可以来自不同拼写的列
-# (names_split 用 `Recommended name`, master 用 `Recommended Name`)。
+# Enzyme field table: (source column, field_name in the index, weight). The same
+# field_name can come from differently spelled columns (names_split uses `Recommended
+# name`, master uses `Recommended Name`).
 ENZYME_FIELDS = [
     ("Entry", "uniprot_id", 95),
     ("UniProt Link", "uniprot_url", 35),
@@ -176,14 +194,17 @@ ENZYME_FIELDS = [
 
 
 def _enzyme_usecols(rel, only=None):
-    """本文件里**确实存在**的那些酶字段列 —— 只读这些。
+    """The enzyme field columns that **actually exist** in this file -- read only those.
 
-    master 是宽度动态的宽表(实测 TrEMBL 段 473 列), 而它只贡献 3 个字段
-    (Entry / UniProt Link / Recommended Name): 全列解析 96k × 473 是 GB 级峰值,
-    而这一步要的只是 3 列。缺列不报错 —— 与原来的 `if column in df.columns` 行为一致。
+    master is a dynamically wide table (measured TrEMBL segment 473 columns), yet it
+    contributes only 3 fields (Entry / UniProt Link / Recommended Name): parsing all
+    columns at 96k x 473 peaks at GB scale, while this step wants only 3 columns. A
+    missing column is not an error -- same behaviour as the original `if column in
+    df.columns`.
 
-    返回 None 表示「退回全列读取」: 若连 Entry 都不在这些列里, 用 usecols 会把所有行
-    当成没有 Entry 而**静默跳过**, 那比慢更糟。
+    Returning None means "fall back to reading all columns": if even Entry is absent
+    from these columns, using usecols would treat every row as having no Entry and
+    **silently skip** it, which is worse than being slow.
     """
     names_by_source = columns_of(rel, only=only)
     present = [c for c, _, _ in ENZYME_FIELDS
@@ -210,7 +231,8 @@ def _add_enzyme_file(rows, df, source_file, entry_to_enzyme_id):
 
 
 def _compound_to_enzyme_ids(entry_to_enzyme_id):
-    """化合物 -> 用它做底物/产物的酶。来源过滤已由 build_rows 收窄映射做掉。"""
+    """Compound -> enzymes that use it as substrate/product. Source filtering is already
+    done by build_rows narrowing the mapping."""
     mapping = {}
     terpene_only = _read_seg(TERPENE_ONLY_FILE)
     for _, row in terpene_only.iterrows():
@@ -260,7 +282,8 @@ def _add_compounds(rows, df, source_file, compound_to_enzyme_ids):
             continue
         for column, field_name, weight in fields:
             if column in df.columns:
-                # enzyme_id=None: 化合物**实体本身**的行 -> B 类, 与来源无关。
+                # enzyme_id=None: the compound **entity itself** row -> class B,
+                # source-independent.
                 _add(rows, "compound", compound_id, None, source_file, field_name, row.get(column), weight)
                 for enzyme_id in compound_to_enzyme_ids.get(compound_id, set()):
                     _add(rows, "compound", compound_id, enzyme_id, source_file, field_name, row.get(column), weight)
@@ -298,8 +321,9 @@ def _add_terpene_only(rows, df, source_file, entry_to_enzyme_id, rhea_to_reactio
 
 
 def _add_terpene_pairs(rows, df, source_file, entry_to_enzyme_id, rhea_to_reaction_id):
-    """pairs 是汇合表: 同一对化合物下两个来源的酶落在同一行。按来源过滤在 build_rows
-    收窄 entry_to_enzyme_id 时已经做掉了, 这里不必再判来源。"""
+    """pairs is a hand-off table: both sources' enzymes for the same compound pair land
+    on one row. Source filtering is already done when build_rows narrows
+    entry_to_enzyme_id, so there is no need to test source here."""
     for _, row in df.iterrows():
         for index in indexed_groups(df.columns, "Enzyme"):
             enzyme_entry = _clean(row.get(f"Enzyme_{index}"))
@@ -307,14 +331,16 @@ def _add_terpene_pairs(rows, df, source_file, entry_to_enzyme_id, rhea_to_reacti
             if not enzyme_id:
                 continue
             _add(rows, "enzyme", enzyme_id, enzyme_id, source_file, "uniprot_id", enzyme_entry, 95)
-            # 以下 4 条与 Rhea ID 无关, 每酶只出一条 —— 放进下面的循环会按 Rhea 数翻倍。
+            # The 4 lines below are independent of Rhea ID and emit once per enzyme --
+            # putting them in the loop below would multiply them by the Rhea count.
             _add(rows, "compound", row.get("Substrate ChEBI"), enzyme_id, source_file, "substrate_chebi", row.get("Substrate ChEBI"), 80)
             _add(rows, "compound", row.get("Substrate ChEBI"), enzyme_id, source_file, "substrate", row.get("Substrate"), 60)
             _add(rows, "compound", row.get("Product ChEBI"), enzyme_id, source_file, "product_chebi", row.get("Product ChEBI"), 80)
             _add(rows, "compound", row.get("Product ChEBI"), enzyme_id, source_file, "product", row.get("Product"), 60)
-            # Rhea ID_i 可能是 '; ' 拼接的多值单元格 (见 cell_values.py)。
-            # 原来拿整串当 entity_id: 索引里多出一条永远匹配不上的假实体,
-            # 而该酶真实催化的那几个反应一条都没进索引。
+            # Rhea ID_i may be a '; '-joined multi-value cell (see cell_values.py).
+            # The original used the whole string as entity_id: the index gained a fake
+            # entity that never matches, while the reactions the enzyme really catalyses
+            # did not enter the index at all.
             for one_rhea in split_multi_value(row.get(f"Rhea ID_{index}")):
                 reaction_id = rhea_to_reaction_id.get(one_rhea, one_rhea)
                 _add(rows, "reaction", reaction_id, enzyme_id, source_file, "rhea_id", one_rhea, 90)
@@ -356,8 +382,9 @@ def _add_go(rows, df, source_file, entry_to_enzyme_id):
 
 
 def _add_sequence_links(rows, df, source_file, entry_to_enzyme_id):
-    # 宽度按列头推导, 不写死 —— 实测现表 INSDC_Nuc_ID_24 / RefSeq_Prot_ID_11 各有 1 条
-    # 真实数据, 即写死的上限已经被顶满, 再多一段链接就被静默丢掉。
+    # Width derived from the header, not hard-coded -- measured on the current table,
+    # INSDC_Nuc_ID_24 / RefSeq_Prot_ID_11 each have 1 real row, i.e. the hard-coded cap
+    # is already saturated, so one more link segment is silently dropped.
     insdc_max = indexed_width(df.columns, "INSDC_Nuc_ID", "INSDC_Prot_ID", "INSDC_Molecule")
     refseq_max = indexed_width(df.columns, "RefSeq_Nuc_ID", "RefSeq_Prot_ID", "RefSeq_Molecule")
     for _, row in df.iterrows():
@@ -409,11 +436,14 @@ def _add_isoforms(rows, df, source_file, entry_to_enzyme_id):
 
 
 def _step_sources(entry_to_enzyme_id, compound_to_enzyme_ids, rhea_to_reaction_id, only):
-    """[(逻辑表, 是否分段, usecols, 生成函数)] —— **一个逻辑表一步**。
+    """[(logical table, is segmented, usecols, generate function)] -- **one logical table
+    per step**.
 
-    分步是为了让峰值内存 = 单步的切片行, 而不是全部行。生成函数统一签名 `f(rows, df)`。
-    `usecols` 为 None 表示读全列(宽度动态的汇合表与子表本来就窄, 但 master 必须收窄)。
-    顺序与原来的 `build_rows` 保持一致(顺序不影响最终行集合, 但保持一致便于比对)。
+    Stepping keeps peak memory at one step's slice rows rather than all rows. The
+    generate functions share the signature `f(rows, df)`. A `usecols` of None means read
+    all columns (the dynamically wide hand-off and child tables are narrow to begin with,
+    but master must be narrowed). The order matches the original `build_rows` (order does
+    not affect the final row set, but matching keeps comparison easy).
     """
     steps = []
     for rel in (NAMES_FILE, RHEA_SUMMARY_FILE, ENZYME_MERGED_FILE, MASTER_FILE):
@@ -441,14 +471,19 @@ def _step_sources(entry_to_enzyme_id, compound_to_enzyme_ids, rhea_to_reaction_i
 
 
 def _iter_batches(only=None):
-    """逐表逐切片产出**已去重**的 (逻辑表, DataFrame)。峰值内存与总行数无关。
+    """Yield **deduped** (logical table, DataFrame) per table, per slice. Peak memory is
+    independent of the total row count.
 
-    only=<s> 时只产出该来源的 C 类行; B 类行(化合物实体)两种模式都一样。
+    With only=<s> it yields only that source's class C rows; class B rows (compound
+    entities) are the same in both modes.
 
-    按来源过滤集中在**一处**: 收窄 `entry_to_enzyme_id`。每个 C 类行都挂在某一个酶上,
-    而酶归属唯一一个来源 —— 所以只要这个映射里只剩目标来源的酶, 下面**所有**读取处
-    (含 pairs / compounds 这两张无法分段、两个来源混在一行的汇合表)就自动只产出该来源的行。
-    逐个读取处判来源会漏 —— 漏的那处就静默多灌一份另一个来源的索引行。
+    Source filtering is centralised in **one place**: narrowing `entry_to_enzyme_id`.
+    Every class C row hangs off one enzyme, and an enzyme belongs to exactly one source
+    -- so as long as this mapping keeps only the target source's enzymes, **every**
+    downstream read site (including the pairs / compounds hand-off tables, which cannot
+    be segmented and mix both sources on one row) automatically yields only that
+    source's rows. Testing source at each read site would miss one -- and that miss
+    silently loads a second copy of the other source's index rows.
     """
     entry_to_enzyme_id = _get_map("enzyme", "uniprot_id", "enzyme_id")
     if only:
@@ -466,8 +501,9 @@ def _iter_batches(only=None):
             df = _read_merged(rel)
         for start in range(0, len(df), INPUT_CHUNK):
             rows = []
-            # 切片按**输入行**切: 一个输入行产出的全部行必然落在同一片里 ——
-            # 这正是「逐片去重 == 全量去重」的依据(见模块 docstring)。
+            # Slices are cut by **input row**: all rows produced by one input row fall
+            # in the same slice -- this is the basis for "per-slice dedupe == full
+            # dedupe" (see the module docstring).
             generate(rows, df.iloc[start:start + INPUT_CHUNK])
             if not rows:
                 continue
@@ -481,11 +517,13 @@ def _insert(df):
 
 
 def _count_duplicate_facts():
-    """落库后自查: 按去重键分组, 有没有 >1 行的组。
+    """Post-write self-check: group by the dedupe key and look for groups with >1 row.
 
-    这是「只补充 + 只新增」在索引上的体现 —— 同一 (实体, 字段, 值) 不该有两行。
-    正常输入下必然是 0; 不为 0 就说明**源侧有完全重复的输入行且被切片边界分开了**
-    (见模块 docstring 的残留说明), 这时要显式说出来而不是让它留在库里。
+    This is "add-only + append-only" reflected on the index -- the same (entity, field,
+    value) should not have two rows. With normal input this is necessarily 0; a non-zero
+    value means **the source has fully duplicated input rows split by a slice boundary**
+    (see the residual risk note in the module docstring), and that must be said
+    explicitly rather than left in the database.
     """
     cols = ", ".join(DEDUPE_COLS)
     sql = (f'SELECT COUNT(*) FROM (SELECT 1 FROM search_index '
@@ -495,14 +533,17 @@ def _count_duplicate_facts():
 
 
 def _clear_index(only):
-    """清掉本次要重建的行。分两段, 都不是全表清空 —— 见模块 docstring。"""
+    """Clear the rows to be rebuilt this run. Two parts, neither a full-table wipe --
+    see the module docstring."""
     with engine.begin() as conn:
         conn.execute(text(schema_ddl('search_index')))
 
-        # B 类: 化合物实体行, 与来源无关。只读汇合表, 两种模式下都能完整重建。
+        # class B: compound entity rows, source-independent. Reads only hand-off
+        # tables, so it can be fully rebuilt in both modes.
         b = conn.execute(text('DELETE FROM search_index WHERE enzyme_id IS NULL')).rowcount
 
-        # C 类: 有 enzyme_id 的行, 按来源清。全量模式下两个来源都清。
+        # class C: rows with an enzyme_id, cleared by source. In full mode both sources
+        # are cleared.
         if only:
             c = conn.execute(text('DELETE FROM search_index WHERE enzyme_id IN '
                                   '(SELECT enzyme_id FROM enzyme WHERE source_type = :s)'),

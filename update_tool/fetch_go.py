@@ -2,33 +2,33 @@
 Regenerate the GO child table (uniprotkb_go.tsv) from the unified raw TSV.
 Format: Entry, GO ID, GO Term, GO Link
 
-数据来源: 统一原始 TSV 的 'Gene Ontology (biological process)' 列 (go_p 字段)。
-旧 uniprotkb_go.tsv 只存生物过程 (BP) 方面的 GO 词条, 且该列正是 BP-only:
-  - 真实行: go_p 解析结果与旧表 2698 个真实行逐格 0 差异
-  - 空占位行: 无 BP GO 的酶补一行 (GO ID/Term/Link 全空), 保证每酶至少一行, 与旧表结构一致
-  - 注意: 旧表个别无 GO 酶有 2~7 行空占位 (历史构建脚本按当时 API GO 引用数发空行,
-    源数据已变, 现统一为每酶一行空占位)。rebuild_master 读子表时会过滤 GO ID 为空的行。
+Data source: the unified raw TSV's 'Gene Ontology (biological process)' column (the go_p field).
+The old uniprotkb_go.tsv stored only biological-process (BP) GO terms, and that column is exactly BP-only:
+  - real rows: the go_p parse matches the old table's 2698 real rows cell for cell (0 diff)
+  - empty placeholder rows: a row is added for enzymes with no BP GO (GO ID/Term/Link all empty), guaranteeing at least one row per enzyme, same structure as the old table
+  - Note: a few no-GO enzymes had 2-7 empty placeholder rows in the old table (the historical build script emitted empty rows per the API's GO-reference count at the time;
+    the source data has changed, now unified to one empty placeholder per enzyme). rebuild_master filters out rows with empty GO ID when reading the child table.
 
-不再打 UniProt API: GO 交叉引用已含在导出的 go_p 列, 符合 'API 只补导出没有的' 策略,
-且离线解析确定性更高。
+No longer hits the UniProt API: GO cross-references are already in the exported go_p column, matching the "API only fills what the export lacks" policy,
+and offline parsing is more deterministic.
 
-用法: python fetch_go.py [输入原始TSV] [输出文件]
+Usage: python fetch_go.py [input raw TSV] [output file]
 """
 import csv
 import re
 import sys
 
-# 用法: python fetch_go.py [输入原始TSV] [输出文件]
+# Usage: python fetch_go.py [input raw TSV] [output file]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else 'output_uniprot_unified.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_go.tsv'
 
-# 列头固定名 (UniProt TSV 里 go_p 字段的显示名)
+# Fixed header name (the display name of the go_p field in UniProt TSV)
 GO_COL = 'Gene Ontology (biological process)'
 
 # ---- collect entries and their BP GO terms from the raw TSV ----
 go_by_entry = {}
-# Entry -> Source。'Source' 由 download_uniprot.py 写在 RAW 统一表末列,
-# 这里跟着条目一起带下去, 否则下游无从判断这条 GO 属于哪个来源分段。
+# Entry -> Source. 'Source' is written in the last column of the RAW unified table by download_uniprot.py,
+# and carried along with the entry here; otherwise downstream cannot tell which source segment this GO belongs to.
 source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
@@ -51,7 +51,7 @@ with open(INPUT, 'r', encoding='utf-8') as f:
                 })
         go_by_entry[e] = gos
 
-# ---- write: real GO rows + 每酶至少一行(无 GO 的酶补一行空占位, 与旧表结构一致) ----
+# ---- write: real GO rows + at least one row per enzyme (a no-GO enzyme gets one empty placeholder, same structure as the old table) ----
 with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
     w = csv.writer(f, delimiter='\t')
     w.writerow(['Entry', 'GO ID', 'GO Term', 'GO Link', 'Source'])
@@ -62,8 +62,8 @@ with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
             for g in gos:
                 w.writerow([entry, g['go_id'], g['term'], g['link'], src])
         else:
-            # 空占位: 无 BP GO 的酶(行序与原始表一致)。Source 仍要写, 否则空占位行
-            # 在按来源替换时无法归属, 会被另一个来源的刷新连带清掉。
+            # Empty placeholder: a no-BP-GO enzyme (row order same as the raw table). Source must still be written, or the placeholder row
+            # cannot be attributed when replacing by source, and would be swept away by another source's refresh.
             w.writerow([entry, '', '', '', src])
 
 # ---- stats ----

@@ -72,9 +72,10 @@ export type FilterOptionsPayload = {
   organisms?: string[]
   sourceTypes?: string[]
   reviewStatuses?: string[]
-  /** 搜索集（search set）的候选项：**真的有行的**来源 + 各自条数。
-   *  与 `sourceTypes` 是两件事 —— 后者是枚举全集（含 0 行的值），
-   *  选择器只能列这里的值，否则用户选中一个空集合，还看不出是自己选的。 */
+  /** Search-set candidates: the sources that **really have rows**, plus each one's
+   *  count. Distinct from `sourceTypes` -- that is the full enum (with 0-row
+   *  values); the picker may only list the values here, or the user picks an empty
+   *  set and cannot see it was their own choice. */
   searchSets?: Array<{ value: string; count: number }>
 }
 
@@ -124,7 +125,7 @@ export type EntrySearchParams = {
   q: string
   organismName?: string
   pageSize?: number
-  /** 搜索集：只在圈定的来源里检索。空数组/缺省 = 全库。 */
+  /** Search set: search only the pinned-in sources. Empty array / omitted = whole library. */
   sourceTypes?: string[]
 }
 
@@ -137,7 +138,7 @@ export async function loadApiDataset(): Promise<ApiDataset> {
   return adaptDataset(metadata, graph)
 }
 
-/** 把搜索集放进 query string。空数组 = 全库，所以一个参数也不发。 */
+/** Put the search set into the query string. Empty array = whole library, so send no params. */
 function setSourceTypes(params: URLSearchParams, sourceTypes?: string[]) {
   for (const value of sourceTypes ?? []) params.append('source_types', value)
 }
@@ -492,9 +493,11 @@ export type HomeGraphEnzymeCard = {
   reactionDirection: string
   sourceType: string
   reviewStatus: string
-  /** 模型参考分。**不是**可溶性标签，也不是校准过的概率 —— UI 文案别写 "solubility"。 */
+  /** Model reference score. **Not** a solubility label, nor a calibrated probability
+   *  -- do not write "solubility" in UI copy. */
   deepSolnetScore?: number | null
-  /** `'membrane'` / `'non-membrane'` / `'unannotated'`。只有 `'membrane'` 豁免分数阈值。 */
+  /** `'membrane'` / `'non-membrane'` / `'unannotated'`. Only `'membrane'` is exempt
+   *  from the score threshold. */
   membrane?: string | null
 }
 
@@ -519,7 +522,8 @@ export type HomeGraphEdgeGroupItem = {
   organismName?: string | null
   sourceType?: string | null
   reviewStatus?: string | null
-  /** 不点开复合边也要能按分数筛，所以这两项跟着**每条子边**一起来。 */
+  /** Filtering by score must work without expanding the composite edge, so these
+   *  two come along on **every child edge**. */
   deepSolnetScore?: number | null
   membrane?: string | null
 }
@@ -529,9 +533,10 @@ export type HomeGraphEdgeGroup = {
   sourceCompoundId: string
   targetCompoundId: string
   label: string
-  /** 记录数（一个 edge_id 一条）。**不是** `label` 里那个 N。 */
+  /** Record count (one row per edge_id). **Not** the N in `label`. */
   count: number
-  /** `label` 里那个 N：**不同的酶**个数。同一个酶用两条反应催化同一对化合物时 count=2 而这里是 1。 */
+  /** The N in `label`: the number of **distinct enzymes**. When one enzyme
+   *  catalyses the same compound pair with two reactions, count=2 but this is 1. */
   enzymeCount: number
   edgeIds: string[]
   items?: HomeGraphEdgeGroupItem[] | null
@@ -595,7 +600,8 @@ export type EnzymeIsoformSequence = {
   canonicalLength?: number | null
   canonicalMass?: string | null
   sequence?: string | null
-  /** 该变体自己的模型参考分。全库只有 30 条真变体有 —— 其余是 null，不渲染。 */
+  /** This variant's own model reference score. Only 30 true variants in the whole
+   *  library have one -- the rest are null and not rendered. */
   deepSolnetScore?: number | null
 }
 
@@ -631,7 +637,8 @@ export type EnzymeDetailData = {
    *  referenced it (see the backend's `EnzymeDetail` docstring). */
   sourceType?: string | null
   reviewStatus?: string | null
-  /** canonical 序列的模型参考分 + 膜三态。见 `HomeGraphEnzymeCard` 上的同名说明。 */
+  /** Model reference score + membrane tri-state for the canonical sequence. See the
+   *  same-named note on `HomeGraphEnzymeCard`. */
   deepSolnetScore?: number | null
   membrane?: string | null
   gene?: EnzymeGeneDetail | null
@@ -648,7 +655,7 @@ export type HomeGraphRequest = {
   depth?: number
   limitNodes?: number
   selectionMode?: 'global'
-  /** 搜索集：只在圈定的来源里取图。 */
+  /** Search set: fetch the graph only from the pinned-in sources. */
   sourceTypes?: string[]
 }
 
@@ -692,7 +699,7 @@ export type PathwaySearchParams = {
   viaCompoundIds?: string[]
   maxSteps?: number
   limit?: number
-  /** 搜索集：只在圈定的来源里找通路。 */
+  /** Search set: find pathways only in the pinned-in sources. */
   sourceTypes?: string[]
 }
 
@@ -729,14 +736,16 @@ export type TableEnzymePayload = {
 /**
  * Table-form enzyme search.
  *
- * ⚠️ `limit` 与后端 `routers/search.py` 的 `limit: int = Query(500, ge=1, le=2000)`
- * 是**一对**，改一个必须改另一个 —— 前端要 3000 而 `le=2000` 只会换来一个看不懂的 422。
+ * ⚠️ `limit` and the backend's `limit: int = Query(500, ge=1, le=2000)` in
+ * `routers/search.py` are **a pair**: change one and you must change the other --
+ * asking the frontend for 3000 against `le=2000` only buys an inscrutable 422.
  *
- * 那三个 `filter*` 参数是**服务端**执行的显示筛选（编进取数 SQL），不是取回后再筛。
- * 原因：`ORDER BY score DESC LIMIT n` 与「来源 / 物种 / EC」这三个维度毫不相关，
- * 先截断再客户端筛，筛出来的是「分数前 n 名里恰好属于该来源的那几个」。
- * 实测 `terpene synthase` 在 limit=600 下客户端筛完只剩 2 条 swiss_prot，
- * 服务端圈定给的是 1,243 条。
+ * The three `filter*` params are display filters run **server-side** (folded into
+ * the fetch SQL), not applied after the rows come back. Because `ORDER BY score
+ * DESC LIMIT n` is unrelated to the source / organism / EC dimensions, truncating
+ * first and filtering client-side yields "whichever of the top n happen to be
+ * that source". Measured: `terpene synthase` at limit=600 leaves only 2 Swiss-Prot
+ * rows after client-side filtering, against 1,243 from the server-side predicate.
  */
 export async function searchTableEnzymes({
   q,
@@ -749,15 +758,19 @@ export async function searchTableEnzymes({
 }: {
   q: string
   limit?: number
-  /** 搜索集：只在圈定的来源里检索。与结果页自己的 "Data source" 显示筛选是两层。 */
+  /** Search set: search only the pinned-in sources. A different layer from the
+   *  result page's own "Data source" display filter. */
   sourceTypes?: string[]
-  /** 显示筛选：数据来源。与搜索集在 SQL 里 AND 叠加。 */
+  /** Display filter: data source. ANDed with the search set in SQL. */
   filterSourceTypes?: string[]
-  /** 显示筛选：物种（精确串相等）。没有物种的行用 `__unknown__` 哨兵表示。 */
+  /** Display filter: organism (exact string match). Rows with no organism use the
+   *  `__unknown__` sentinel. */
   filterOrganismNames?: string[]
-  /** 显示筛选：EC 前缀，形如 `4.2.3`。调用方负责只传解析合法的前缀。 */
+  /** Display filter: EC prefix, e.g. `4.2.3`. The caller must pass only
+   *  successfully parsed prefixes. */
   filterEcPrefixes?: string[]
-  /** 一次检索可能十几秒，改词/改筛选时必须取消上一次，否则请求叠队。 */
+  /** One search can take over ten seconds; on a query/filter change the previous
+   *  one must be cancelled, or requests stack up. */
   signal?: AbortSignal
 }): Promise<TableEnzymePayload> {
   const params = new URLSearchParams({ q, limit: String(limit) })
@@ -769,7 +782,8 @@ export async function searchTableEnzymes({
 }
 
 /** Rich aggregated rows for an explicit enzyme-id list (caller order preserved).
- *  **不是**搜索（是按显式 id 取行），所以刻意不接受任何筛选参数。 */
+ *  **Not** a search (it fetches rows by explicit id), so it deliberately takes no
+ *  filter params. */
 export async function searchTableEnzymesByIds(enzymeIds: string[]): Promise<TableEnzymePayload> {
   return request<TableEnzymePayload>('/search/table/by-ids', {
     method: 'POST',
@@ -893,8 +907,9 @@ export async function loadEnzymeDetail(enzymeId: string): Promise<EnzymeDetailDa
   return request<EnzymeDetailData>(`/enzymes/${encodeURIComponent(enzymeId)}`)
 }
 
-/** 展开一个边组的全部酶。`sourceTypes` = 搜索集 —— 图上圈定了，展开时也必须圈定，
- *  否则展开会把不属于搜索集的边又漏回来（服务端见 `expand_edge_group`）。 */
+/** Expand every enzyme of an edge group. `sourceTypes` = search set -- the map is
+ *  scoped, and expansion must be scoped too, or expanding leaks back edges outside
+ *  the search set (server-side, see `expand_edge_group`). */
 export async function loadExpandedEdgeGroup(edgeGroupId: string, sourceTypes?: string[]): Promise<HomeGraphEdge[]> {
   const params = new URLSearchParams()
   setSourceTypes(params, sourceTypes)
@@ -1064,9 +1079,10 @@ export type BlastSearchParams = {
   sequence: string
   eValueThreshold?: number
   maxResults?: number
-  /** 搜索集：BLAST 算搜索，所以**真的**按它建序列库（每个搜索集一个库）。
-   *  库变小会改变 E-value 的统计语境（搜索空间小 → 同一个序列显得更显著），
-   *  这不是 bug，但界面上要提醒一句。 */
+  /** Search set: BLAST counts as a search, so it **really** builds the sequence
+   *  library from it (one library per search set). A smaller library changes the
+   *  statistical context of E-values (smaller search space → the same sequence
+   *  looks more significant); not a bug, but the UI must warn about it. */
   sourceTypes?: string[]
 }
 
@@ -1084,15 +1100,22 @@ export async function runBlastSearch(params: BlastSearchParams): Promise<BlastPa
 }
 
 /**
- * 当前搜索集下 BLAST 会搜多少条主体序列 —— 抽屉右上角那个数字。
+ * How many subject sequences BLAST would search under the current search set --
+ * the number in the drawer's top-right corner.
  *
- * 这是一个**独立接口**，不是从别处推到出来的，原因有三：
- * - `payload.searchedSubjects` 要跑完一次才知道（首次含建库约 45s），
- *   而抽屉在用户点 Run 之前就要显示它，且换搜索集后旧的那个数属于上一次运行；
- * - `filter-options` 的 `searchSets` 只有**酶**数，真实主体还包含异构体，
- *   前端拿它算出来的数会与实际建库的集合差一截 —— 而它看起来完全正常；
- * - 后端那条与建库**共用同一组谓词**（`blast_service.count_subjects`），
- *   所以这个数与实际搜的库不会漂开。
+ * This is a **separate endpoint**, not derived from anything else, for three
+ * reasons:
+ * - `payload.searchedSubjects` is only known after a run finishes (the first run
+ *   includes library build, ~45s), but the drawer must show it before the user
+ *   clicks Run, and after a search-set change the old number belongs to the
+ *   previous run;
+ * - `filter-options`' `searchSets` carries only the **enzyme** count, while real
+ *   subjects also include isoforms, so a number the frontend computed from it
+ *   would fall short of the set actually built -- and it would look perfectly
+ *   normal;
+ * - that backend endpoint **shares the same predicates** as library build
+ *   (`blast_service.count_subjects`), so this number does not drift from the
+ *   library actually searched.
  */
 export async function loadBlastSubjects(sourceTypes?: string[]): Promise<number> {
   const params = new URLSearchParams()

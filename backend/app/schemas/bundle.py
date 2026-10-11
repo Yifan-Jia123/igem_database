@@ -1,12 +1,15 @@
-"""`/bundle/*` 聚合端点的 schema。
+"""Schema for the `/bundle/*` aggregation endpoint.
 
-判别键放在**外层信封**的 `kind` 上（`BundleData` 的 discriminated union），而不是
-`entity` 字段上的 `Union[EnzymeDetail, CompoundCard, ReactionDetail]` —— 后者靠
-pydantic smart union 运行时也能work，但语义上有歧义，且会把 `kind` 标记丢掉。
+The discriminator key lives on the **outer envelope**'s `kind` (the discriminated
+union of `BundleData`), not on the `entity` field's
+`Union[EnzymeDetail, CompoundCard, ReactionDetail]` -- the latter also works at
+runtime via pydantic's smart union, but it's semantically ambiguous and drops the
+`kind` tag.
 
-注：现有路由没有一个声明 `response_model`，`ApiResponse.data` 是 `Any`，所以
-`/docs` 里 `data` 无论如何都是无类型的 —— 这里按运行时清晰度选，不考虑 OpenAPI 渲染。
-想让形状出现在文档里就得把 `ApiResponse` 泛型化，超出本端点范围。
+Note: no existing route declares a `response_model`, and `ApiResponse.data` is
+`Any`, so `data` in `/docs` is untyped anyway -- chose here for runtime clarity,
+not OpenAPI rendering. To get the shape into the docs you'd have to make
+`ApiResponse` generic, which is out of scope for this endpoint.
 """
 from typing import Annotated, List, Literal, Optional, Union
 
@@ -20,8 +23,9 @@ from app.schemas.reaction import ReactionDetail
 
 BUNDLE_KINDS = ("enzyme", "compound", "reaction", "pathway")
 
-#: 一次批量最多几条。单条 enzyme 要发 `~8 + 2·R` 条查询且不做预取，
-#: 50 条已经是几百条查询的量级；提高要连同 prefetch 一起考虑。
+#: Max items per batch. A single enzyme issues `~8 + 2·R` queries and does no
+#: prefetching, so 50 items is already hundreds of queries; raising it means
+#: considering prefetch too.
 MAX_BATCH_ITEMS = 50
 
 BundleKind = Literal["enzyme", "compound", "reaction", "pathway"]
@@ -58,10 +62,12 @@ class ReactionBundle(CamelModel):
 
 
 class PathwayBundle(CamelModel):
-    """`entityId` 是 `PATH_A_B_C` —— 一条化合物链，不是表里的一行。
+    """`entityId` is `PATH_A_B_C` -- a chain of compounds, not a row in a table.
 
-    注意它**不是稳定主键**：id 指向的是一条可达性，ETL 重跑后某条边没了，同一个 id
-    就会查不到。也别把它当"某一次搜索"的句柄 —— 筛选条件不在 id 里。
+    Note it is **not a stable primary key**: the id points to a reachability, so
+    after an ETL re-run removes some edge, the same id returns nothing. Don't
+    treat it as the handle of "some particular search" either -- the filter
+    conditions are not in the id.
     """
 
     kind: Literal["pathway"] = "pathway"
@@ -77,8 +83,8 @@ BundleData = Annotated[
 
 
 class BundleBatchItem(CamelModel):
-    # 故意是 str 而不是 BundleKind：单个非法 kind 只让那一条 found:false，
-    # 不会把整个请求 422 掉。
+    # Deliberately str rather than BundleKind: a single illegal kind only makes
+    # that one item found:false, it doesn't 422 the whole request.
     kind: str
     entity_id: str
 

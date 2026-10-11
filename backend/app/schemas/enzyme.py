@@ -20,11 +20,15 @@ class EnzymeCard(CamelModel):
     reaction_direction: str
     source_type: str
     review_status: str
-    # 模型参考分（canonical 序列的那条）。别名生成器会输出 `deepSolnetScore`。
-    # ⚠️ 这是模型参考分, 不是可溶性标签, 也不是校准过的概率 —— 界面文案别写成「可溶性」。
+    # Model reference score (the canonical sequence's row). The alias generator
+    # emits `deepSolnetScore`.
+    # ⚠️ This is a model reference score, not a solubility label and not a
+    # calibrated probability -- don't word the UI copy as "solubility".
     deep_solnet_score: Optional[float] = None
-    # 'membrane' / 'non-membrane' / 'unannotated' 三态。只有 'membrane' 豁免分数阈值。
-    # 'unannotated' ≠ 'non-membrane' —— 前者是没注释, 后者是明确非膜, 别合并。
+    # Three states: 'membrane' / 'non-membrane' / 'unannotated'. Only 'membrane'
+    # is exempt from the score threshold.
+    # 'unannotated' != 'non-membrane' -- the former is no annotation, the latter
+    # is explicitly non-membrane; don't merge them.
     membrane: Optional[str] = None
 
 
@@ -82,8 +86,10 @@ class IsoformSequence(CamelModel):
     canonical_length: Optional[int] = None
     canonical_mass: Optional[str] = None
     sequence: Optional[str] = None
-    # 该变体自己的模型参考分。全库只有 30 条真变体有 —— 其余为 None, 界面不渲染。
-    # 由 routers/enzymes.py 按 isoform_id 组装, 前端不做 id 匹配。
+    # The variant's own model reference score. Only 30 true variants in the whole
+    # database have one -- the rest are None and the UI doesn't render them.
+    # Assembled by routers/enzymes.py by isoform_id; the frontend does no id
+    # matching.
     deep_solnet_score: Optional[float] = None
 
 
@@ -113,7 +119,8 @@ class EnzymeDetail(CamelModel):
     mass: Optional[float] = None
     source_type: Optional[str] = None
     review_status: Optional[str] = None
-    # canonical 序列的模型参考分 + 膜三态。见 EnzymeCard 上的同名注释。
+    # The canonical sequence's model reference score + membrane tri-state. See the
+    # same-named comment on EnzymeCard.
     deep_solnet_score: Optional[float] = None
     membrane: Optional[str] = None
     gene: Optional[GeneSummary] = None

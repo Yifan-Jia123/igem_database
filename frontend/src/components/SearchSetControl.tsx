@@ -4,23 +4,27 @@ import { loadMetadataFilters } from '../api'
 import { sourceLabel } from '../lib/sourceLabels'
 
 /**
- * 搜索集（search set）：**检索之前**圈定数据来源。
+ * Search set: pins down the data sources **before** the search.
  *
- * 与页面上原有的「Data source」筛选是两层东西 —— 那个筛的是**已经取回来**的行，
- * 这个定的是**去取哪些行**。两层都保留：检索范围大的时候，显示筛选自然还有用。
- * 所以这个控件不替换任何现有筛选器，它是新加的一层。
+ * A different layer from the page's existing "Data source" filter -- that one
+ * filters rows **already fetched**, this one decides **which rows to fetch**.
+ * Both are kept: when the search scope is wide, a display filter is still useful.
+ * So this control replaces no existing filter; it is a new layer.
  *
- * 空数组 = 全部（沿用全仓库「空数组即不过滤」的约定，没有 `all` 哨兵值）。
+ * Empty array = all (following the repo-wide "empty array means no filter"
+ * convention; there is no `all` sentinel value).
  *
- * 它同时是用户要的那个「常驻显示当前搜索集的小模块」：一个控件既显示当前值、
- * 点开又能改。不做两个（那会出现两个控件说同一件事）。
+ * It is also the "small always-on module showing the current search set" the user
+ * asked for: one control both shows the current value and can be opened to change
+ * it. Not two (that would be two controls saying the same thing).
  */
 
 export type SearchSetOption = { value: string; count: number }
 
 /**
- * `/metadata/filter-options` 每个页面各取一次是浪费 —— 三个页面都会挂这个控件。
- * 一个会话内取一次就够（搜索集候选只随 ETL 变化）。失败时不缓存，下次挂载重试。
+ * Fetching `/metadata/filter-options` once per page is wasteful -- all three pages
+ * mount this control. Once per session is enough (the search-set candidates only
+ * change with the ETL). On failure it is not cached, and the next mount retries.
  */
 let optionsPromise: Promise<SearchSetOption[]> | null = null
 
@@ -40,7 +44,7 @@ export function SearchSetControl({
   value,
   onChange,
 }: {
-  /** 当前搜索集，`[]` = 全部。 */
+  /** The current search set, `[]` = all. */
   value: string[]
   onChange: (next: string[]) => void
 }) {
@@ -62,8 +66,9 @@ export function SearchSetControl({
   const currentLabel = current ? sourceLabel(current) : 'All sources'
   const currentCount = current ? options.find((option) => option.value === current)?.count : total
 
-  // 只列**真的有行**的来源（见后端 `searchSets` 的说明）：选中一个 0 行的集合
-  // 就是一次空检索，而用户看不出那是自己选的。
+  // List only the sources that **really have rows** (see the backend's `searchSets`
+  // note): picking a 0-row set is an empty search, and the user cannot tell it was
+  // their own choice.
   const choices: Array<{ key: string; label: string; count?: number; next: string[] }> = [
     { key: '', label: 'All sources', count: total || undefined, next: [] },
     ...options.map((option) => ({
@@ -75,7 +80,8 @@ export function SearchSetControl({
   ]
 
   const pick = (next: string[]) => {
-    // 原生 <details>（与页面上其它筛选下拉一致），选完手动收起。
+    // Native <details> (consistent with the page's other filter dropdowns); close
+    // it by hand on pick.
     if (detailsRef.current) detailsRef.current.open = false
     if (next[0] !== current || next.length !== value.length) onChange(next)
   }

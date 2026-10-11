@@ -1,29 +1,29 @@
 """
-更新 ChEBI 参考库 (chebi_full.tsv + chebi_smiles.tsv)。
+Update the ChEBI reference library (chebi_full.tsv + chebi_smiles.tsv).
 
-隔离原则: 所有输出写到本文件夹的 chebi_data/ (默认), 绝不碰 ../chebi_data/ 原始目录。
-换新数据时: 用新的 chebi_full.tsv / chebi_smiles.tsv 替换工作流输入路径即可 (build_terpene_compounds,
-            build_all_nodes 用 chebi_full; fetch_rhea 用 chebi_smiles)。
+Isolation principle: all output goes to this folder's chebi_data/ (default); never touch ../chebi_data/ (the original directory).
+When swapping in new data: just replace the workflow input paths with the new chebi_full.tsv / chebi_smiles.tsv (build_terpene_compounds,
+            build_all_nodes use chebi_full; fetch_rhea uses chebi_smiles).
 
-数据来源: ChEBI FTP flat files
-  compounds.tsv.gz          : id, name, ..., chebi_accession, ...   (Name + 全量化合物清单)
-  chemical_data.tsv.gz      : id, compound_id, ..., mass, ..., structure_id  (分子量 + 结构关联)
+Data sources: ChEBI FTP flat files
+  compounds.tsv.gz          : id, name, ..., chebi_accession, ...   (Name + full compound list)
+  chemical_data.tsv.gz      : id, compound_id, ..., mass, ..., structure_id  (molecular mass + structure link)
   structure_registry.tsv.gz : id, structure_id, layers(json), ...   (CANONICAL_SMILES)
   structures.tsv.gz         : id, compound_id, ..., standard_inchi, standard_inchi_key,
-                              default_structure                       (官方 InChI Key)
-    最后一个是 build_all_nodes 取官方 InChI Key 的来源。它**只能从 ChEBI 拿** ——
-    早先那版拿 ChEBI ID 去问 PubChem 的 /compound/name/, 而那是同义词模糊匹配端点,
-    多个 ChEBI 号会折到同一个 CID, 于是 712 条里有 27 条写进了别人分子的键。
+                              default_structure                       (official InChI Key)
+    The last one is build_all_nodes' source for the official InChI Key. It **can only come from ChEBI** --
+    an earlier version asked PubChem's /compound/name/ with a ChEBI ID, but that is a synonym fuzzy-match endpoint,
+    and several ChEBI numbers collapsed to the same CID, so 27 of 712 entries wrote in another molecule's key.
 
-输出格式 (与旧库一致):
-  chebi_full.tsv   : ChEBI ID, Name, SMILES, Molecular Mass, ChEBI URL   (全部化合物, 按 ChEBI ID 排序)
-  chebi_smiles.tsv : CHEBI, SMILES                                        (仅含 SMILES 的化合物)
+Output format (same as the old library):
+  chebi_full.tsv   : ChEBI ID, Name, SMILES, Molecular Mass, ChEBI URL   (all compounds, sorted by ChEBI ID)
+  chebi_smiles.tsv : CHEBI, SMILES                                        (only compounds that have a SMILES)
 
-用法:
-  python update_chebi_library.py [输出目录] [--refresh] [--old=<旧库路径>]
-    --refresh        强制重新下载 flat 文件 (默认已存在则跳过)
-    --old=<旧库路径> 覆盖回填源 (只读)。新库缺失的 SMILES/Mass 用旧库补回,
-                     并写出 curation_overrides.tsv 记录补丁。默认 ../chebi_data/chebi_full.tsv
+Usage:
+  python update_chebi_library.py [output dir] [--refresh] [--old=<old library path>]
+    --refresh        force a re-download of the flat files (skipped by default if they already exist)
+    --old=<old lib>  override the backfill source (read-only). SMILES/Mass missing from the new library are backfilled from the old,
+                     and curation_overrides.tsv records the patch. Default ../chebi_data/chebi_full.tsv
 """
 import csv
 import gzip
@@ -35,8 +35,8 @@ import urllib.request
 
 
 def clean_name(row):
-    """优先 ascii_name (无 HTML、希腊字母/减号已转 ASCII, 与旧库格式一致);
-       空则回退 name 去掉 HTML 标签。"""
+    """Prefer ascii_name (no HTML; Greek letters/minus signs already ASCII, matching the old library format);
+       fall back to name with HTML tags stripped when empty."""
     a = row.get('ascii_name', '').strip()
     if a:
         return a
@@ -44,7 +44,7 @@ def clean_name(row):
 
 OUT_DIR = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('--') else 'chebi_data'
 REFRESH = '--refresh' in sys.argv
-# 覆盖回填源: 新库缺失的 SMILES/Mass 从旧参考库补回 (只读, 不修改原始文件)
+# Backfill source: SMILES/Mass missing from the new library are restored from the old reference library (read-only, the original file is untouched)
 OLD_LIB = '../chebi_data/chebi_full.tsv'
 for a in sys.argv:
     if a.startswith('--old='):
@@ -59,7 +59,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 
 def download():
-    """下载 flat 文件到本地 (已存在且非 --refresh 则跳过)。"""
+    """Download the flat files locally (skip an existing one unless --refresh)."""
     for fname in FILES:
         path = os.path.join(OUT_DIR, fname)
         if os.path.exists(path) and not REFRESH:
@@ -115,7 +115,7 @@ def build():
         except Exception:
             pass
 
-    # 4) 组装
+    # 4) assemble
     chebi_full = {}   # accession -> row
     for acc in acc2name:
         cid = acc2id.get(acc)
@@ -128,12 +128,12 @@ def build():
             'Molecular Mass': mass,
             'ChEBI URL': f'https://www.ebi.ac.uk/chebi/{acc}',
         }
-    # 若无化合物清单, 退化为按 structure 补全
+    # If there is no compound list, degrade to filling in by structure
     if not chebi_full:
         print('WARN: compounds.tsv empty')
         return
 
-    # 4.5) 覆盖回填: 新库缺失而旧库有的 SMILES/Mass 用旧值补回 (人工覆盖补丁)
+    # 4.5) Backfill overrides: where the new library lacks a SMILES/Mass that the old one has, restore the old value (manual override patch)
     overrides = []
     if OLD_LIB and os.path.exists(OLD_LIB):
         old = {}
@@ -163,7 +163,7 @@ def build():
     else:
         print(f'\nWARN: old library not found at {OLD_LIB}, no backfill')
 
-    # 5) 写出 chebi_full.tsv (全部化合物, 按 ChEBI ID 排序)
+    # 5) write chebi_full.tsv (all compounds, sorted by ChEBI ID)
     rows = sorted(chebi_full.values(), key=lambda r: r['ChEBI ID'])
     out = os.path.join(OUT_DIR, 'chebi_full.tsv')
     fields = ['ChEBI ID', 'Name', 'SMILES', 'Molecular Mass', 'ChEBI URL']
@@ -173,7 +173,7 @@ def build():
         w.writerows(rows)
     print(f'chebi_full.tsv: {len(rows)} rows -> {out}')
 
-    # 6) 写出 chebi_smiles.tsv (仅含 SMILES)
+    # 6) write chebi_smiles.tsv (only compounds with a SMILES)
     smi_rows = sorted(((r['ChEBI ID'], r['SMILES']) for r in rows if r['SMILES']), key=lambda x: x[0])
     out2 = os.path.join(OUT_DIR, 'chebi_smiles.tsv')
     with open(out2, 'w', encoding='utf-8', newline='') as f:

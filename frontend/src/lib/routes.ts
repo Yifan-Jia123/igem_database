@@ -2,16 +2,20 @@ import { useCallback, useEffect, useState } from 'react'
 import type { View } from './entities'
 
 /**
- * 首页地图上的一次检索。让它进 URL 是为了让**浏览器后退退掉这次检索**,
- * 而不是因为 `/` 是标签页的第一条记录就直接退出网站。
+ * One search on the home map. It goes into the URL so that **browser Back undoes
+ * this search**, rather than leaving the site outright because `/` is the first
+ * entry in the tab.
  *
- * 形状与后端契约一一对应: 关键词检索只有 `query`; 通路检索把 composer
- * 交给 API 的那串 token 原样带来(`start`/`end`/`via`), 服务端本来就能解析
- * id、裸 ChEBI 号或化合物名, 所以从 URL 重放出来的结果与手动跑一次完全一致。
+ * The shape mirrors the backend contract one-to-one: a keyword search has only
+ * `query`; a pathway search carries the token string the composer handed the API
+ * verbatim (`start`/`end`/`via`), and the server can already parse an id, a bare
+ * ChEBI number or a compound name -- so replaying from the URL gives the same
+ * result as running it by hand.
  */
 export type MapSearchRoute = {
   mode: 'enzyme' | 'pathway'
-  /** 关键词检索的词。通路检索恒为空串 —— 一条链不是一个词能描述的。 */
+  /** The keyword search's word. A pathway search is always the empty string -- a
+   *  chain is not something a single word can describe. */
   query: string
   start: string
   end: string
@@ -24,39 +28,44 @@ export type AppRoute = {
   query?: string
   blast?: boolean
   /**
-   * 只在 `view === 'home'` 时有意义。**三态缺一不可**:
-   * - `undefined` 不是首页 —— 无信号, 消费方什么都别动;
-   * - `null` 首页且没有任何检索参数 —— 清掉检索现场;
-   * - 有值 —— 按这个规格跑检索。
+   * Only meaningful when `view === 'home'`. **All three states are required**:
+   * - `undefined`: not home -- no signal, the consumer must not touch anything;
+   * - `null`: home with no search params -- clear the search state;
+   * - a value: run the search to this spec.
    *
-   * 把 `undefined` 并进 `null` 会立刻打回「打开酶详情页顺手清空地图检索结果」
-   * 那个 bug: 从 `/?q=x` 进 `/enzymes/X` 时规格会凭空变成「该清空」。
+   * Merging `undefined` into `null` immediately brings back the "open an enzyme
+   * detail page and it wipes the map search results" bug: going from `/?q=x` to
+   * `/enzymes/X` would turn the spec into "should clear" out of nowhere.
    */
   mapSearch?: MapSearchRoute | null
 }
 
-/** `?q=` / `mode` / `start` / `end` / `via` → 检索规格。一个都没有则是 `null`。 */
+/** `?q=` / `mode` / `start` / `end` / `via` → search spec. None of them present means `null`. */
 function parseMapSearch(params: URLSearchParams): MapSearchRoute | null {
   const query = params.get('q') ?? ''
   const start = params.get('start') ?? ''
   const end = params.get('end') ?? ''
   const via = params.getAll('via').filter((token) => token !== '')
   const wantsPathway = params.get('mode') === 'pathway'
-  // 没有词可检的 `?mode=enzyme` 不是检索, 归一化成裸首页, 免得 URL 与状态各说各话。
+  // A `?mode=enzyme` with no word to search is not a search; normalise to a bare
+  // home so the URL and the state cannot tell different stories.
   if (!query && !wantsPathway && !start && !end && via.length === 0) return null
-  // `mode` 由有没有关键词推出来, 不单独存 —— 这样 `routeUrl(parseRoute(url))`
-  // 一定等于规范形式, `syncRoute` 不会每次 popstate 都 replaceState 一遍。
+  // `mode` is derived from whether there is a keyword, not stored separately --
+  // that way `routeUrl(parseRoute(url))` is always the canonical form, and
+  // `syncRoute` does not replaceState on every popstate.
   return { mode: query ? 'enzyme' : 'pathway', query, start, end, via }
 }
 
-/** 固定顺序 `q, mode, start, end, via` —— 顺序不稳会让上一条的规范化反复触发。 */
+/** Fixed order `q, mode, start, end, via` -- an unstable order makes the previous
+ *  entry's canonicalisation fire over and over. */
 function serializeMapSearch(spec: MapSearchRoute, params: URLSearchParams) {
   if (spec.query) params.set('q', spec.query)
   params.set('mode', spec.mode)
   if (spec.start) params.set('start', spec.start)
   if (spec.end) params.set('end', spec.end)
-  // `via` 用重复参数而不是逗号拼接: 这里的 token 可能是没解析出来的原始文本,
-  // 而真实化合物名里就有逗号(实测标签 `2-cis,6-cis-farnesyl diphosphate(3−)`)。
+  // `via` uses repeated params rather than comma-joining: a token here may be raw
+  // text that never got parsed, and real compound names contain commas (measured
+  // label `2-cis,6-cis-farnesyl diphosphate(3−)`).
   spec.via.filter((token) => token !== '').forEach((token) => params.append('via', token))
 }
 
@@ -95,17 +104,19 @@ export function routeUrl(route: AppRoute): string {
     const search = params.toString()
     return `/${search ? `?${search}` : ''}`
   }
-  // 没有检索参数的首页必须**仍然**是裸 `'/'` —— `resetHome`、`goTo('home')`
-  // 全都靠它表达「回到干净的浏览图」。
+  // A home with no search params must **still** be a bare `'/'` -- `resetHome` and
+  // `goTo('home')` both rely on it to mean "back to a clean browse map".
   return '/'
 }
 
 /**
- * 本应用在 `history.state` 里存一个「我们自己 push 了几层」的下标, 用来判断
- * 还有没有可退的应用内历史。**不要换成 push 时 +1 / popstate 时 -1 的计数器**:
- * `popstate` 对**前进**也一样触发, 「退一步再进一步」会把计数减到 0,
- * 明明后面还有条目却被判成「退不了」。下标存在 state 里则前进后退都对 ——
- * popstate 时重读一次就是权威值。
+ * The app stores an index of "how many levels we pushed" in `history.state`, to
+ * tell whether there is still in-app history to go back to. **Do not replace it
+ * with a counter that +1s on push and -1s on popstate**: `popstate` also fires on
+ * **forward**, so "back one, forward one" drives the count to 0 and it is judged
+ * "cannot go back" though there are entries behind. With the index in state,
+ * forward and back are both correct -- re-reading it on popstate gives the
+ * authoritative value.
  */
 type RouteHistoryState = { atlasIndex?: number }
 
@@ -123,7 +134,8 @@ export function useAppRoute() {
       const next = parseRoute(new URL(window.location.href))
       const canonical = routeUrl(next)
       if (`${window.location.pathname}${window.location.search}` !== canonical) {
-        // 这次原地规范化不是一次导航, 下标必须**原样带过去**, 不能写 null 抹掉。
+        // This in-place canonicalisation is not a navigation, so the index must be
+        // **carried over as-is**, not written as null to wipe it.
         window.history.replaceState({ atlasIndex: currentIndex() }, '', canonical)
       }
       setRoute(next)
@@ -139,7 +151,7 @@ export function useAppRoute() {
     if (`${window.location.pathname}${window.location.search}` !== target) {
       const index = currentIndex()
       if (replace) {
-        // replace 不新增条目, 所以下标不动 —— 「能不能退」不该因此改变。
+        // replace adds no entry, so the index stays -- "can go back" must not change.
         window.history.replaceState({ atlasIndex: index }, '', target)
       } else {
         window.history.pushState({ atlasIndex: index + 1 }, '', target)
@@ -149,7 +161,8 @@ export function useAppRoute() {
     setRoute(parseRoute(new URL(target, window.location.origin)))
   }, [])
 
-  /** 退回上一条应用内记录。返回 false 表示栈里没有可退的项, 调用方自行兜底。 */
+  /** Go back one in-app record. Returns false when there is nothing to pop, and
+   *  the caller handles the fallback. */
   const goBack = useCallback(() => {
     if (currentIndex() <= 0) return false
     window.history.back()

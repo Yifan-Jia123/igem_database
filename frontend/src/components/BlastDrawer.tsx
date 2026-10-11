@@ -90,7 +90,8 @@ export function BlastDrawer({
   queueCount: number
   /** Open this run in the shared keyword-style result views (table form or map). */
   onOpenResults: (payload: BlastPayload, mode: 'table' | 'map') => void
-  /** 搜索集。BLAST 算搜索，所以它对 BLAST **真的**生效（后端按搜索集另建序列库）。 */
+  /** Search set. BLAST counts as a search, so it **really** applies to BLAST (the
+   *  backend builds a separate sequence library per search set). */
   searchSet: string[]
 }) {
   const [draft, setDraft] = useState('')
@@ -99,15 +100,19 @@ export function BlastDrawer({
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<BlastPayload | null>(null)
   const [loadedOnce, setLoadedOnce] = useState(false)
-  /** 当前搜索集下的真实主体条数。null = 还没问到 —— **不显示上一个搜索集的数**。 */
+  /** True subject count under the current search set. null = not asked yet -- **do
+   *  not show the previous search set's number**. */
   const [subjectCount, setSubjectCount] = useState<number | null>(null)
 
-  // 依赖用稳定串：searchSet 每次渲染都是新数组身份，直接进 deps 会每次重查。
+  // A stable string for the dep: searchSet is a new array identity on every render,
+  // so putting it in deps directly would refetch every time.
   const searchSetKey = useMemo(() => [...searchSet].sort().join(','), [searchSet])
 
-  // 主体条数**与选中的搜索集一一对应**，所以搜索集变了必须重新问；置回 null 是
-  // 有意的 —— 把上一个搜索集的数继续留在屏幕上，正是这次要修掉的那个 bug
-  // （数字一动不动，看起来像"搜索集没生效"，而实际搜索是对的，所以没人会去查）。
+  // The subject count corresponds **one-to-one with the selected search set**, so a
+  // search-set change must re-ask; resetting to null is deliberate -- leaving the
+  // previous set's number on screen is exactly the bug being fixed here (the number
+  // sits still, looking like "the search set had no effect", while the search is
+  // actually right, so nobody goes looking).
   useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -116,7 +121,8 @@ export function BlastDrawer({
       .then((count) => {
         if (!cancelled) setSubjectCount(count)
       })
-      // 问不到就不显示数字 —— 比显示一个不属于当前搜索集的数诚实。
+      // If it cannot be asked, show no number -- more honest than showing a number
+      // that does not belong to the current search set.
       .catch(() => {
         if (!cancelled) setSubjectCount(null)
       })
@@ -204,8 +210,10 @@ export function BlastDrawer({
               <strong>Paste a protein sequence</strong>
               <small>FASTA header optional · at least {MIN_AA} amino acids</small>
             </div>
-            {/* 搜索集变 → 这个数跟着变（后端与建库共用谓词，见 loadBlastSubjects）。
-                问不到时显示 "…"：宁可不说，也不说一个不属于当前搜索集的数。 */}
+            {/* search set changes → this number follows (the backend shares the
+                predicates with library build; see loadBlastSubjects). Shows "…" when
+                it cannot be asked: better to say nothing than a number that does not
+                belong to the current search set. */}
             <span className="blast-pool-chip" title="Sequences BLAST will search in the current search set">
               {subjectCount === null ? '…' : `${subjectCount.toLocaleString()} subjects`}
             </span>
@@ -292,9 +300,10 @@ export function BlastDrawer({
                 <strong>{hitCount} hit{hitCount === 1 ? '' : 's'}</strong>
               </div>
 
-              {/* 搜索集把库改小了 → E-value 的统计语境跟着变。同一个序列在 1,535 条里
-                  会比在 95,899 条里"看起来更显著"，这不是 bug，但很容易被误读成
-                  「在全库里也这么显著」，所以必须写出来。 */}
+              {/* A search set shrinks the library → the statistical context of the
+                  E-values changes. The same sequence looks "more significant" in
+                  1,535 than in 95,899; not a bug, but easily misread as "also this
+                  significant in the whole library", so it must be spelled out. */}
               {searchSet.length > 0 && (
                 <p className="blast-scope-note" role="note">
                   Searched inside the <strong>{searchSet.map(sourceLabel).join(', ')}</strong> search set only —

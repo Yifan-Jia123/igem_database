@@ -748,9 +748,10 @@
   color: var(--graph-navy, #081a3a);
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 12.5px;
-  /* 只折行、不截断：原来这里的 `white-space: nowrap` 让上面两行换行属性全部失效，
-     而 `text-overflow: ellipsis` 又因为没有 `overflow: hidden` 从来不生效 ——
-     两条一起删掉，和卡片里其它文字的收法保持一致。 */
+  /* Wrap only, never truncate: the old `white-space: nowrap` here voided both wrap
+     properties above, and `text-overflow: ellipsis` never applied anyway without
+     `overflow: hidden` -- both were removed, matching how the card's other text is
+     handled. */
   overflow-wrap: anywhere;
   word-break: break-word;
 }

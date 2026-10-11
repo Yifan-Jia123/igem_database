@@ -1,30 +1,35 @@
-"""ETL Step 2: 酶表 —— 按来源替换 + 编号永久保留不复用。
+"""ETL Step 2: the enzyme table -- replace by source + IDs stay permanent and unreused.
 
-## 两条不变量 (方案 Phase 2.1 / 2.2)
+## Two invariants (plan Phase 2.1 / 2.2)
 
-1. **编号永久保留不复用**。原实现是位置编号 `f"ENZ{i+1:06d}"` —— 基础集合一变
-   (996 -> 96k) 全库错位, 而 `enzyme_id` 被 **7 张表的 FK** 引用。
-   现在编号一律来自 `enzyme_id_map`: 命中沿用 / 未命中取 `MAX+1` / 条目消失只打
-   `retired_at` 而**不回收编号**。任何已发出的 ENZ 号永远指同一个生物学实体。
+1. **IDs stay permanent and are never reused.** The original implementation assigned
+   positional IDs `f"ENZ{i+1:06d}"` -- the moment the base set changed (996 -> 96k) the
+   whole database shifted, and `enzyme_id` is referenced by the **FKs of 7 tables**.
+   Now every ID comes from `enzyme_id_map`: a hit reuses it / a miss takes `MAX+1` / a
+   vanished entry only gets `retired_at` and its ID is **not reclaimed**. Any ENZ number
+   ever issued forever points at the same biological entity.
 
-2. **只补充 + 只新增**。按来源整段替换(`DELETE WHERE source_type=<s>` 后重灌),
-   **不是**「读现有 -> 过滤掉已存在的」。后者是「已存在就跳过」: 已有酶的新名字、
-   新 GO 永远进不来。
+2. **Add-only + insert-only.** Per source, replace the whole segment (after `DELETE WHERE
+   source_type=<s>`, reload), **not** "read existing -> filter out those already present".
+   The latter means "skip if it already exists": new names and new GO terms for an existing
+   enzyme never get in.
 
-## 基础集合 = names_split(全部条目), 不是 rhea_summary
+## Base set = names_split (all entries), not rhea_summary
 
-原实现从 `uniprotkb_rhea_summary.tsv` 取酶 —— 那是「有反应的酶」。
-只有序列没有反应注释的 528 个 SwissProt 酶因此被**静默丢弃**。
-names_split 含全部条目。
+The original implementation took enzymes from `uniprotkb_rhea_summary.tsv` -- that is
+"enzymes that have a reaction". The 528 SwissProt enzymes that have only a sequence and no
+reaction annotation were therefore **silently dropped**. names_split contains all entries.
 
-⚠️ **不能换成 `uniprotkb_master.tsv`**: 它 951 列但**没有 `Organism` / `Protein name`**, 会 KeyError。
+⚠️ **Cannot be switched to `uniprotkb_master.tsv`**: it has 951 columns but **no `Organism` /
+`Protein name`**, which would KeyError.
 
-## 子表必须先清 (调用顺序约束)
+## Child tables must be cleared first (call-order constraint)
 
-`enzyme` 的子表(gene / gene_sequence_link / evidence / enzyme_go / enzyme_isoform /
-enzyme_reaction_edge / search_index)**都没有 `ON DELETE CASCADE`**。
-所以本模块的 `DELETE FROM enzyme` 必须发生在 etl_run.py 的 purge 阶段**之后**,
-否则直接外键报错。单独跑本模块前必须已 purge。
+The child tables of `enzyme` (gene / gene_sequence_link / evidence / enzyme_go /
+enzyme_isoform / enzyme_reaction_edge / search_index) **all lack `ON DELETE CASCADE`**.
+So this module's `DELETE FROM enzyme` must happen **after** etl_run.py's purge phase, or it
+is a direct foreign-key error. Running this module on its own requires purge to have run
+first.
 """
 import json
 import os
@@ -44,20 +49,21 @@ engine = create_engine(DB_URL)
 NAMES_FILE = 'for_enzyme_detail/child_tables/uniprotkb_names_split.tsv'
 RHEA_SUMMARY_FILE = 'for_enzyme_reaction_card/uniprotkb_rhea_summary.tsv'
 
-# 来源 -> review_status。写成映射而不是 if/else, 未知来源直接报错 ——
-# 「猜一个默认值」会让新来源的审核状态静默变成错的。
+# source -> review_status. Written as a mapping rather than if/else, and an unknown source
+# errors out -- "guess a default" would silently make a new source's review status wrong.
 SOURCE_TO_REVIEW = {'swiss_prot': 'official', 'trembl': 'pending'}
 
-# 已消失 accession 的 302 解析上限。见 _resolve_redirects。
+# Cap on 302 resolution for vanished accessions. See _resolve_redirects.
 REDIRECT_LIMIT = 500
 _ACC_IN_LOCATION = re.compile(r'/uniprotkb/([A-Za-z0-9]+)')
 
 
 def _coalesce(*series):
-    """按顺序取第一个非空值 —— **把空串也当空**。
+    """Take the first non-empty value in order -- **treating an empty string as empty too**.
 
-    原实现用 `fillna`, 而 `fillna` 只补 NaN、**不补空串**。TrEMBL 的名字存在
-    空串形态, 于是 primary_name 会落成空串并绕过所有兜底, 变成没有名字的酶。
+    The original implementation used `fillna`, and `fillna` only fills NaN, **not empty
+    strings**. TrEMBL names come in an empty-string form, so primary_name would land as an
+    empty string, bypass every fallback, and become an enzyme with no name.
     """
     out = None
     for s in series:
@@ -67,9 +73,11 @@ def _coalesce(*series):
 
 
 def load_entries(only=None):
-    """names_split 为基集(含全部条目), 左连 rhea_summary 取 Protein name / Organism。
+    """names_split is the base set (all entries); left-join rhea_summary for Protein name /
+    Organism.
 
-    names_split 一行一条目; rhea_summary 一行一反应 -> 先按条目收敛再连。
+    names_split is one entry per row; rhea_summary is one reaction per row -> collapse by
+    entry before joining.
     """
     names = read_segmented(NAMES_FILE, only=only, dtype=str)
     rhea = read_segmented(RHEA_SUMMARY_FILE, only=only, dtype=str)
@@ -80,12 +88,14 @@ def load_entries(only=None):
     if 'Protein name' not in rhea.columns:
         raise KeyError(f'{RHEA_SUMMARY_FILE} 缺列 "Protein name"')
 
-    # ⚠️ 这里**不能**按 Entry 静默去重。原来这里有一句 `drop_duplicates(subset='Entry')`,
-    # 它把「同一 accession 出现在两个分段」的情况就地抹平了 —— 留下的是**先读到的那一段**
-    # (即 SOURCES 的顺序), 不打印任何东西。结果恰好与「SwissProt 优先」一致, 所以一直没暴露;
-    # 但它同时让 dedupe_cross_source 的显式优先级与冲突报告成了永不执行的死代码,
-    # 于是同一条规则有了两份实现, 而真正生效的那份是靠 concat 顺序隐式表达的。
-    # 现在一律交给 dedupe_cross_source 裁: 显式优先级 + 逐条打印。
+    # ⚠️ Here we **must not** silently de-duplicate by Entry. There used to be a
+    # `drop_duplicates(subset='Entry')` here; it flattened the case "the same accession
+    # appears in two segments" in place -- keeping the **segment read first** (i.e. the
+    # SOURCES order), printing nothing. The result happened to match "SwissProt first", so
+    # it never surfaced; but it also turned dedupe_cross_source's explicit priority and
+    # conflict report into dead code that never runs, so one rule had two implementations
+    # and the one actually in effect was implicit in the concat order.
+    # Now it is all decided by dedupe_cross_source: explicit priority + per-row printing.
     rhea_by_entry = rhea.drop_duplicates(subset='Entry').set_index('Entry')
 
     entry = names['Entry'].astype(str).str.strip()
@@ -124,17 +134,22 @@ def load_entries(only=None):
 
 
 def dedupe_cross_source(enzyme):
-    """同一 accession 同时出现在两个分段时, 高优先级来源胜出, 另一段的行剔除。
+    """When the same accession appears in two segments, the higher-priority source wins and
+    the other segment's row is dropped.
 
-    否则 `enzyme.uniprot_id` 的 UNIQUE 会直接报错。reviewed 状态变化(升级/降级)
-    在两段下载窗口之间发生, 正是这种情况的来源 —— 同一个 accession 就是一个实体,
-    所以**剔除而不是各留一行**, 并且剔除的是低优先级来源那份。
+    Otherwise `enzyme.uniprot_id`'s UNIQUE would error out directly. A reviewed-status
+    change (upgrade/downgrade) happening between the two segments' download windows is
+    exactly where this arises -- the same accession is one entity, so **drop rather than
+    keep one row each**, and what is dropped is the lower-priority source's copy.
 
-    优先级取自 `source_registry.SOURCES` 的顺序(经 sources.SOURCE_PRIORITY),
-    **不在这里另写一份** —— 两份会在加来源时漂移, 而漂移的表现是「静默按错的那份裁决」。
+    Priority is taken from the order of `source_registry.SOURCES` (via
+    sources.SOURCE_PRIORITY), **not written a second time here** -- two copies would drift
+    when a source is added, and the drift shows up as "silently adjudicated by the wrong
+    copy".
 
-    这条路径是**唯一**的裁决点: 上游 load_entries 不再按 Entry 预去重, 所以这里必然会看到
-    重复行, 冲突也必然会被打印出来(见 load_entries 的注释)。
+    This path is the **only** decision point: upstream load_entries no longer pre-dedupes by
+    Entry, so duplicate rows are guaranteed to show up here and conflicts are guaranteed to
+    be printed (see the note in load_entries).
     """
     dup = enzyme[enzyme.duplicated(subset='uniprot_id', keep=False)]
     if dup.empty:
@@ -142,8 +157,10 @@ def dedupe_cross_source(enzyme):
 
     enzyme = enzyme.copy()
     enzyme['_prio'] = enzyme['source_type'].map(SOURCE_PRIORITY)
-    # 原来的写法是 `.fillna(99)` —— 未知来源静默排到最后。宁可报错: 一个没登记进
-    # SOURCES 的来源值本来就取不到(分段路径按登记表校验), 出现即意味着有东西绕过了它。
+    # The old code was `.fillna(99)` -- an unknown source silently sorted last. Better to
+    # error: a source value not registered in SOURCES cannot be obtained anyway (the
+    # segmented path validates against the registry), so its appearance means something
+    # bypassed that.
     if enzyme['_prio'].isna().any():
         bad = sorted(set(enzyme.loc[enzyme['_prio'].isna(), 'source_type']))
         raise ValueError(f'未知来源 {bad}: 无法裁决跨来源冲突。已登记 {list(SOURCE_PRIORITY)}。')
@@ -161,7 +178,8 @@ def dedupe_cross_source(enzyme):
 
 
 def load_id_maps():
-    """enzyme_id_map / enzyme_alias_map -> 两个 dict。这两张表永不参与 DELETE。"""
+    """enzyme_id_map / enzyme_alias_map -> two dicts. These two tables never take part in
+    DELETE."""
     with engine.connect() as conn:
         m = pd.read_sql("SELECT uniprot_id, enzyme_id FROM enzyme_id_map", conn)
         a = pd.read_sql("SELECT secondary_accession, enzyme_id FROM enzyme_alias_map", conn)
@@ -171,9 +189,10 @@ def load_id_maps():
 
 
 def _resolve_redirect(acc):
-    """UniProt 对已退休 accession 返回 302 到当前主 accession。取不到返回 None。
+    """UniProt returns a 302 to the current primary accession for a retired accession. None
+    when unavailable.
 
-    实测 4/4 一跳到位 (例: B6SYF3 -> A0A1D6EFT8)。
+    Measured 4/4 resolved in one hop (e.g. B6SYF3 -> A0A1D6EFT8).
     """
     try:
         r = requests.get(f'https://rest.uniprot.org/uniprotkb/{acc}',
@@ -187,16 +206,20 @@ def _resolve_redirect(acc):
 
 
 def resolve_vanished(id_map, present_accessions, only=None):
-    """给「以前有编号、这次数据里不见了」的 accession 找它的新号。
+    """Find the new ID for an accession that "had an ID before but is gone from this run's
+    data".
 
-    这里**只在消失的编号上发请求**(≤ |编号表|, 实际极小), 而不是对每个匹配失败的
-    新条目发请求 —— 后者在第一次全量扩容时等于 94k 次 HTTP 请求(约 5 小时)。
-    方向反过来问「我们认识的那个号还在不在」, 既够用又有界。
+    Here we **only request on vanished IDs** (<= |id map|, actually tiny), rather than
+    requesting for every new entry that fails to match -- the latter equals 94k HTTP
+    requests on the first full expansion (~5 hours). Asking the reverse question, "is the
+    number we know still there", is both sufficient and bounded.
 
-    命中新号且新号在当前数据里 -> 写 enzyme_alias_map, 后续沿用原编号。
+    Hit a new ID that is present in the current data -> write enzyme_alias_map, and the
+    original number is reused thereafter.
     """
     if only:
-        # 只重灌一个来源时, 另一个来源的条目仍在库中, 无法判定「消失」。
+        # When reloading only one source, the other source's entries are still in the
+        # database, so "vanished" cannot be decided.
         print('  [redirect] --source 模式跳过退休号解析 (需全量视图)')
         return 0
 
@@ -223,7 +246,8 @@ def resolve_vanished(id_map, present_accessions, only=None):
 
 
 def assign_ids(enzyme, id_map, alias_map):
-    """分配 enzyme_id。命中沿用 / secondary 命中沿用 / 未命中取 MAX+1。**绝不填补空洞**。"""
+    """Assign enzyme_id. A hit reuses it / a secondary hit reuses it / a miss takes
+    MAX+1. **Never fill holes**."""
     used = set(id_map.values())
     nxt = 1 + max((int(e[3:]) for e in used
                    if e.startswith('ENZ') and e[3:].isdigit()), default=0)
@@ -242,11 +266,12 @@ def assign_ids(enzyme, id_map, alias_map):
                 eid = f'ENZ{nxt:06d}'
                 nxt += 1
                 allocated += 1
-            new_rows.append((acc, eid))     # 别名接续的也要补主号映射
+            new_rows.append((acc, eid))     # alias-continued entries need the primary-ID map too
         ids.append(eid)
 
-    # 新分配的号段是 [nxt - allocated, nxt - 1] —— 下面那句断言用的也是 nxt - allocated,
-    # 早先这里多写了个 +1, 日志于是显示「从 ENZ000002 起」, 与库里实际的起始号对不上。
+    # The newly allocated ID range is [nxt - allocated, nxt - 1] -- the assertion below also
+    # uses nxt - allocated. An earlier version added a stray +1 here, so the log showed
+    # "starting at ENZ000002", which did not match the actual starting ID in the database.
     print(f'  enzyme_id: 沿用 {reused}, 经别名接续 {by_alias}, 新分配 {allocated}'
           f'{f" (从 ENZ{nxt - allocated:06d} 到 ENZ{nxt - 1:06d})" if allocated else ""}')
     if allocated and (nxt - allocated) <= max((int(e[3:]) for e in used
@@ -256,7 +281,8 @@ def assign_ids(enzyme, id_map, alias_map):
 
 
 def write_id_map(new_rows, present_accessions, only=None):
-    """回写编号表 + 给本次消失的条目打 retired_at(不删行, 编号不回收)。"""
+    """Write back the ID table + mark retired_at on entries that vanished this run (no row
+    deletion, no ID reclamation)."""
     if new_rows:
         with engine.begin() as conn:
             conn.execute(
@@ -268,12 +294,15 @@ def write_id_map(new_rows, present_accessions, only=None):
         print(f'  enzyme_id_map: 新增 {len(new_rows)} 行')
 
     if only:
-        # 与 resolve_vanished 同理: 只重灌一个来源时 present_accessions 只含该来源,
-        # 另一个来源的条目一条都没进这一眼, 会被整批误判成「从数据里消失了」——
-        # 而它们仍在库里、编号照用。判「消失」必须站在全量视图上, 所以整步跳过。
-        # 实测(2026-09-19): 只跑 --source=trembl 会给全部 1,535 个 swiss_prot 条目
-        # 打上 retired_at(其中 1,535 条当时都还在 enzyme 表里)。全量重跑虽然会把它们
-        # 清回来, 但「单来源刷新不得改动另一个来源的任何一行」要求这里根本别碰。
+        # Same reason as resolve_vanished: when reloading only one source, present_accessions
+        # holds only that source, so the other source's entries never enter this view and
+        # would be wholesale misjudged as "vanished from the data" -- yet they are still in
+        # the database and their IDs still in use. Deciding "vanished" requires the full
+        # view, so the whole step is skipped.
+        # Measured (2026-09-19): running only --source=trembl stamps retired_at on all 1,535
+        # swiss_prot entries (all 1,535 of which were still in the enzyme table at the
+        # time). A full re-run clears them back, but "a single-source refresh must not touch
+        # any row of the other source" requires not touching this at all.
         print(f'  enzyme_id_map: --source={only} 模式跳过 retired_at 维护 (需全量视图)')
         return
 
@@ -288,7 +317,8 @@ def write_id_map(new_rows, present_accessions, only=None):
             conn.execute(text(_retire_sql(gone, True)),
                          {f'p{i}': a for i, a in enumerate(gone)})
         if back:
-            # 条目回来了(降级后又升格): 撤掉退休标记。
+            # The entry came back (downgraded then upgraded again): clear the retirement
+            # mark.
             conn.execute(text(_retire_sql(back, False)),
                          {f'p{i}': a for i, a in enumerate(back)})
 
@@ -299,7 +329,8 @@ def write_id_map(new_rows, present_accessions, only=None):
 
 
 def _retire_sql(accessions, retire):
-    """IN 列表不能直接用绑定参数, 按长度展开占位符 (IN 不接受一个列表参数)。"""
+    """An IN list cannot use a bound parameter directly; expand placeholders by length (IN
+    does not accept a single list parameter)."""
     placeholders = ','.join(f':p{i}' for i in range(len(accessions)))
     if retire:
         return ('UPDATE enzyme_id_map SET retired_at = NOW() '
@@ -309,7 +340,8 @@ def _retire_sql(accessions, retire):
 
 
 def load_enzymes(only=None):
-    """按来源替换酶表。调用前子表必须已由 etl_run.purge_source() 清空。"""
+    """Replace the enzyme table by source. Before calling, the child tables must already be
+    cleared by etl_run.purge_source()."""
     enzyme = load_entries(only=only)
     print(f'  enzyme: 读入 {len(enzyme)} 条目 (基集 = names_split)')
     enzyme, _ = dedupe_cross_source(enzyme)

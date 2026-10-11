@@ -1,21 +1,21 @@
 """
-Generate uniprotkb_terpene_pairs.tsv (每个 底物->产物 对一行, 列出催化它的所有酶).
+Generate uniprotkb_terpene_pairs.tsv (one row per substrate->product pair, listing all enzymes that catalyze it).
 Format: Substrate, Substrate ChEBI, Product, Product ChEBI,
         Enzyme_1..N, Rhea ID_1..N, Direction_1..N
 
-Source: uniprotkb_terpene_only.tsv 按 (Substrate ChEBI, Product ChEBI) 分组。
-  - 组内酶去重: 同一酶催化同一对的多反应, Rhea ID 升序 '; ' 连接, Direction 取该酶第一个反应的值
-  - 组内酶排序 = Entry 字符串升序
-  - 组间排序 = (Substrate ChEBI 字符串, Product ChEBI 字符串) 升序 (与旧表一致)
-  - Substrate/Product 名称: 去前导计量前缀 'N ' (如 '3 isopentenyl diphosphate' -> 'isopentenyl diphosphate'),
-    立体描述符括号保留 ((2E)-farnesyl ...)
+Source: uniprotkb_terpene_only.tsv, grouped by (Substrate ChEBI, Product ChEBI).
+  - de-dup enzymes within a group: for multiple reactions of the same enzyme catalyzing the same pair, Rhea IDs are joined in ascending order with '; ', and Direction takes that enzyme's first reaction's value
+  - enzyme order within a group = ascending string order of Entry
+  - group order = ascending (Substrate ChEBI string, Product ChEBI string) (same as the old table)
+  - Substrate/Product name: strip the leading stoichiometric prefix 'N ' (e.g. '3 isopentenyl diphosphate' -> 'isopentenyl diphosphate'),
+    stereo-descriptor parentheses are kept ((2E)-farnesyl ...)
 """
 import csv
 import re
 import sys
 from collections import OrderedDict
 
-# 用法: python build_terpene_pairs.py [terpene_only] [输出]
+# Usage: python build_terpene_pairs.py [terpene_only] [output]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else 'output_terpene_only.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_terpene_pairs.tsv'
 
@@ -25,11 +25,11 @@ def rhea_key(rid):
 
 
 def strip_stoich(name):
-    """去前导计量前缀 'N ' (立体描述符括号保留)。"""
+    """Strip the leading stoichiometric prefix 'N ' (stereo-descriptor parentheses kept)."""
     return re.sub(r'^\d+ ', '', name)
 
 
-# ---- 单次遍历: (sub, prod) -> {entry: [(rid, direction), ...]}, 记录首个名称 ----
+# ---- single pass: (sub, prod) -> {entry: [(rid, direction), ...]}, recording the first name ----
 pairs = OrderedDict()  # key -> {'sub': name, 'prod': name, 'enzymes': {entry: [(rid,dir)]}}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
@@ -43,15 +43,15 @@ with open(INPUT, 'r', encoding='utf-8') as f:
 max_n = max((len(v['enzymes']) for v in pairs.values()), default=0)
 print(f'Unique substrate->product pairs: {len(pairs)}, max enzymes per pair: {max_n}')
 
-# ---- 组装 ----
+# ---- assemble ----
 fields = ['Substrate', 'Substrate ChEBI', 'Product', 'Product ChEBI']
 for i in range(1, max_n + 1):
     fields += [f'Enzyme_{i}', f'Rhea ID_{i}', f'Direction_{i}']
 
 out_rows = []
-for (sub_chebi, prod_chebi) in sorted(pairs.keys()):  # 组间字符串升序
+for (sub_chebi, prod_chebi) in sorted(pairs.keys()):  # ascending group strings
     meta = pairs[(sub_chebi, prod_chebi)]
-    enzymes = sorted(meta['enzymes'].keys())  # 组内酶 Entry 字符串升序
+    enzymes = sorted(meta['enzymes'].keys())  # ascending Entry strings within a group
     row = OrderedDict()
     row['Substrate'] = strip_stoich(meta['sub'])
     row['Substrate ChEBI'] = sub_chebi
@@ -63,7 +63,7 @@ for (sub_chebi, prod_chebi) in sorted(pairs.keys()):  # 组间字符串升序
             rxns = meta['enzymes'][entry]
             row[f'Enzyme_{i}'] = entry
             row[f'Rhea ID_{i}'] = '; '.join(sorted({r for r, _ in rxns}, key=rhea_key))
-            # Direction: 仅当该酶所有反应都是 'not specified' 才记为 'not specified', 否则 '' (与旧表一致)
+            # Direction: 'not specified' only when all of this enzyme's reactions are 'not specified', else '' (same as the old table)
             row[f'Direction_{i}'] = ('not specified' if all(d == 'not specified' for _, d in rxns) else '')
         else:
             for c in ['Enzyme', 'Rhea ID', 'Direction']:

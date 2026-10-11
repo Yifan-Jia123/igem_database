@@ -23,10 +23,13 @@ async def search_structure_by_inchikey(
     if not key:
         return ApiResponse(success=False, error={"code": "BAD_REQUEST", "message": "InChIKey is required"})
 
-    # 两列都匹配。inchi_key 是 ChEBI 官方值, inchi_key_derived 是 RDKit 从库里 smiles
-    # 现算的 —— 两者在 710 条可比数据里只差 2 条 (CHEBI:231826 / CHEBI:53643, ChEBI 自己
-    # 的 smiles 与 standard_inchi 互相矛盾), 谁都不能判为错, 所以两个键都认。
-    # 只认一列会让那 2 条中"用另一种工具算出另一个键"的调用方查不到东西。
+    # Match both columns. inchi_key is the official ChEBI value, inchi_key_derived
+    # is RDKit's on-the-fly computation from the stored smiles -- across 710
+    # comparable records the two differ in only 2 (CHEBI:231826 / CHEBI:53643,
+    # where ChEBI's own smiles and standard_inchi contradict each other), neither
+    # can be judged wrong, so both keys are accepted. Accepting only one column
+    # would leave a caller who "computed the other key with another tool"
+    # unable to find those 2.
     matches_key = or_(Compound.inchi_key == key, Compound.inchi_key_derived == key)
 
     compound_result = await db.execute(

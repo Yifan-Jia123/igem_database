@@ -20,11 +20,13 @@ async def blast_subjects(
     source_types: Optional[List[str]] = Query(None, description="搜索集：只数圈定来源里的主体"),
     db: AsyncSession = Depends(get_db),
 ):
-    """当前搜索集下 BLAST 会拿多少条主体序列。
+    """How many subject sequences BLAST would take under the current search set.
 
-    抽屉要在**用户点 Run 之前**显示这个数（跑完那次有 ``searchedSubjects``，
-    但换搜索集后那个数属于上一次运行）。与 ``_ensure_blast_db`` **同一组谓词** ——
-    这个数与实际建库的条数必须一致，详见 ``blast_service.count_subjects``。
+    The drawer must show this number **before the user clicks Run** (a completed
+    run has ``searchedSubjects``, but after changing the search set that number
+    belongs to the previous run). Same predicate group as ``_ensure_blast_db`` --
+    this number must match the number actually built into the database; see
+    ``blast_service.count_subjects``.
     """
     subjects = await count_subjects(db, source_types)
     return ApiResponse(data={"subjects": subjects})

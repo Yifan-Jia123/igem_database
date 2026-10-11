@@ -1,19 +1,23 @@
-"""ETL Step 5: 酶序列回填 + 子表(gene / sequence_link / evidence / go / isoform)。
+"""ETL Step 5: enzyme sequence backfill + child tables (gene / sequence_link /
+evidence / go / isoform).
 
-## 按来源替换 (方案 Phase 2.1 C 类)
+## Replaced by source (plan Phase 2.1, C class)
 
-这 5 张子表都**有 `enzyme_id` 外键、但没有 `source_type` 列**。它们每个 enzyme_id
-都确定性地属于某一个来源, 所以照样能按来源替换 —— 判据是「有没有 enzyme_id 外键」,
-不是「有没有 source_type」。
+All 5 child tables **have an `enzyme_id` foreign key but no `source_type` column**.
+Each enzyme_id deterministically belongs to one source, so they can still be replaced
+by source -- the criterion is "does it have an enzyme_id FK", not "does it have
+source_type".
 
-原实现在这里做了 **5 处无条件 `DELETE FROM <表>`(全表清空)**: 刷新 TrEMBL 会把
-SwissProt 的子表行一并清掉, 来源隔离直接失效。按来源的删除已集中到 etl_run.purge_source(),
-本模块只负责写入。
+The original implementation did **5 unconditional `DELETE FROM <table>` (full-table
+wipes)** here: refreshing TrEMBL also wiped SwissProt's child-table rows, breaking
+source isolation outright. Source-scoped deletion has been centralised into
+etl_run.purge_source(); this module only writes.
 
-## 建表语句的唯一出处 = sql/schema.sql
+## The single source of DDL = sql/schema.sql
 
-原实现在本文件内嵌了 3 张表的 DDL, 与 `sql/schema.sql` 重复定义 ——
-改 schema 时漏改一处, 本地建表语句就和 schema.sql 漂移。改成从 schema.sql 里取。
+The original embedded the DDL for 3 tables in this file, duplicating `sql/schema.sql` --
+miss one place when the schema changes and the local DDL drifts from schema.sql.
+Changed to fetch it from schema.sql.
 """
 import os
 import sys
@@ -36,7 +40,8 @@ GO_FILE = 'for_enzyme_detail/child_tables/uniprotkb_go.tsv'
 ISOFORM_FILE = 'for_enzyme_detail/child_tables/uniprotkb_isoform_sequences.tsv'
 SOLUBILITY_FILE = 'for_enzyme_detail/child_tables/uniprotkb_solubility_score.tsv'
 
-# evidence 表没有 source_type, 但它的来源由 enzyme 决定 -> 审核状态跟着酶走。
+# The evidence table has no source_type, but its source is decided by enzyme ->
+# review status follows the enzyme.
 SOURCE_TO_REVIEW = {'swiss_prot': 'official', 'trembl': 'pending'}
 
 EVIDENCE_COLUMNS = {
@@ -53,7 +58,8 @@ EVIDENCE_COLUMNS = {
 
 
 def _enzyme_source_map():
-    """enzyme_id -> source_type。子表地址靠它判来源; 审核状态也跟着来源走。"""
+    """enzyme_id -> source_type. Child tables use it to determine their source;
+    review status follows the source too."""
     df = pd.read_sql("SELECT enzyme_id, source_type FROM enzyme", engine)
     return {str(r.enzyme_id): str(r.source_type) for r in df.itertuples()}
 
@@ -115,19 +121,26 @@ def _ensure_table(ddl):
 
 
 def update_enzyme_from_master(only=None):
-    """把 master 宽表里的序列 / 长度 / 质量回填到 enzyme 表。
+    """Backfill sequence / length / mass from the master wide table into the enzyme
+    table.
 
-    原实现逐行发一条 UPDATE, 语句还随行变化(不同行更新的列不同)—— 96k 行就是 96k 条语句。
-    改成一条统一语句 + executemany, 并用 COALESCE 让「本次没有值」不覆盖已有值。
+    The original issued one UPDATE per row, and the statement varied by row (different
+    rows updated different columns) -- 96k rows meant 96k statements. Changed to one
+    unified statement + executemany, with COALESCE so a "no value this run" does not
+    overwrite an existing value.
     """
-    # 只读真正用得到的列: master 是**宽度动态**的宽表(实测 SP 141 列 / TrEMBL 473 列,
-    # 全量 96k 行时列数还可能再涨), 而本步只用 Entry + 序列/长度/质量四列。
-    # 全列解析 96k × 473 的峰值是 GB 级, 而这里要的只是 5 列。
+    # Read only the columns actually needed: master is a **dynamically wide** table
+    # (measured SP 141 columns / TrEMBL 473 columns, and the count may grow further at
+    # the full 96k rows), while this step uses only Entry + the four sequence/length/
+    # mass columns. Parsing all columns at 96k x 473 peaks at GB scale, and only 5
+    # columns are wanted here.
     spec_cols = ["Entry", "Canonical Sequence", "Sequence Length", "Canonical Length", "Canonical Mass"]
     have = columns_of(MASTER_FILE, only=only)
     wanted = [c for c in spec_cols if all(c in names for names in have.values())]
     if "Entry" not in wanted or "Canonical Sequence" not in wanted:
-        # 缺「预期的序列列名」时要走下面的列名猜测(扫全部列找序列样式的列), 那就必须读全列。
+        # When the "expected sequence column name" is missing, it falls through to the
+        # column-name guess below (scanning all columns for a sequence-like one), which
+        # requires reading all columns.
         wanted = None
     df = read_segmented(MASTER_FILE, only=only, dtype=str,
                         **({'usecols': wanted} if wanted else {}))
@@ -179,7 +192,8 @@ def update_enzyme_from_master(only=None):
         print("  enzyme (sequence update): 没有可回填的行")
         return
 
-    # COALESCE: 本次没值(NULL)就不动原值 —— 用 SET sequence = :sequence 会把缺列的行写空。
+    # COALESCE: a NULL this run leaves the original value alone -- SET sequence =
+    # :sequence would blank rows that lack the column.
     sql = text(
         "UPDATE enzyme SET "
         "sequence = COALESCE(:sequence, sequence), "
@@ -217,8 +231,9 @@ def load_gene_info(only=None):
         if not enzyme_id:
             continue
 
-        # 列宽按列头推导, 不写死 —— 原来这里是 range(1, 25) / range(1, 12),
-        # 而现表最后一列恰好各有 1 条真实数据(零余量), 更宽的条目会取不到 accession。
+        # Column width derived from the header, not hard-coded -- this used to be
+        # range(1, 25) / range(1, 12), and the current table's last column has exactly
+        # 1 real row each (zero slack), so a wider entry would fail to get an accession.
         insdc_nuc_cols = [f"INSDC_Nuc_ID_{i}" for i in indexed_groups(df.columns, "INSDC_Nuc_ID")]
         insdc_genbank_cols = [f"INSDC_Nuc_GenBank_Link_{i}"
                               for i in indexed_groups(df.columns, "INSDC_Nuc_GenBank_Link")]
@@ -243,8 +258,9 @@ def load_gene_info(only=None):
                 "protein_accession": protein_accession,
             })
 
-    # 不再 DELETE FROM gene —— 那是全表清空, 会连另一个来源的行一起清掉。
-    # 按来源的删除已在 etl_run.purge_source() 做完, 这里只写。
+    # No more DELETE FROM gene -- that is a full-table wipe, clearing the other
+    # source's rows too. Source-scoped deletion is done by etl_run.purge_source();
+    # this only writes.
     if not rows:
         print("  gene: no rows to insert")
         return
@@ -315,8 +331,9 @@ def load_sequence_links(only=None):
         if not enzyme_id:
             continue
 
-        # 宽度按列头推导, 不写死。这里是**会产生行**的一处 —— 写死 24/11 时,
-        # 第 25 段 INSDC 链接会被静默丢掉(现表第 24 列恰好有 1 条真实数据, 零余量)。
+        # Width derived from the header, not hard-coded. This is one of the places that
+        # **produces rows** -- with 24/11 hard-coded, the 25th INSDC link was silently
+        # dropped (the current table's 24th column has exactly 1 real row, zero slack).
         for i in indexed_groups(df.columns, "INSDC_Nuc_ID"):
             _append_insdc_links(rows, enzyme_id, row, i)
 
@@ -360,8 +377,9 @@ def load_evidence(only=None):
         if not enzyme_id:
             continue
 
-        # evidence 表没有 source_type, 审核状态跟着它那个酶的来源走 ——
-        # 原来无条件写 "official", TrEMBL 的证据也会被标成官方审核。
+        # The evidence table has no source_type; review status follows its enzyme's
+        # source -- the original wrote "official" unconditionally, marking TrEMBL
+        # evidence as officially reviewed too.
         review = SOURCE_TO_REVIEW.get(source_by_enzyme.get(enzyme_id, ''))
         if review is None:
             raise ValueError(f'{enzyme_id} 的来源 {source_by_enzyme.get(enzyme_id)!r} 未知, '
@@ -480,15 +498,18 @@ def load_isoforms(only=None):
 
 
 def _true_variant_isoform_ids():
-    """「序列与 canonical 确实不同」的 isoform_id 集合。
+    """Set of isoform_ids whose sequence genuinely differs from the canonical one.
 
-    与 blast_service._isoform_subject_query 用的是**同一条谓词** —— 系统里只应有
-    一个「什么算真变体」的定义, 那边是 BLAST 主体库, 这边是分数入库。
+    Uses the **same predicate** as blast_service._isoform_subject_query -- the system
+    should have only one definition of "what counts as a true variant"; there it is the
+    BLAST subject database, here it is score ingestion.
 
-    源表里 56 条 isoform 记录有 26 条的 id 是 `-1`(UniProt 的 canonical 编号),
-    序列与 canonical 逐字符相同, 分数只差在第六位小数(实测最大 Δ 0.000004)——
-    同一序列重跑的浮点噪声, 不是另一个生物学实体。前端读取一律走
-    `isoform_id IS NULL`, 所以那 26 行即使入库也永远读不到, 不如不写。
+    Of the 56 isoform records in the source table, 26 have an id of `-1` (UniProt's
+    canonical numbering), with a sequence identical char-for-char to canonical and a
+    score differing only in the sixth decimal (measured max Δ 0.000004) -- floating
+    point noise from re-running the same sequence, not another biological entity. The
+    frontend always reads via `isoform_id IS NULL`, so those 26 rows would never be read
+    even if inserted, so they are better left unwritten.
     """
     df = pd.read_sql(
         "SELECT DISTINCT isoform_id FROM enzyme_isoform "
@@ -502,7 +523,8 @@ def _true_variant_isoform_ids():
 def load_solubility_scores(only=None):
     """Load per-enzyme model score + membrane annotation.
 
-    ⚠️ 必须排在 load_isoforms() **之后** —— 下面的真变体过滤要查 enzyme_isoform。
+    ⚠️ Must run **after** load_isoforms() -- the true-variant filter below queries
+    enzyme_isoform.
     """
     _ensure_table(schema_ddl('enzyme_solubility_score'))
     df = read_segmented(SOLUBILITY_FILE, only=only, dtype=str)
@@ -520,9 +542,10 @@ def load_solubility_scores(only=None):
             no_enzyme += 1
             continue
 
-        # ⚠️ 与 load_isoforms 相反: isoform_id 为空**正是 canonical 行**, 不能跳过 ——
-        # 照抄那边的 `if not isoform_id: continue` 会丢掉全部 canonical 数据。
-        # 空值写 None(不是 ''), 前端读的是 `isoform_id IS NULL`。
+        # ⚠️ Opposite of load_isoforms: an empty isoform_id **is exactly the canonical
+        # row**, so do not skip it -- copying that side's `if not isoform_id: continue`
+        # would drop all canonical data. Write None (not ''); the frontend reads
+        # `isoform_id IS NULL`.
         isoform_id = _clean_value(row.get("Isoform_ID"))
         if isoform_id and isoform_id not in true_variants:
             dropped_redundant += 1
@@ -550,8 +573,10 @@ def load_solubility_scores(only=None):
         print("  solubility scores: no rows to insert")
         return
 
-    # 按 (enzyme_id, isoform_id) 去重: 下游 `_load_solubility_meta` 是建成字典按 enzyme_id
-    # 索引的, 重复键会**静默后者覆盖前者**。源数据核验过是 1:1, 这里只是把它变成显式的。
+    # De-duplicate by (enzyme_id, isoform_id): downstream `_load_solubility_meta` builds
+    # a dict keyed by enzyme_id, where a duplicate key **silently lets the latter
+    # overwrite the former**. The source data was verified 1:1; this just makes it
+    # explicit.
     score_df = pd.DataFrame(rows)
     keys = ["enzyme_id", "isoform_id"]
     before = len(score_df)
@@ -578,7 +603,8 @@ def run(only=None):
     load_sequence_links(only=only)
     load_evidence(only=only)
     load_go_terms(only=only)
-    # 必须在 load_isoforms 之后: load_solubility_scores 靠 enzyme_isoform 判真变体。
+    # Must run after load_isoforms: load_solubility_scores relies on enzyme_isoform to
+    # identify true variants.
     load_isoforms(only=only)
     load_solubility_scores(only=only)
 

@@ -1,8 +1,10 @@
-"""按稳定身份 upsert 的小工具。B 类表(全局字典, 与来源无关)共用。
+"""Small helper to upsert by stable identity. Shared by B-class tables (global
+dictionaries, independent of source).
 
-方案「只补充 + 只新增」的规则: 命中已有身份 -> **原地更新**, 未命中 -> 新增。
-绝不能「读现有 -> 过滤掉已存在的」再 append —— 那是「已存在就跳过」,
-已有行的字段改善(smiles / equation 等)永远进不来。
+The "supplement only + insert only" rule: an identity already present -> **updated in
+place**; a new one -> inserted. Never "read existing, filter out the ones already
+there" and append -- that is "skip if it exists", so field improvements on existing
+rows (smiles / equation, etc.) can never come in.
 """
 import os
 import re
@@ -13,8 +15,9 @@ from sqlalchemy import text
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# schema.sql 从**本仓库**取, 不跟着 IGEM_DATA_DIR 走 —— 那个环境变量是给沙箱换
-# for_* 数据目录用的, 而建表语句属于代码, 沙箱里不该出现第二份(会漂移)。
+# schema.sql comes from **this repo**, it does not follow IGEM_DATA_DIR -- that env
+# var is for swapping the sandbox's for_* data directory, while the DDL belongs to
+# the code, and a second copy must not appear in the sandbox (it would drift).
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_SQL = os.path.join(_REPO_ROOT, 'sql', 'schema.sql')
 
@@ -22,11 +25,14 @@ _MISSING_DDL = {}
 
 
 def schema_ddl(table):
-    """从 sql/schema.sql 取某张表的 CREATE TABLE 语句 —— 建表语句的唯一出处。
+    """Fetch a table's CREATE TABLE statement from sql/schema.sql -- the single source
+    of the DDL.
 
-    ETL 里有几个模块原先各自内嵌一份 DDL 副本(`gene_sequence_link` / `enzyme_go` /
-    `enzyme_isoform` / `search_index`), 与 schema.sql 重复定义。改 schema 时漏改一处,
-    本地建表语句就和 schema.sql 漂移 —— 而漂移的表结构不会报错, 只会让下游读到空列。
+    Several ETL modules used to embed their own DDL copy (`gene_sequence_link` /
+    `enzyme_go` / `enzyme_isoform` / `search_index`), duplicating schema.sql. Miss one
+    place when the schema changes and the local DDL drifts from schema.sql -- and a
+    drifted table structure raises no error, it just makes downstream read empty
+    columns.
     """
     if table in _MISSING_DDL:
         raise KeyError(f'sql/schema.sql 里找不到 {table} 的建表语句')
@@ -37,26 +43,32 @@ def schema_ddl(table):
     m = re.search(rf'CREATE TABLE IF NOT EXISTS {re.escape(table)}\s*\(.*?\n\)\s*ENGINE=[^;]*;',
                   sql, re.S)
     if not m:
-        # 记下来, 免得每张表都重读一遍这个 400 行的文件。
+        # Remember it, so each table does not re-read this 400-line file again.
         _MISSING_DDL[table] = True
         raise KeyError(f'sql/schema.sql 里找不到 {table} 的建表语句')
     return m.group(0)
 
-# MySQL 的 VALUES() 在新版本被标记为 deprecated, 但在 8.0.46 上仍是可用的标准写法,
-# 且比 8.0.19+ 的别名语法兼容性更好(别名语法在 MariaDB 上不认)。
+# MySQL marks VALUES() deprecated in newer versions, but it is still a usable standard
+# form on 8.0.46, and it is more compatible than the 8.0.19+ alias syntax (which
+# MariaDB does not accept).
 def upsert_dataframe(conn, table, df, update_cols, preserve=()):
-    """INSERT ... ON DUPLICATE KEY UPDATE, 冲突键由表上的 PK/UNIQUE 决定。
+    """INSERT ... ON DUPLICATE KEY UPDATE, with the conflict key decided by the table's
+    PK/UNIQUE.
 
-    update_cols: 冲突时要更新的列
-    preserve:    这些列用 COALESCE(VALUES(c), c) —— 传 NULL 不会把现值抹掉。
-                 给「本次数据没带、但已有值仍有效」的列(如 compound.inchi_key)。
+    update_cols: columns to update on conflict
+    preserve:    these columns use COALESCE(VALUES(c), c) -- passing NULL does not wipe
+                 the current value. For columns "not carried by this run's data, but
+                 whose existing value is still valid" (e.g. compound.inchi_key).
 
-    ⚠️ **返回值是输入行数(`len(df)`), 不是实际写入行数** —— 不是 `cursor.rowcount`。
-    两条理由: (1) MySQL 对 ON DUPLICATE KEY UPDATE 的 rowcount 把「更新」按 2 计,
-    拿它当行数会翻倍; (2) INSERT IGNORE 时 rowcount 会把冲突忽略的行排除掉, 于是
-    `update_cols=[]`(纯只新增)在**幂等重跑**时返回 0 —— 而调用点全都拿它当
-    「本次处理了多少行」打印。所以打印时必须写成「输入 N 行」而不是「新增 N 行」,
-    实际是否新增要看表行数变化(2026-09-19 曾因此把「新增 0 行」误报成「新增 112 行」)。
+    ⚠️ **The return value is the input row count (`len(df)`), not the rows actually
+    written** -- it is not `cursor.rowcount`. Two reasons: (1) MySQL counts an "update"
+    as 2 in the rowcount of ON DUPLICATE KEY UPDATE, so using it as a row count doubles
+    the number; (2) with INSERT IGNORE the rowcount excludes rows dropped on conflict,
+    so `update_cols=[]` (pure insert-only) returns 0 on an **idempotent re-run** -- yet
+    every call site prints it as "how many rows this run processed". So the print must
+    read "input N rows", not "inserted N rows"; whether anything was actually inserted
+    has to come from the change in table row count (on 2026-09-19 this misreported
+    "inserted 0 rows" as "inserted 112 rows").
     """
     if df.empty:
         return 0
@@ -71,11 +83,11 @@ def upsert_dataframe(conn, table, df, update_cols, preserve=()):
         )
         sql = f'INSERT INTO {table} ({col_list}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {sets}'
     else:
-        # 没有要更新的列 = 纯「只新增」, 冲突就忽略。
+        # No columns to update = pure "insert only"; on conflict, ignore.
         sql = f'INSERT IGNORE INTO {table} ({col_list}) VALUES ({placeholders})'
 
-    # NaN -> None: 否则 pandas 会把 NaN 当浮点数写进 VARCHAR 列。
-    # 先 astype(object) 避免 numpy 标量类型(pymysql 对 numpy.int64 会报错)。
+    # NaN -> None: otherwise pandas writes NaN as a float into VARCHAR columns.
+    # astype(object) first avoids numpy scalar types (pymysql errors on numpy.int64).
     params = df.astype(object).where(pd.notna(df), None).to_dict('records')
     conn.execute(text(sql), params)
     return len(params)

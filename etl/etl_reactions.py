@@ -1,45 +1,55 @@
-"""ETL Step 3: 反应表 + reaction_compound —— B 类(全局字典)。
+"""ETL Step 3: the reaction table + reaction_compound -- class B (global dictionaries).
 
-## 为什么 reaction 不按来源删
+## Why reaction is not deleted by source
 
-`reaction` 表**有** source_type 列, 但它不是 A 类。同一个 Rhea 反应会被两个来源共享,
-按来源 DELETE 会删掉另一个来源正在引用的反应行, 而
-`enzyme_reaction_edge.fk_edge_reaction` 会直接报外键错。
+The `reaction` table **has** a source_type column, but it is not class A. The same Rhea
+reaction is shared by both sources, so a DELETE by source would drop reaction rows the
+other source is still referencing, and `enzyme_reaction_edge.fk_edge_reaction` would be a
+direct foreign-key error.
 
-反应是**客观化学实体**, 不是某条 UniProt 记录的属性 —— 所以统一记为 `swiss_prot`
-并只增不删, 来源归属交给 `enzyme` / `enzyme_reaction_edge` 表达。
+A reaction is an **objective chemical entity**, not a property of some UniProt record -- so
+it is uniformly recorded as `swiss_prot` and add-only, and source attribution is expressed
+by `enzyme` / `enzyme_reaction_edge`.
 
-## 顺带修掉的两个旧缺陷
+## Two old defects fixed along the way
 
-1. `drop_duplicates(subset="Rhea ID")` 全局归并保留 —— 对 reaction 是**对的**
-   (一个 Rhea ID 就是一个反应), 保留。
-2. 原实现「读现有 -> 过滤掉已存在的」= **已存在就跳过**: 已有反应更新的 `smiles` / `equation`
-   永远不会生效。改成 upsert。
+1. `drop_duplicates(subset="Rhea ID")` keeping a global merge -- for reaction this is
+   **right** (one Rhea ID is one reaction), keep it.
+2. The original implementation's "read existing -> filter out those already present" =
+   **skip if it already exists**: an updated `smiles` / `equation` for an existing reaction
+   would never take effect. Changed to upsert.
 
-## ⚠️ 2026-09-19: `--source=<s>` 模式下 reaction 只新增、不更新
+## ⚠️ 2026-09-19: in `--source=<s>` mode reaction is insert-only, never update
 
-上面那条「改成 upsert」对**全量模式**成立, 但对**单来源模式是错的** —— 实测出来的:
+The "changed to upsert" above holds for **full mode** but is **wrong for single-source
+mode** -- measured:
 
-`read_segmented(RHEA_FILE, only=only)` 在单来源模式下只读到那一段, 而下面的
-`drop_duplicates(subset='Rhea ID')` 取的是**该段文件里的第一行**。同一个 Rhea ID 的
-`Direction` 在两条来源里可以不同(TrEMBL 的自动注释大量是 `not specified`), 于是
-「一个 Rhea ID 一个反应」这个跨来源的客观实体, 它的属性变成了**由最后跑的模式决定**:
+`read_segmented(RHEA_FILE, only=only)` reads only that segment in single-source mode, and
+the `drop_duplicates(subset='Rhea ID')` below takes **the first row in that segment's
+file**. The `Direction` of the same Rhea ID can differ between the two sources (TrEMBL's
+automatic annotation is largely `not specified`), so the cross-source objective entity
+"one Rhea ID is one reaction" has its attributes **decided by whichever mode ran last**:
 
-| RHEA:31007 的 Direction | 读到的第一行 | 映射后 | 图的后果 |
+| Direction of RHEA:31007 | first row read | after mapping | effect on the graph |
 |---|---|---|---|
-| 合并视图(swiss_prot 在前) | `left-to-right` | `forward` | 只画底物→产物 |
-| 只读 trembl 段 | `not specified` | `unknown` | **双向都画**(`DIRECTION_ALLOWS_*` 都含 unknown) |
+| merged view (swiss_prot first) | `left-to-right` | `forward` | draws substrate->product only |
+| trembl segment only | `not specified` | `unknown` | **draws both ways** (`DIRECTION_ALLOWS_*` all include unknown) |
 
-实测只跑一次 `--source=trembl`: `reaction` 里 12 行的 `direction` 从 `forward`/`reverse`
-翻成 `unknown`(恰好等于「两段 Direction 不一致的共享反应」数, 39 个共享反应里有 12 个)。
-行数一个没变, 但首页图从 **157 组 / 7,166.6 KB 变成 169 组 / 8,774.7 KB**, 并多出
-`(X,Y)` 与 `(Y,X)` 成对的镜像边 —— 即一次「另一个来源」的刷新改掉了图上画什么。
+Measured running `--source=trembl` once: the `direction` of 12 rows in `reaction` flips from
+`forward`/`reverse` to `unknown` (exactly the count of "shared reactions whose two segments
+disagree on Direction", 12 of 39 shared reactions). The row count did not change, but the
+home graph went from **157 groups / 7,166.6 KB to 169 groups / 8,774.7 KB**, and extra
+paired mirror edges `(X,Y)` and `(Y,X)` appeared -- i.e. one "other source" refresh changed
+what the graph draws.
 
-所以单来源模式下这里是**纯只新增**(`update_cols=[]`, 走 `INSERT IGNORE`):
-判断一个共享反应该取哪一行, 只有合并视图做得到; 单来源看半张表, 无权覆盖。
-这与同模块 `load_reaction_compounds` 的「已存在则忽略」是同一个道理, 也是隔离原则
-(「两个来源互不覆盖」)在共享实体上的落地 —— 更新共享反应的属性由**全量模式**负责
-(全量模式读全部分段, 且 `SOURCES` 顺序让 swiss_prot 在前, 结果与修复前一致)。
+So in single-source mode this is **pure insert-only** (`update_cols=[]`, going through
+`INSERT IGNORE`): deciding which row a shared reaction should take can only be done by the
+merged view; a single source sees half the table and has no right to overwrite. This is the
+same rationale as `load_reaction_compounds`'s "ignore if it already exists" in this module,
+and it is the isolation principle ("the two sources do not overwrite each other") applied to
+a shared entity -- updating a shared reaction's attributes is the job of **full mode**
+(full mode reads all segments, and the `SOURCES` order puts swiss_prot first, matching the
+result before the fix).
 """
 import os
 import sys
@@ -66,7 +76,7 @@ REACTION_COLS = ["reaction_id", "rhea_id", "equation", "direction", "ec_number",
 def parse_chebi_ids(chebi_str):
     """'CHEBI:138232 | CHEBI:138233; CHEBI:33019' -> (substrates, products)
 
-    '|' 左边是底物(';' 分隔), 右边是产物。
+    The left of '|' is substrates (';'-separated), the right is products.
     """
     if pd.isna(chebi_str) or not str(chebi_str).strip():
         return [], []
@@ -78,7 +88,7 @@ def parse_chebi_ids(chebi_str):
 
 
 def load_allowed_compound_ids():
-    """被允许作为图节点的化合物(人工策展过的集合)。"""
+    """Compounds allowed as graph nodes (the hand-curated set)."""
     allowed = set()
     for rel in (TERPENE_COMPOUNDS_FILE, GRAPH_NODES_FILE):
         df = read_merged(rel, usecols=["ChEBI ID"])
@@ -91,8 +101,9 @@ def load_allowed_compound_ids():
 def load_reactions(only=None):
     df = read_segmented(RHEA_FILE, only=only, dtype=str)
 
-    # 一个 Rhea ID 就是一个反应: 全局按 Rhea ID 归并(跨来源合并, 与来源无关)。
-    # 个别 Rhea ID 有多条 SMILES, 取第一条以保持确定性。
+    # One Rhea ID is one reaction: merge globally by Rhea ID (a cross-source merge,
+    # independent of source). A few Rhea IDs have multiple SMILES; take the first for
+    # determinism.
     reactions = df[["Rhea ID", "EC Number", "Equation", "Direction",
                     "Reaction SMILES"]].drop_duplicates(subset="Rhea ID")
 
@@ -108,20 +119,23 @@ def load_reactions(only=None):
     )
     out = out[out["rhea_id"].notna() & (out["rhea_id"].astype(str).str.strip() != "")]
 
-    # 反应统一记 swiss_prot: 它是共享的客观实体, 按来源标记会在另一来源引用它时
-    # 被按来源 DELETE 删掉 -> 外键错。来源归属由 enzyme / edge 表达。
+    # Reactions are uniformly recorded as swiss_prot: it is a shared objective entity, and
+    # tagging by source would let a source-scoped DELETE remove it while the other source
+    # references it -> foreign-key error. Source attribution is expressed by enzyme / edge.
     out["source_type"] = "swiss_prot"
     out["review_status"] = "official"
 
-    # 单来源模式: 只新增, 不覆盖(理由见模块 docstring)。全量模式: 正常 upsert。
+    # Single-source mode: insert-only, never overwrite (see the module docstring). Full
+    # mode: normal upsert.
     upd = [] if only else [c for c in REACTION_COLS if c != "reaction_id"]
     with engine.begin() as conn:
         n = upsert_dataframe(conn, "reaction", out[REACTION_COLS].drop_duplicates(subset="reaction_id"),
                              update_cols=upd)
     if only:
-        # 措辞用「输入」不用「新增」: upsert_dataframe 返回的是输入行数, 不是写入行数
-        # (见 db_utils 的说明)。本模式下这 112 行**全部已存在**、实际新增 0,
-        # 若写成「新增 112 行」会让幂等重跑看起来像在重复灌数据。
+        # The wording is "input" not "insert": upsert_dataframe returns the input row count,
+        # not the written row count (see the note in db_utils). In this mode all 112 of
+        # these rows **already exist** and 0 are actually inserted, so writing "inserted 112
+        # rows" would make an idempotent re-run look like it keeps reloading the same data.
         print(f"  reaction: 只新增模式, 输入 {n} 行 (冲突即忽略; "
               f"--source={only} 不覆盖共享反应, 属性更新由全量模式负责)")
     else:
@@ -156,7 +170,7 @@ def load_reaction_compounds(only=None):
         return
 
     rc = pd.DataFrame(rows).drop_duplicates()
-    # UNIQUE (reaction_id, compound_id, role) 保证幂等: 冲突即忽略。
+    # UNIQUE (reaction_id, compound_id, role) guarantees idempotency: ignore on conflict.
     with engine.begin() as conn:
         n = upsert_dataframe(conn, "reaction_compound", rc, update_cols=[])
     print(f"  reaction_compound: upsert {n} 行 (已存在则忽略)")

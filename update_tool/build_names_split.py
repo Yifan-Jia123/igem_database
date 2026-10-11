@@ -2,21 +2,21 @@
 Generate the names_split child table (uniprotkb_names_split.tsv).
 Format: Entry, UniProt Link, Entry Name, Organism, Recommended name, Alternative names, Gene Names
 
-Source: parse_names.py 的产物 uniprotkb_terpene_parsed.tsv
-  - Recommended name / Alternative names 与 rebuild_master.py 同一逻辑：推荐名+首个 EC，
-    替代名依次配 EC（EC 来自 parse_names 拆出的 'EC numbers' 字段）
-  - Entry Name / Organism / Gene Names 直接取自 parsed
+Source: parse_names.py's output uniprotkb_terpene_parsed.tsv
+  - Recommended name / Alternative names use the same logic as rebuild_master.py: recommended name + first EC,
+    alternative names paired with ECs in order (the EC comes from the 'EC numbers' field split out by parse_names)
+  - Entry Name / Organism / Gene Names are taken straight from parsed
 """
 import csv
 import sys
 
-# 用法: python build_names_split.py [parsed.tsv] [输出文件]
+# Usage: python build_names_split.py [parsed.tsv] [output file]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else 'uniprotkb_terpene_parsed.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_names_split.tsv'
 
 
 def build_name_fields(rec_name, alt_names_str, ec_str):
-    """与 rebuild_master.py 完全一致的推荐名/替代名 + EC 组合逻辑。"""
+    """Recommended name / alternative name + EC combination logic, identical to rebuild_master.py."""
     alt_names_list = [n.strip() for n in alt_names_str.split(';') if n.strip()]
     ecs = [ec.strip().replace('EC ', '') for ec in ec_str.split(';') if ec.strip()]
 
@@ -53,14 +53,14 @@ with open(INPUT, 'r', encoding='utf-8') as f:
             'Recommended name': rec_full,
             'Alternative names': alt_full,
             'Gene Names': row.get('Gene Names (primary)', ''),
-            # Source 由 parse_names.py 从 RAW 透传下来 (上游若漏掉此列则取空)。
+            # Source is passed through from RAW by parse_names.py (empty if the upstream column is missing).
             'Source': (row.get('Source') or '').strip(),
         })
 
-# 旧表按 Entry 升序排列
+# The old table is ordered by ascending Entry
 rows.sort(key=lambda r: r['Entry'])
 
-# 'Source' 放末列。etl_enzymes 的酶表基础集合就取自本表, 来源归属必须在这里可用。
+# 'Source' goes in the last column. etl_enzymes' base enzyme set is taken from this table, so source attribution must be available here.
 fields = ['Entry', 'UniProt Link', 'Entry Name', 'Organism',
           'Recommended name', 'Alternative names', 'Gene Names', 'Source']
 

@@ -13,7 +13,7 @@ async def get_reaction_detail(
     reaction_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """装配在 `app.services.entity_service.load_reaction_detail`，与 `/bundle` 共用。"""
+    """Assembled in `app.services.entity_service.load_reaction_detail`, shared with `/bundle`."""
     detail = await load_reaction_detail(db, reaction_id)
     if detail is None:
         return ApiResponse(success=False, error={"code": "NOT_FOUND", "message": f"Reaction {reaction_id} not found"})

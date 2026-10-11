@@ -140,9 +140,11 @@ def clean_query_sequence(raw: str) -> str:
 # Subject library
 # --------------------------------------------------------------------------- #
 def _scope_key(source_types: Optional[List[str]]) -> str:
-    """搜索集的稳定名字, 用来给**每个搜索集**分出独立的库文件与签名。
+    """A stable name for the search set, giving **each search set** its own DB
+    files and signature.
 
-    排序后再拼 —— 用户勾选的先后顺序不该产生第二个库。
+    Sorted before joining -- the order the user ticked the boxes should not produce
+    a second DB.
     """
     if not source_types:
         return "all"
@@ -150,10 +152,11 @@ def _scope_key(source_types: Optional[List[str]]) -> str:
 
 
 def _scope_paths(work: Path, scope_key: str) -> Tuple[Path, Path, Path]:
-    """一个搜索集对应的 (fasta, db 前缀, 签名文件)。
+    """The (fasta, db prefix, signature file) for one search set.
 
-    ``all`` 沿用历史文件名, 这样**已经建好的全量库(约 98MB)会被直接复用**,
-    而不是因为改了这个函数就白重建一次。
+    ``all`` keeps the historical filenames so the **already-built full DB (~98MB)
+    is reused directly**, instead of being needlessly rebuilt just because this
+    function changed.
     """
     if scope_key == "all":
         return work / "igem_subjects.fa", work / "igem_enzymes", work / "igem.sig"
@@ -166,11 +169,13 @@ def _scope_paths(work: Path, scope_key: str) -> Tuple[Path, Path, Path]:
 
 
 def _enzyme_subject_query(source_types: Optional[List[str]]):
-    """主体库的「酶」那一半。**建库与报数共用这一个构造器。**
+    """The "enzyme" half of the subject library. **DB building and counting share
+    this one constructor.**
 
-    各写一份的代价是零 —— 两边都能跑通、都不抛异常 —— 而它买到的是一个
-    不报错的谎话: 抽屉右上角说「1,025 subjects」, 实际建库用的是别的集合。
-    所以这里的谓词只能有一处。
+    Writing it twice costs nothing -- both versions run, neither raises -- and it
+    buys a lie that raises no error: the drawer's top-right says "1,025 subjects"
+    while the DB was actually built from a different set. So the predicate must
+    live in one place only.
     """
     query = select(Enzyme).where(Enzyme.sequence.is_not(None))
     if source_types:
@@ -179,11 +184,14 @@ def _enzyme_subject_query(source_types: Optional[List[str]]):
 
 
 def _isoform_subject_query(source_types: Optional[List[str]]):
-    """主体库的「异构体」那一半。与 ``_enzyme_subject_query`` 同样共用。
+    """The "isoform" half of the subject library. Shared the same way as
+    ``_enzyme_subject_query``.
 
-    异体蛋白自己没有 source_type 列, 所以按来源圈定时必须 join ``Enzyme``。
-    「与 canonical 序列不同才算一条真主体」这个条件也在里面 —— 它是主体库语义的一部分,
-    不属于调用方, 所以留在构造器里而不是留给 `count_subjects` 自己记得加。
+    An isoform has no source_type column of its own, so scoping by source must join
+    ``Enzyme``. The "only counts as a true subject when its sequence differs from
+    the canonical one" condition lives here too -- it is part of the subject
+    library's semantics, not the caller's, so it stays in the constructor instead
+    of being left for `count_subjects` to remember.
     """
     query = select(EnzymeIsoform).where(
         EnzymeIsoform.sequence.is_not(None),
@@ -200,23 +208,28 @@ def _isoform_subject_query(source_types: Optional[List[str]]):
 
 
 async def count_subjects(db: AsyncSession, source_types: Optional[List[str]] = None) -> int:
-    """当前搜索集下 BLAST 会拿多少条序列当主体 —— 与 ``_load_subjects`` 同一组谓词。
+    """How many sequences BLAST would use as subjects under the current search set
+    -- the same predicate group as ``_load_subjects``.
 
-    抽屉右上角要在**用户点 Run 之前**显示这个数, 而那时还没有任何 BLAST 响应
-    (``payload.searchedSubjects`` 要跑完才有)。之前那里写的是常量 1,025,
-    于是换了搜索集数字也不动 —— 显示的东西与实际搜的集合脱钩。
+    The drawer's top-right shows this before **the user clicks Run**, when there is
+    no BLAST response yet (``payload.searchedSubjects`` exists only after a run).
+    It used to be the constant 1,025 there, so changing the search set did not move
+    the number -- what was shown was decoupled from what was actually searched.
 
-    **不能**写成 ``len(await _load_subjects(...))``: 那是一次把全部序列整读进来的
-    加载(实测 34.9s / 95,869 条), 而抽屉每打开一次、每换一次搜索集都要问一次。
-    这里只数行, 谓词走 ``idx_enzyme_source_review``; 代价与命中数无关, 也不传输序列。
+    Must **not** be written as ``len(await _load_subjects(...))``: that is a load
+    that reads every sequence in (measured 34.9s / 95,869 rows), and the drawer asks
+    on every open and every search-set change. This only counts rows, with the
+    predicate going through ``idx_enzyme_source_review``; the cost is independent
+    of hit count and no sequence is transferred.
 
-    返回的是**真值** —— 与 ``_ensure_blast_db`` 写进 FASTA 的条数逐条相同
-    (同一组谓词, 见上面两个构造器的 docstring)。
+    Returns the **true value** -- row-for-row identical to what ``_ensure_blast_db``
+    writes into the FASTA (same predicate group, see the two constructors above).
     """
     total = 0
     for subject_query in (_enzyme_subject_query(source_types), _isoform_subject_query(source_types)):
-        # 套一层派生表只是为了拿到「与建库完全同一条件的行数」; MySQL 8 会把
-        # 无聚合/无 LIMIT 的派生表 merge 掉, 所以真正执行的还是那条 WHERE 计数。
+        # The derived table is only to get "the row count under exactly the same
+        # condition as DB building"; MySQL 8 merges a derived table with no
+        # aggregation/LIMIT, so what actually runs is still that WHERE count.
         count_query = select(func.count()).select_from(subject_query.subquery())
         total += int((await db.execute(count_query)).scalar() or 0)
     return total
@@ -225,12 +238,14 @@ async def count_subjects(db: AsyncSession, source_types: Optional[List[str]] = N
 async def _load_subjects(db: AsyncSession, source_types: Optional[List[str]] = None) -> List[BlastSubject]:
     """Load the BLAST subject library, optionally narrowed to the search set.
 
-    过滤的是 ``Enzyme.source_type``(酶**自身**的来源), 不是边上的来源 ——
-    这里的主体就是酶, 与 BLAST 在全量酶上建库的语义一致。
-    异体蛋白自己不带 source_type 列, 所以 join ``Enzyme`` 后再过滤。
+    Filters on ``Enzyme.source_type`` (the source of the enzyme **itself**), not the
+    source on the edge -- the subjects here are the enzymes, matching BLAST's
+    semantics of building the DB over all enzymes. An isoform has no source_type
+    column of its own, so join ``Enzyme`` and then filter.
 
-    两个子查询由 ``_enzyme_subject_query`` / ``_isoform_subject_query`` 构造,
-    与 ``count_subjects`` **共用** —— 理由见那两个函数。
+    The two subqueries are built by ``_enzyme_subject_query`` /
+    ``_isoform_subject_query`` and **shared** with ``count_subjects`` -- see those
+    functions for why.
     """
     enzymes = (await db.execute(_enzyme_subject_query(source_types))).scalars().all()
     subjects: List[BlastSubject] = []
@@ -261,15 +276,18 @@ async def _load_subjects(db: AsyncSession, source_types: Optional[List[str]] = N
 
 
 def _signature(subjects: List[BlastSubject], scope_key: str) -> str:
-    """主体库的内容签名: **搜索集 + 主体集合**。
+    """The subject library's content signature: **search set + subject set**.
 
-    ⚠️ 搜索集必须进这个哈希。它原来只哈希 enzyme_id/isoform_id/length
-    (连序列内容都没有), 而调用方判断"库还是新的吗"用的就是这个签名 ——
-    于是圈定后的库与全量库只要主体 id 集合相同就算出同一个签名,
-    圈定的库会被当成"全量库已就绪"**直接复用**: 用户选了 Swiss-Prot, 实际在搜 TrEMBL,
-    且**不报任何错**。这正是本项目一路在防的那类静默给错答案。
-    (库里已有的 98MB 全量库仍会被复用 —— 它的 scope_key 就是 ``all``, 签名与改造前不同,
-    所以第一次会重建一次, 之后稳定。)
+    ⚠️ The search set must go into this hash. It used to hash only
+    enzyme_id/isoform_id/length (not even the sequence content), and the caller
+    uses this signature to decide "is the DB still fresh" -- so a scoped DB and the
+    full DB computed the same signature as long as the subject id sets were equal,
+    and the scoped DB was treated as "full DB ready" and **reused directly**: the
+    user picked Swiss-Prot while TrEMBL was actually searched, with **no error at
+    all**. This is exactly the kind of silent wrong answer the project guards
+    against. (The existing 98MB full DB is still reused -- its scope_key is ``all``,
+    and its signature differs from before this change, so it rebuilds once, then
+    stays stable.)
     """
     digest = hashlib.sha1()
     digest.update(f"scope={scope_key}\n".encode("utf-8"))
@@ -311,9 +329,10 @@ async def _run_makeblastdb(fasta: Path, prefix: Path) -> None:
 async def _ensure_blast_db(db: AsyncSession, source_types: Optional[List[str]] = None):
     """Return (subjects, db_prefix); rebuild the formatted DB when out of date.
 
-    每个搜索集一个独立的库文件 (见 ``_scope_paths``)。进程内缓存 ``_READY`` 按
-    **db 前缀**索引, 不能按 work 目录 —— 否则两个搜索集共用一条缓存记录, 谁后跑谁覆盖,
-    而签名校验又会因为跨集不匹配触发无谓重建。
+    One DB file per search set (see ``_scope_paths``). The in-process ``_READY``
+    cache is keyed by **db prefix**, not by work dir -- otherwise two search sets
+    share one cache entry, whichever runs last overwrites it, and signature checks
+    trigger needless rebuilds on a cross-set mismatch.
     """
     work = _work_dir()
     scope_key = _scope_key(source_types)

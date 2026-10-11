@@ -1,21 +1,25 @@
-"""实体字段装配 + 结构图 URL 解析。
+"""Entity field assembly + structure-image URL resolution.
 
-详情端点（`/enzymes/{id}`、`/compounds/{id}/card`、`/reactions/{id}`）与
-`/bundle/*` 聚合端点共用这里，路由层只做信封包装。
+Shared by the detail endpoints (`/enzymes/{id}`, `/compounds/{id}/card`,
+`/reactions/{id}`) and the `/bundle/*` aggregation endpoints; the router layer only
+wraps the envelope.
 
-**为什么独立成 service**：`CompoundCard` 原先在后端有 4 处独立装配
-（`routers/enzymes.py`、`routers/compounds.py`、`routers/reactions.py`、
-`services/graph_service.py`），其中前两处静默漏传了
-`formula` / `charge` / `inchi` / `description` —— pydantic 对缺省字段取 `None`
-而不报错，于是酶详情页和反应详情页上的化合物卡片一直少这四个字段，没人发现。
-收口到 `compound_to_card` 之后，这类漂移只有一个地方可改。
+**Why a separate service**: `CompoundCard` used to be assembled in 4 separate
+places in the backend (`routers/enzymes.py`, `routers/compounds.py`,
+`routers/reactions.py`, `services/graph_service.py`), and the first two silently
+omitted `formula` / `charge` / `inchi` / `description` -- pydantic takes `None` for
+missing fields without erroring, so the compound cards on the enzyme and reaction
+detail pages were always missing those four fields and nobody noticed. After
+collapsing into `compound_to_card` this kind of drift has one place to fix.
 
-**批量的成本**：`load_enzyme_detail` 单条要发 `~8 + 2·R` 条查询（R = 反应数）——
-酶、gene、4 次表存在性探测、sequence-links、evidence、edges，然后每条 edge 各
-1 次 reaction + 1 次 reaction-compound。`build_entity_bundles` 只把 4 次探测抬到
-循环外，**不做全量预取**：那要把 enzyme loader 改成一条大 JOIN 再在 Python 里分组，
-等于重写，与"复用单条 loader"的目的相悖。代价由 `schemas.bundle.MAX_BATCH_ITEMS`
-封顶，取舍是有意为之而非疏忽。
+**The cost of batching**: a single `load_enzyme_detail` fires `~8 + 2·R` queries
+(R = number of reactions) -- enzyme, gene, 4 table-existence probes,
+sequence-links, evidence, edges, then one reaction + one reaction-compound per
+edge. `build_entity_bundles` only lifts the 4 probes out of the loop and does
+**no full prefetch**: that would mean rewriting the enzyme loader into one big JOIN
+with grouping in Python, defeating the "reuse the single-row loader" goal. The
+cost is capped by `schemas.bundle.MAX_BATCH_ITEMS`; the trade-off is deliberate,
+not an oversight.
 """
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -64,16 +68,18 @@ from app.services.pathway_service import (
 from app.utils.compound_card import compound_to_card as build_compound_card
 from app.utils.compound_filters import displayable_compound_filters
 
-# 缓存击穿串只此一处。它**归前端所有** —— 前端哪天 bump 到 v=5，这里还在发 v=4，
-# 两边要一起改（前端三处：api.ts、graphExperience.tsx、components/StructureSearchDrawer.tsx）。
+# This cache-buster string lives in exactly one place. It is **owned by the
+# frontend** -- if the frontend bumps to v=5 while this still sends v=4, both must
+# change together (three frontend spots: api.ts, graphExperience.tsx,
+# components/StructureSearchDrawer.tsx).
 STRUCTURE_SUFFIX = "/structure.svg?v=4"
 ASSET_PREFIX = "/api/v1/assets/compounds"
 
 
-# --------------------------------------------------------------------------- 装配
+# --------------------------------------------------------------------------- assembly
 
 def compound_to_card(c: Compound) -> CompoundCard:
-    """见 `app.utils.compound_card` —— 这里只是 re-export，方便老调用点。"""
+    """See `app.utils.compound_card` -- this is just a re-export for old call sites."""
     return build_compound_card(c)
 
 
@@ -103,7 +109,7 @@ async def _fetch_reaction_compound_cards(
 
 @dataclass(frozen=True)
 class EnzymeTableFlags:
-    """四张可选表是否存在。批处理时探测一次、循环内复用。"""
+    """Whether the four optional tables exist. Probed once per batch, reused in the loop."""
 
     gene_sequence_link: bool
     enzyme_go: bool
@@ -122,8 +128,8 @@ async def _table_exists(db: AsyncSession, table_name: str) -> bool:
         )
         return bool(result.scalar())
     except (ProgrammingError, OperationalError):
-        # 注意：这会在批中途重置事务。批量全是读，回滚不丢东西，
-        # 但别在写操作之后复用本模块。
+        # NOTE: this resets the transaction mid-batch. The batch is all reads, so
+        # a rollback loses nothing, but do not reuse this module after a write.
         await db.rollback()
         return False
 
@@ -154,9 +160,10 @@ async def _load_enzyme_detail_with_flags(
         "sequence": enz.sequence,
         "length": enz.length,
         "mass": float(enz.mass) if enz.mass is not None else None,
-        # 酶**自身**的来源/审核状态。与下面 reaction_items 里每一项的来源不是一回事:
-        # 反应是共享的客观实体, etl_reactions 把所有 reaction 行都记成 swiss_prot
-        # (见 schemas.EnzymeDetail 的说明)。取 .value 因为模型上是 ENUM。
+        # The source/review status of the enzyme **itself**. Not the same as the
+        # source on each item in reaction_items below: a reaction is a shared
+        # objective entity, so etl_reactions stamps every reaction row swiss_prot
+        # (see schemas.EnzymeDetail). Takes .value because it is an ENUM on the model.
         "source_type": enz.source_type.value if enz.source_type else None,
         "review_status": enz.review_status.value if enz.review_status else None,
     }
@@ -228,9 +235,11 @@ async def _load_enzyme_detail_with_flags(
             for go in go_result.scalars()
         ]
 
-    # 模型参考分 + 膜注释。一次查询同时覆盖酶级(canonical)行与各变体行 ——
-    # 表里 `isoform_id IS NULL` 的就是 canonical 序列的分。
-    # 全库只有 30 条真变体有分, 所以 score_by_isoform 绝大多数时候是空的。
+    # Model reference score + membrane annotation. One query covers both the
+    # enzyme-level (canonical) row and the variant rows -- the row with
+    # `isoform_id IS NULL` is the canonical sequence's score.
+    # Only 30 true variants have a score in the whole database, so
+    # score_by_isoform is empty the vast majority of the time.
     enzyme_score = None
     enzyme_membrane = None
     score_by_isoform: dict = {}
@@ -264,7 +273,7 @@ async def _load_enzyme_detail_with_flags(
                 canonical_length=iso.canonical_length,
                 canonical_mass=iso.canonical_mass,
                 sequence=iso.sequence,
-                # 按 isoform_id 直接组装, 不让前端做 id 匹配。
+                # Assemble by isoform_id directly, so the frontend never id-matches.
                 deep_solnet_score=score_by_isoform.get(iso.isoform_id),
             )
             for iso in isoform_result.scalars()
@@ -338,7 +347,7 @@ async def load_enzyme_detail(
     enzyme_id: str,
     flags: Optional[EnzymeTableFlags] = None,
 ) -> Optional[EnzymeDetail]:
-    """None 表示酶不存在 —— 路由层翻译成 NOT_FOUND。"""
+    """None means the enzyme does not exist -- the router turns it into NOT_FOUND."""
     if flags is None:
         flags = await probe_enzyme_tables(db)
     return await _load_enzyme_detail_with_flags(db, enzyme_id, flags)
@@ -387,15 +396,19 @@ async def load_entity(db: AsyncSession, kind: str, entity_id: str):
 
 
 async def find_compound_id_by_inchikey(db: AsyncSession, key: str) -> Optional[str]:
-    """用一个 InChIKey 反查 compound_id, 找不到返回 None。
+    """Look up a compound_id by one InChIKey; None when not found.
 
-    匹配**跨两列**, 理由与 `routers/structure_search.py` 里那处相同: `inchi_key` 是 ChEBI
-    官方值、`inchi_key_derived` 是 RDKit 从本行 smiles 现算的, 两者在 710 条可比数据里只差
-    2 条 (`CHEBI:231826` / `CHEBI:53643`, ChEBI 自己那条记录自相矛盾)。只认一列会让
-    "用另一种工具算出另一个键"的调用方查不到东西。
+    Match **across two columns**, for the same reason as in
+    `routers/structure_search.py`: `inchi_key` is the official ChEBI value and
+    `inchi_key_derived` is RDKit's computed from this row's smiles; the two differ
+    in only 2 of 710 comparable records (`CHEBI:231826` / `CHEBI:53643`, where
+    ChEBI's own record contradicts itself). Recognizing one column only would make
+    a caller that "computed the other key with another tool" find nothing.
 
-    今天**一个键最多命中一个化合物**(实测 710 条有键的化合物: 列内重复 0、跨列撞车 0),
-    所以取第一条即可; 仍按 compound_id 排序, 好让结果在将来真出现重复时也是稳定的。
+    Today **one key hits at most one compound** (measured on 710 keyed compounds:
+    0 within-column duplicates, 0 cross-column collisions), so taking the first is
+    fine; still ordered by compound_id so the result stays stable if duplicates
+    ever do appear.
     """
     result = await db.execute(
         select(Compound.compound_id)
@@ -406,13 +419,14 @@ async def find_compound_id_by_inchikey(db: AsyncSession, key: str) -> Optional[s
     return result.scalar_one_or_none()
 
 
-# --------------------------------------------------------------------------- 图片 URL
+# --------------------------------------------------------------------------- image URL
 
 def compound_image_for_card(c: CompoundCard) -> CompoundImage:
-    """逐字复刻前端三处 `compoundImageUrl`。
+    """Verbatim replica of the frontend's three `compoundImageUrl` spots.
 
-    `quote(key, safe="")` 把 `:` 编成 `%3A`，与 `encodeURIComponent` 的结果一致。
-    两者只在 `!*'()` 上不同，而 ChEBI id 里不会出现这些字符。
+    `quote(key, safe="")` encodes `:` as `%3A`, matching `encodeURIComponent`'s
+    result. The two differ only on `!*'()`, and those characters never appear in a
+    ChEBI id.
     """
     key = c.chebi_id or c.compound_id
     if key and key.startswith("CHEBI:"):
@@ -445,7 +459,7 @@ def _cards_of(kind: str, entity) -> List[CompoundCard]:
 
 
 def collect_images(kind: str, entity) -> List[CompoundImage]:
-    """按 compoundId 去重，保持首次出现顺序。"""
+    """De-duplicate by compoundId, keeping first-seen order."""
     seen: Dict[str, CompoundImage] = {}
     for card in _cards_of(kind, entity):
         if card.compound_id not in seen:
@@ -456,9 +470,10 @@ def collect_images(kind: str, entity) -> List[CompoundImage]:
 async def _load_cards_for_ids(
     db: AsyncSession, compound_ids: Iterable[str]
 ) -> List[CompoundCard]:
-    """按**给定顺序**取化合物卡片；查不到的跳过。
+    """Fetch compound cards in the **given order**; misses are skipped.
 
-    pathway 卡片只带 `compoundIds`，没有内嵌 CompoundCard，所以要回表取一次。
+    A pathway card carries only `compoundIds`, no embedded CompoundCard, so it
+    needs one round-trip to the table.
     """
     ids = list(compound_ids)
     if not ids:
@@ -470,7 +485,8 @@ async def _load_cards_for_ids(
 
 async def _images_for(db: AsyncSession, kind: str, entity) -> List[CompoundImage]:
     if kind == "pathway":
-        # 链序 = 反应顺序，有意义，所以直接用它在链上的顺序，不走 collect_images。
+        # Chain order = reaction order, which is meaningful, so use its chain order
+        # directly instead of collect_images.
         cards = await _load_cards_for_ids(db, entity.compound_ids)
         return [compound_image_for_card(c) for c in cards]
     return collect_images(kind, entity)
@@ -513,11 +529,12 @@ async def build_entity_bundle(
     source_types: Optional[List[str]] = None,
     review_statuses: Optional[List[str]] = None,
 ) -> Tuple[Optional[BundleData], Optional[ErrorDetail]]:
-    """返回 `(bundle, error)`，两者恰有一个非 None。
+    """Return `(bundle, error)`, exactly one of which is non-None.
 
-    kind 非法 → BAD_REQUEST。pathway 走 `PATH_` id：id 只编码化合物链、**不编码筛选
-    条件**，所以把 `source_types`/`review_statuses` 一并透传给 `load_pathway_by_chain`，
-    否则拿到的 segment 未必是调用方当初看到的那组。
+    An invalid kind -> BAD_REQUEST. pathway uses a `PATH_` id: the id encodes only
+    the compound chain and **not the filter conditions**, so forward
+    `source_types`/`review_statuses` into `load_pathway_by_chain`, or the segments
+    returned may not be the set the caller originally saw.
     """
     if kind not in BUNDLE_KINDS:
         return None, ErrorDetail(code="BAD_REQUEST", message=f"Unknown kind {kind}")
@@ -553,10 +570,11 @@ async def build_entity_bundles(
     db: AsyncSession,
     requests: List[Tuple[str, str]],
 ) -> List[BundleBatchResult]:
-    """按入参顺序逐条返回；重复 id 复用上次的查询结果，但仍各出一条。
+    """Return one result per input, in input order; a repeated id reuses the last
+    result but still emits one entry each.
 
-    `requests` 是 `[(kind, entity_id), ...]`，长度已由
-    `BundleBatchRequest.items` 的 `max_length` 限制。
+    `requests` is `[(kind, entity_id), ...]`; its length is already capped by
+    `BundleBatchRequest.items`'s `max_length`.
     """
     flags = await probe_enzyme_tables(db)
     cache: Dict[Tuple[str, str], BundleBatchResult] = {}
@@ -568,8 +586,9 @@ async def build_entity_bundles(
             results.append(cache[key])
             continue
 
-        # 批量项只有 {kind, entityId}，放不下筛选条件 —— pathway 在这里一律按
-        # 不筛重建，需要带筛选的走单条端点。
+        # A batch item carries only {kind, entityId}, no room for filter conditions
+        # -- pathway is always rebuilt unfiltered here; use the single endpoint when
+        # filters are needed.
         bundle, error = await build_entity_bundle(db, kind, entity_id, flags=flags)
         if bundle is None:
             result = BundleBatchResult(

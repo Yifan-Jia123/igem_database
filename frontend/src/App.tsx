@@ -55,15 +55,17 @@ function App() {
   const [queuedEntitiesById, setQueuedEntitiesById] = useCachedState<Record<string, Entity>>('queuedEntities', {}, (value): value is Record<string, Entity> => isRecord(value) && Object.entries(value).every(([id, entity]) => isEntity(entity) && entity.id === id))
   const [datasetRevision, setDatasetRevision] = useState(0)
   /**
-   * 首页地图现在是**常驻**的（离开首页只隐藏、不卸载），所以它内部的 scope/通路
-   * 现场不会自己消失 —— `resetHome` 想清干净就必须显式通知它一次。
-   * 递增值；地图侧靠比对 nonce 只执行一次。
+   * The home map is now **resident** (leaving home hides it, does not unmount it),
+   * so its internal scope/pathway state does not disappear on its own -- for
+   * `resetHome` to clear it fully it must notify the map explicitly once.
+   * An incrementing value; the map side compares the nonce and runs once.
    */
   const [mapResetNonce, setMapResetNonce] = useState(0)
   /**
-   * 地图检索的「再来一次」计数器。URL 决定**跑什么**，它决定**何时再跑一遍**：
-   * 同一个词连按两次回车时目标 URL 与当前地址一模一样，`navigate` 会提前 return，
-   * 光比对规格发现不了第二次提交。
+   * The map search's "run again" counter. The URL decides **what** runs; this
+   * decides **when to run it again**: when the same word is entered twice in a
+   * row the target URL is identical to the current address, `navigate` returns
+   * early, and comparing specs alone cannot detect the second submit.
    */
   const [mapSearchNonce, setMapSearchNonce] = useState(0)
   const [blastOpen, setBlastOpen] = useState(false)
@@ -72,10 +74,11 @@ function App() {
   /** One-shot hand-off telling the home map to scope itself to the active BLAST session. */
   const [autoBlastScope, setAutoBlastScope] = useState<{ sessionId: number; nonce: number } | null>(null)
   /**
-   * 搜索集（search set）：**检索范围**，不是显示筛选。空数组 = 全部 ——
-   * 沿用全仓库「空数组即不过滤」的约定（没有 `all` 哨兵值）。
+   * Search set: the **search scope**, not a display filter. Empty array = all --
+   * following the repo-wide "empty array means no filter" convention (there is no
+   * `all` sentinel value).
    *
-   * 它管的是取数，不管下载 —— 下载路径一行都不看这个值。
+   * It governs fetching, not downloads -- the download path never looks at this value.
    */
   const [searchSet, setSearchSet] = useCachedState<string[]>('searchSet', [], isStringArray)
 
@@ -174,23 +177,24 @@ function App() {
   }
 
   /**
-   * 批量入队 —— 合并抽屉的「Queue all N entries」用。
+   * Bulk enqueue -- for the merge drawer's "Queue all N entries".
    *
-   * 不能循环调 `toggleQueue`：那里每次都要 `downloadedIds.includes(id)`（O(n)）
-   * 并展开整个 `queuedEntitiesById`（O(n)），3,595 条串行就是 O(n²) ≈ 1,300 万次
-   * 操作 —— 本身就成了新的卡顿源。这里一次 `setDownloadedIds` + 一次
-   * `setQueuedEntitiesById`。
+   * Not a loop over `toggleQueue`: each call there does `downloadedIds.includes(id)`
+   * (O(n)) and spreads the whole `queuedEntitiesById` (O(n)), so 3,595 in series is
+   * O(n²) ≈ 13 million operations -- itself a new source of jank. Here it is one
+   * `setDownloadedIds` + one `setQueuedEntitiesById`.
    *
-   * `isExportableKind` 那道闸门照旧（与 `toggleQueue` 同一判据）：
-   * 队列不许出现没有导出载荷的条目。
-   * 已经在队列里的条目保持原样（不重复、也不被移除）—— 「Queue all」是补充动作。
+   * The `isExportableKind` gate is unchanged (same criterion as `toggleQueue`):
+   * the queue must never hold an entry with no export payload.
+   * Entries already queued are left as they are (not duplicated, not removed) --
+   * "Queue all" is an additive action.
    */
   const queueEntities = (entries: Entity[]) => {
     if (entries.length === 0) return
     const incoming = new Map<string, Entity>()
     entries.forEach((entry) => {
       if (!isExportableKind(entry.kind)) return
-      if (getEntity(entry.id)) return // 数据集里有的，靠 id 就能解析出来，不必存整份
+      if (getEntity(entry.id)) return // in the dataset; resolvable by id, no need to store the whole copy
       if (!incoming.has(entry.id)) incoming.set(entry.id, entry)
     })
     if (incoming.size === 0) return
@@ -301,9 +305,11 @@ function App() {
    * not a second writer: it asks for a spec, this navigates, and the route comes
    * back down as `mapSearch`.
    *
-   * `null`撤掉检索。撤掉时用 replace 还是 push 取决于当前在哪: 已经在首页时这是
-   * 一次原地更正, 不该留一条能退回旧检索的记录; 从别的页面回来则是一次真正的
-   * 导航, 用 replace 会把那条记录本身抹掉(后退就跳过它了)。
+   * `null` removes the search. Whether removing uses replace or push depends on
+   * where we are: on the home page already this is an in-place correction, and
+   * must not leave an entry that can go back to the old search; coming back from
+   * another page it is a real navigation, and replace would wipe that entry itself
+   * (Back would skip over it).
    */
   const runMapSearch = (spec: MapSearchRoute | null) => {
     if (!spec) {
@@ -355,9 +361,10 @@ function App() {
 
   /**
    * Changing the search set changes what every scope/pathway result *means*, so
-   * the map drops its whole search现场。URL 上那条 `?q=` 必须跟着退掉, 否则刷新
-   * 会复活一次范围已经对不上的检索。
-   * `replace`, not push: 换集不是一次可后悔的导航, 不该留一条能退回旧 URL 的记录。
+   * the map drops its whole search state. The `?q=` in the URL must be removed with
+   * it, or a refresh revives a search whose scope no longer matches.
+   * `replace`, not push: changing the set is not a reversible navigation and must
+   * not leave an entry that can go back to the old URL.
    * (On an enzyme page `route.mapSearch` is `undefined`, so nothing happens there
    * — the map is not the surface being looked at.)
    */
@@ -574,7 +581,8 @@ function App() {
         isQueued={(id) => queuedIds.has(id)}
         queueCount={queueCount}
         onOpenResults={enterBlastResults}
-        // BLAST 算搜索，所以搜索集对它**真的**生效（后端按搜索集另建序列库）。
+        // BLAST counts as a search, so the search set **really** applies to it
+        // (the backend builds a separate sequence library per search set).
         searchSet={searchSet}
       />
     </div>

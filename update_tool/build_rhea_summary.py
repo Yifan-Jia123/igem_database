@@ -1,12 +1,12 @@
 """
-Generate uniprotkb_rhea_summary.tsv (每反应一行 + Organism/Protein name).
+Generate uniprotkb_rhea_summary.tsv (one row per reaction + Organism/Protein name).
 Format: Entry, Organism, Protein name, Rhea ID, EC number, Equation, Direction
 
 Source:
   - Rhea ID / EC number / Equation / Direction : rhea child table (uniprotkb_rhea.tsv)
-  - Organism / Protein name                    : 原始 UniProt TSV (Protein names 首个 '(' 前切分，
-                                               去掉尾随逗号；与旧表比对 0 差异)
-行序 = rhea child 行序。
+  - Organism / Protein name                    : raw UniProt TSV (split at the first '(' of Protein names,
+                                               trailing comma removed; 0 diff vs the old table on comparison)
+Row order = rhea child row order.
 """
 import csv
 import os
@@ -16,18 +16,18 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from protein_name import split_recommended_name  # noqa: E402
 
-# 用法: python build_rhea_summary.py [rhea子表] [原始TSV] [输出]
+# Usage: python build_rhea_summary.py [rhea child] [raw TSV] [output]
 RHEA_INPUT = sys.argv[1] if len(sys.argv) > 1 else '../for_enzyme_detail/child_tables/uniprotkb_rhea.tsv'
 RAW_INPUT = sys.argv[2] if len(sys.argv) > 2 else '../uniprotkb_terpene_AND_reviewed_true_2026_07_10.tsv'
 OUTPUT = sys.argv[3] if len(sys.argv) > 3 else 'output_rhea_summary.tsv'
 
-# 切分逻辑已抽到 protein_name.py, 与 parse_names / build_enzyme_merged 共用。
-# 原先此处内联的是「切第一个 '('」, 会把 (+)-/(E,E)- 开头的名字切成空串
-# (TrEMBL 切片实测 1.9% 中招), 且与 parse_names 的 EC-优先行为不一致。
+# The split logic is extracted to protein_name.py, shared with parse_names / build_enzyme_merged.
+# What was inlined here used to be "split at the first '('", which turned names starting with (+)-/(E,E)-
+# into an empty string (measured on TrEMBL slices: 1.9% hit), and disagreed with parse_names' EC-first behavior.
 clean_protein_name = split_recommended_name
 
 
-# ---- 原始 TSV: Entry -> (Organism, 干净蛋白名, 来源) ----
+# ---- raw TSV: Entry -> (Organism, clean protein name, source) ----
 info = {}
 with open(RAW_INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
@@ -37,7 +37,7 @@ with open(RAW_INPUT, 'r', encoding='utf-8') as f:
             'src': (row.get('Source') or '').strip(),
         }
 
-# ---- rhea 子表逐行输出 ----
+# ---- output the rhea child table row by row ----
 rows = []
 with open(RHEA_INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
@@ -54,7 +54,7 @@ with open(RHEA_INPUT, 'r', encoding='utf-8') as f:
             'Source': it['src'],
         })
 
-# 'Source' 放末列: ETL 侧全部按列名取数, 追加列不影响既有读取。
+# 'Source' goes in the last column: the ETL side reads everything by column name, so an appended column does not break existing reads.
 fields = ['Entry', 'Organism', 'Protein name', 'Rhea ID', 'EC number', 'Equation', 'Direction',
           'Source']
 

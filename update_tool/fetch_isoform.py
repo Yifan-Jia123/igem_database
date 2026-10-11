@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-# 用法: python fetch_isoform.py [输入原始TSV] [输出文件]
+# Usage: python fetch_isoform.py [input raw TSV] [output file]
 INPUT = sys.argv[1] if len(sys.argv) > 1 else '../uniprotkb_terpene_AND_reviewed_true_2026_07_10.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_isoform.tsv'
 CACHE_FILE = '_isoform_cache.json'
@@ -20,7 +20,7 @@ BACKOFF = [2, 5, 10, 20, 40]
 
 # ---- Step 1: collect entries ----
 entries = []
-# Entry -> Source, 与 entries 同序带下去 (写行时只有 entry 在手上)。
+# Entry -> Source, carried in the same order as entries (when writing a row only the entry is at hand).
 source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
@@ -88,7 +88,7 @@ for i in range(0, len(entries), BATCH_SIZE):
         time.sleep(0.4)
 
 # ---- Step 4: fetch isoform sequences ----
-# 氨基酸平均残基质量（Da）
+# Average amino-acid residue mass (Da)
 AA_MASS = {
     'A': 71.0788, 'R': 156.1875, 'N': 114.1038, 'D': 115.0886,
     'C': 103.1388, 'E': 129.1155, 'Q': 128.1307, 'G': 57.0519,
@@ -98,7 +98,7 @@ AA_MASS = {
 }
 
 def calc_mass(seq):
-    """计算蛋白质平均质量（考虑 H2O）"""
+    """Compute the protein's average mass (accounting for H2O)."""
     if not seq:
         return ''
     mass = sum(AA_MASS.get(aa, 110.0) for aa in seq)
@@ -113,12 +113,12 @@ for idx, entry in enumerate(entries):
     if not info['iso_ids']:
         continue
     entries_with_iso += 1
-    # 从缓存拿已获取的 isoform 序列
+    # Take the already-fetched isoform sequences from the cache
     info.setdefault('iso_seqs', {})
     for iso_id in info['iso_ids']:
         if iso_id in info['iso_seqs']:
             continue
-        # 下载 isoform 序列
+        # Download the isoform sequence
         try:
             url = f'https://rest.uniprot.org/uniprotkb/{iso_id}.fasta'
             r = requests.get(url, timeout=30)
@@ -155,7 +155,7 @@ with open(OUTPUT, 'w', encoding='utf-8', newline='') as f:
 
 print(f'Written: {entries_with_iso} entries, {total_iso} isoform rows -> {OUTPUT}')
 
-# 清理缓存
+# Clean up the cache
 if os.path.exists(CACHE_FILE):
     os.remove(CACHE_FILE)
     print('Cache removed.')

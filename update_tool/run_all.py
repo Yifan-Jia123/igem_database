@@ -55,14 +55,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from source_registry import SOURCES  # noqa: E402
 
-# 工具自带参考库(update_chebi_library.py 维护), 工具可独立搬到任何位置
+# Tool-bundled reference library (maintained by update_chebi_library.py); the tool can be moved anywhere standalone
 CHEBI_FULL = os.path.join(HERE, 'chebi_data', 'chebi_full.tsv')
 CHEBI_SMILES = os.path.join(HERE, 'chebi_data', 'chebi_smiles.tsv')
 
-SRC_ROOT = os.path.join(HERE, '_src')      # 可被 --src-root 覆盖
+SRC_ROOT = os.path.join(HERE, '_src')      # overridable by --src-root
 MERGED_DIR = os.path.join(HERE, '_merged')
 
-# master 需要 5 个子表放在一个目录里 (固定文件名), 建 staging 目录
+# master needs its 5 child tables in one directory (fixed file names), so build a staging dir
 CHILD_MAP = {
     'output_go.tsv': 'uniprotkb_go.tsv',
     'output_isoform.tsv': 'uniprotkb_isoform_sequences.tsv',
@@ -71,7 +71,7 @@ CHILD_MAP = {
     'output_sequence_links.tsv': 'uniprotkb_sequence_links.tsv',
 }
 
-# 分段阶段的 11 个产出。--merge 的安全阀按这张表逐个校验存在性。
+# The 11 outputs of the segmentation stage. --merge's safety valve checks each one's existence against this list.
 SEGMENT_OUTPUTS = [
     'output_parsed.tsv',
     'output_go.tsv',
@@ -86,7 +86,7 @@ SEGMENT_OUTPUTS = [
     'output_master.tsv',
 ]
 
-# ---- 参数解析 ----
+# ---- argument parsing ----
 FORCE = '--force' in sys.argv
 MODE = None          # 'source' | 'merge'
 SOURCE = None
@@ -110,7 +110,7 @@ if MODE == 'source' and SOURCE not in SOURCES:
 if OUT_DIR is None:
     OUT_DIR = os.path.join(SRC_ROOT, SOURCE) if MODE == 'source' else MERGED_DIR
 
-# 统一表路径: 仅 --source 模式有效
+# Unified-table path: only meaningful in --source mode
 RAW = None
 if MODE == 'source':
     given = next((a for a in sys.argv[1:] if not a.startswith('--')), None)
@@ -134,7 +134,7 @@ def run_step(label, out, cmd):
 
 
 # ---------------------------------------------------------------------------
-# 阶段一: 条目级步骤 (按来源分段)
+# Stage 1: entry-level steps (segmented by source)
 # ---------------------------------------------------------------------------
 def stage_source():
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -161,7 +161,7 @@ def stage_source():
     for label, cmd in steps:
         run_step(label, P(label), cmd)
 
-    # master 需要 5 个子表放在一个目录里 (固定文件名), 建 staging 目录
+    # master needs its 5 child tables in one directory (fixed file names), so build a staging dir
     staging = P('child_tables')
     print('\n===== master (stage child tables) =====')
     os.makedirs(staging, exist_ok=True)
@@ -177,10 +177,10 @@ def stage_source():
 
 
 # ---------------------------------------------------------------------------
-# 阶段二: 跨条目聚合 (从全部分段汇合)
+# Stage 2: cross-entry aggregation (merged from all segments)
 # ---------------------------------------------------------------------------
 def check_segments():
-    """安全阀: 所有已登记来源的分段输出都必须齐, 且 _src/ 下没有未登记目录。"""
+    """Safety valve: every registered source's segment output must be present, and there must be no unregistered directories under _src/."""
     problems = []
     for s in SOURCES:
         seg_dir = os.path.join(SRC_ROOT, s)
@@ -204,11 +204,12 @@ def check_segments():
 
 
 def concat_terpene_only():
-    """把各来源的 terpene_only 拼成一份给汇合步骤用。
+    """Concatenate the sources' terpene_only into one file for the merge steps.
 
-    build_terpene_pairs / _compounds / _all_nodes 都只吃 terpene_only。
-    拼接是安全的: pairs 按 (Substrate ChEBI, Product ChEBI) 分组、组内按 Entry 去重,
-    所以两个来源的同一个酶不会因为拼接而重复计。
+    build_terpene_pairs / _compounds / _all_nodes consume only terpene_only.
+    Concatenation is safe: pairs are grouped by (Substrate ChEBI, Product ChEBI) and
+    de-duplicated by Entry within a group, so the same enzyme from two sources is not
+    double-counted by the concatenation.
     """
     out_path = P('output_terpene_only.tsv')
     header = None
@@ -238,8 +239,9 @@ def stage_merge():
     print(f'输出目录: {OUT_DIR}')
     print(f'来源  : {", ".join(SOURCES)} (全部已就位)')
 
-    # 汇合步骤的输入 = 各来源 terpene_only 的拼接。每次 merge 都重拼,
-    # 否则改了某个来源的分段而 merge 用旧拼接, 汇合表就与分段不一致了。
+    # The merge steps' input = the concatenation of each source's terpene_only. It is
+    # re-concatenated on every merge, otherwise a changed source segment with a stale
+    # concatenation would leave the merged tables inconsistent with the segments.
     merged_only = concat_terpene_only()
 
     steps = [

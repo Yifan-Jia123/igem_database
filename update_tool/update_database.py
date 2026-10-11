@@ -1,40 +1,46 @@
 """
-把 update_tool/ 的新输出部署(覆盖)到原始数据库的对应旧表位置。
+Deploy (overwrite) the new output of update_tool/ onto the matching old table
+locations in the original database.
 
-隔离原则:
-  - 本脚本写在 update_tool/ 内, 不碰原始代码。
-  - 默认把旧表先备份到 <备份目录>/<相对路径>, 再覆盖 —— 出问题可一键回滚。
-  - 测试时用 --root 指向一个沙箱目录, 走同一条代码路径, 不碰原始数据。
+Isolation principles:
+  - This script lives inside update_tool/ and never touches the original code.
+  - By default the old tables are backed up first to <backup dir>/<relative path>,
+    then overwritten -- a problem can be rolled back with one command.
+  - For testing, point --root at a sandbox directory: same code path, no touching
+    the original data.
 
-## 来源分段
+## Source segmentation
 
-分段的 11 张表落盘带来源后缀 (`<name>.<source>.tsv`), 汇合的 3 张不带 —— 见
-plan「核心设计: 隔离模型」。所以本脚本必须显式指定部署哪一段:
+The 11 segmented tables are written with a source suffix (`<name>.<source>.tsv`);
+the 3 merged tables carry none -- see the plan's "core design: isolation model".
+So this script must explicitly state which segment to deploy:
 
-  --source=<s>   部署该来源的 11 张分段表 -> for_*/<name>.<s>.tsv
-  --merge        部署 3 张汇合表         -> for_*/<name>.tsv (无后缀)
+  --source=<s>   deploy that source's 11 segmented tables -> for_*/<name>.<s>.tsv
+  --merge        deploy the 3 merged tables               -> for_*/<name>.tsv (no suffix)
 
-只跑 `--source=trembl` 时 SwissProt 的 11 个文件原样不动 —— 这就是「刷新一个来源
-不动另一个来源」。
+Running only `--source=trembl` leaves SwissProt's 11 files untouched -- that is
+"refresh one source without touching the other".
 
-用法:
-  python update_database.py --source=swiss_prot --dry-run    # 只打印计划, 不写文件
-  python update_database.py --source=trembl --root=<沙箱>     # 对沙箱做真实覆盖测试
+Usage:
+  python update_database.py --source=swiss_prot --dry-run    # print the plan only, write nothing
+  python update_database.py --source=trembl --root=<sandbox>  # real overwrite test into the sandbox
   python update_database.py --merge
-  python update_database.py --source=trembl --target=output_go.tsv   # 只更新指定表
-  python update_database.py --restore=<备份目录>              # 用历史备份回滚旧表
+  python update_database.py --source=trembl --target=output_go.tsv   # update only the named table
+  python update_database.py --restore=<backup dir>            # roll old tables back from a backup
 
-参数:
-  --root=DIR       目标旧表所在根目录, 默认 = update_tool 的上级 (数据库根)
-  --new-dir=DIR    新输出所在目录, 默认 = 本脚本所在目录
-  --backup-dir=DIR 备份目录, 默认 = <new-dir>/_backup_<时间戳>
-  --dry-run        只打印将执行的覆盖计划
-  --target=X[,Y..] 只更新指定新输出文件(可多个)
-  --no-backup      覆盖前不备份
-  --restore=DIR    回滚模式: 把 DIR 下的备份复制回 --root 对应位置
+Arguments:
+  --root=DIR       root of the target old tables, default = parent of update_tool (database root)
+  --new-dir=DIR    directory of the new output, default = this script's directory
+  --backup-dir=DIR backup directory, default = <new-dir>/_backup_<timestamp>
+  --dry-run        print the overwrite plan only
+  --target=X[,Y..] update only the named new output files (may be several)
+  --no-backup      do not back up before overwriting
+  --restore=DIR    rollback mode: copy the backups under DIR back to their --root locations
   --allow-header-change
-                   列头变化时也覆盖 (宽度动态的 5 张表已默认放行, 见下)
-  --allow-shrink   目标行数缩减过半时也覆盖 (默认拒绝, 见下)
+                   also overwrite when the header changes (the 5 dynamic-width
+                   tables already pass by default, see below)
+  --allow-shrink   also overwrite when the target row count shrinks by more than half
+                   (refused by default, see below)
 """
 import csv
 import os
@@ -46,16 +52,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from source_registry import SOURCES  # noqa: E402
 
-DEFAULT_ROOT = os.path.dirname(HERE)          # 数据库根目录
-# 新输出目录: 与 run_all.py 的落盘位置一致 (--source=<s> -> _src/<s>/, --merge -> _merged/)
+DEFAULT_ROOT = os.path.dirname(HERE)          # database root directory
+# New output directory: matches run_all.py's output locations (--source=<s> -> _src/<s>/, --merge -> _merged/)
 DEFAULT_SRC_ROOT = os.path.join(HERE, '_src')
 DEFAULT_MERGED_DIR = os.path.join(HERE, '_merged')
 
-# (新输出文件名, 原始旧表相对路径, 是否按来源分段)
-#   分段=True  -> 落盘 for_*/<name>.<source>.tsv, 由 --source=<s> 部署
-#   分段=False -> 落盘 for_*/<name>.tsv (无后缀), 由 --merge 部署
-# 分段的判据是「一行是否对应一个 UniProt 条目」; 跨条目聚合的表(pairs/compounds/all_nodes)
-# 天然被两个来源共享, 硬切会产生重复行和重复节点。
+# (new output file name, old table relative path, whether segmented by source)
+#   segmented=True  -> written to for_*/<name>.<source>.tsv, deployed by --source=<s>
+#   segmented=False -> written to for_*/<name>.tsv (no suffix), deployed by --merge
+# The segmentation criterion is "does a row correspond to one UniProt entry"; tables that
+# aggregate across entries (pairs/compounds/all_nodes) are naturally shared by both sources,
+# so cutting them hard would create duplicate rows and duplicate nodes.
 MAPPING = [
     ('output_parsed.tsv', 'uniprotkb_terpene_parsed.tsv', True),
     ('output_names_split.tsv', 'for_enzyme_detail/child_tables/uniprotkb_names_split.tsv', True),
@@ -73,19 +80,21 @@ MAPPING = [
     ('output_all_nodes.tsv', 'for_graph/all_nodes.tsv', False),
 ]
 
-# 列宽随数据规模变化、不构成「格式不一致」的表。它们的列头变化是**预期**的,
-# 默认放行并打印新旧列数; 其余 9 张宽度固定, 列头变化说明上游改了格式, 仍然拦住。
+# Tables whose column width varies with the data size and does not count as "format
+# mismatch". Their header changes are **expected**, so they pass by default and the old/new
+# column counts are printed; the other 9 have fixed width, and a header change there means
+# upstream changed the format, so it is still blocked.
 DYNAMIC_WIDTH = {
-    'output_references.tsv',      # 列数 = 该条目最多几条文献
-    'output_sequence_links.tsv',  # 列数 = 该条目最多几条 EMBL/RefSeq 交叉引用
-    'output_enzyme_merged.tsv',   # 列数 = 该酶最多几个反应
-    'output_terpene_pairs.tsv',   # 列数 = 某一对底物-产物最多几个酶
-    'output_master.tsv',          # 聚合上述所有子表, 列数必然跟着变
+    'output_references.tsv',      # column count = the most references of any one entry
+    'output_sequence_links.tsv',  # column count = the most EMBL/RefSeq cross-refs of any one entry
+    'output_enzyme_merged.tsv',   # column count = the most reactions of any one enzyme
+    'output_terpene_pairs.tsv',   # column count = the most enzymes of any one substrate-product pair
+    'output_master.tsv',          # aggregates all the child tables above, so its column count changes too
 }
 
 
 def with_source(rel_path, source):
-    """给相对路径的文件名插进来源后缀: for_x/y.tsv -> for_x/y.<source>.tsv"""
+    """Insert the source suffix into the filename of a relative path: for_x/y.tsv -> for_x/y.<source>.tsv"""
     base, ext = os.path.splitext(rel_path)
     return f'{base}.{source}{ext}'
 
@@ -93,10 +102,10 @@ def with_source(rel_path, source):
 def parse_args(argv):
     args = {
         'root': DEFAULT_ROOT,
-        'new_dir': None,        # None = 由模式推导; 见下方 derive_new_dir 与 --new-dir=
+        'new_dir': None,        # None = derived from the mode; see derive_new_dir below and --new-dir=
         'backup_dir': None,
         'dry_run': False,
-        'targets': None,        # None = 全部
+        'targets': None,        # None = all
         'no_backup': False,
         'restore': None,
         'source': None,
@@ -141,11 +150,12 @@ def parse_args(argv):
     if args['source'] and args['source'] not in SOURCES:
         sys.exit(f'--source 必须是 {SOURCES} 之一, 收到 {args["source"]!r}')
 
-    # 新文件目录由模式推导 —— 不推导的话 new_dir 会停在 update_tool/ 本身, 于是
-    # 每张表都报「新输出不存在」并被跳过, 却以退出码 0 打印「完成: 0 个已更新」:
-    # 看起来像「没有要部署的东西」而不是错误。更糟的是 update_tool/ 根下若留有
-    # 改造前的 output_*.tsv, 会被当成某个来源的分段部署下去(静默写错值)。
-    # 显式 --new-dir= 仍然优先。
+    # The new-file directory is derived from the mode -- without deriving it, new_dir would
+    # stay at update_tool/ itself, so every table would report "new output missing" and be
+    # skipped, yet exit code 0 would print "done: 0 updated": it looks like "nothing to
+    # deploy" rather than an error. Worse, output_*.tsv left over in update_tool/ before the
+    # rework would be deployed as some source's segment (silently writing wrong values).
+    # An explicit --new-dir= still takes precedence.
     if args['new_dir'] is None:
         args['new_dir'] = (DEFAULT_MERGED_DIR if args['merge']
                            else os.path.join(DEFAULT_SRC_ROOT, args['source']))
@@ -204,24 +214,25 @@ def main():
             continue
 
         new_path = os.path.join(a['new_dir'], new_name)
-        # 分段表落盘带来源后缀; 汇合表无后缀
+        # Segmented tables are written with a source suffix; merged tables have none
         if is_segmented:
             rel_target = with_source(rel_target, a['source'])
         old_path = os.path.join(a['root'], rel_target)
 
-        # 1) 新输出必须存在
+        # 1) The new output must exist
         if not os.path.exists(new_path):
             skipped.append((new_name, '新输出不存在'))
             print(f'  [跳过] {new_name}  新输出不存在 ({new_path})')
             continue
 
-        # 2) 列头校验。旧表不存在视为全新表, 直接部署。
+        # 2) Header check. A missing old table is treated as a brand-new table, deployed directly.
         if os.path.exists(old_path):
             nh = header(new_path)
             oh = header(old_path)
             if nh != oh:
-                # 宽度动态的表列数本来就该变 —— 放行, 但把列数变化打出来,
-                # 这样「新列静默消失」也会在日志里看得见。
+                # A dynamic-width table's column count is meant to change -- let it pass, but
+                # print the count change so a silently disappearing new column is visible in
+                # the log too.
                 if new_name in DYNAMIC_WIDTH or a['allow_header_change']:
                     why = '宽度动态(预期)' if new_name in DYNAMIC_WIDTH else '--allow-header-change'
                     print(f'  [列头变化] {new_name} -> {rel_target}  {why}')
@@ -231,7 +242,7 @@ def main():
                         print(f'         WARN 减少的列 ({len(lost)}): {lost[:8]}{" ..." if len(lost) > 8 else ""}')
                     header_changed.append((new_name, len(oh), len(nh)))
                 else:
-                    # 宽度固定的表列头变了 = 上游改了格式, 停下让人看, 不静默部署。
+                    # A fixed-width table's header changed = upstream changed the format; stop for a human to look, do not deploy silently.
                     skipped.append((new_name, '列头不一致'))
                     print(f'  [跳过] {new_name} -> {rel_target}  列头不一致')
                     print(f'         新({len(nh)}): {nh[:4]}...')
@@ -239,10 +250,12 @@ def main():
                     print(f'         宽度固定的表不该变列头; 确认无误后加 --allow-header-change 重跑')
                     continue
 
-        # 3) 空表守卫。用空表覆盖有数据的旧表 = 静默清库, 必须拦住。
-        #    但**新表**(目标还不存在)时 0 行可能是诚实结果 —— 例如某个来源确实
-        #    没有 isoform 数据。这时放行并告警, 否则该来源的分段文件永远落不了盘,
-        #    ETL 会因为找不到分段落盘文件而报错, 把「本来就没数据」误报成「流程坏了」。
+        # 3) Empty-table guard. Overwriting a populated old table with an empty one = silently
+        #    wiping the database, must be blocked. But for a **new** table (target does not
+        #    exist yet) 0 rows may be an honest result -- e.g. a source genuinely has no
+        #    isoform data. Then pass with a warning, otherwise that source's segment file
+        #    could never be written, and the ETL would error on the missing segment file,
+        #    reporting "there was never any data" as "the pipeline broke".
         n_new = count_rows(new_path)
         old_exists = os.path.exists(old_path)
         n_old = count_rows(old_path) if old_exists else None
@@ -253,10 +266,12 @@ def main():
                 continue
             print(f'  [空表] {new_name} -> {rel_target}  0 数据行, 按全新空段部署')
 
-        # 行数塌缩 = 最像「静默丢数据」的信号, 而且覆盖是破坏性的(虽有备份)。
-        # 所以默认**拒绝**, 要人看过再显式放行。典型触发场景: 拿试点规模的分段
-        # 去 --merge 到真实根目录, 会把完整的 pairs/compounds/all_nodes 换成一小时片。
-        # 正常全量更新只会增长(酶 996 -> 96k), 不该走到这里。
+        # A row-count collapse is the signal most like "silently losing data", and the
+        # overwrite is destructive (even with a backup). So it is **refused** by default;
+        # a human must look and explicitly allow it. Typical trigger: --merge-ing a
+        # pilot-scale segment onto the real root, which would swap the complete
+        # pairs/compounds/all_nodes for a one-hour slice. A normal full update only grows
+        # (enzymes 996 -> 96k) and should not reach here.
         shrink = ''
         if n_old and n_new < n_old * 0.5:
             if not a['allow_shrink']:
@@ -272,21 +287,23 @@ def main():
             updated.append(new_name)
             continue
 
-        # 4) 备份旧表(保留相对路径)
+        # 4) Back up the old table (preserving the relative path)
         if not a['no_backup'] and os.path.exists(old_path):
             bak = os.path.join(a['backup_dir'], rel_target)
             os.makedirs(os.path.dirname(bak), exist_ok=True)
             shutil.copy2(old_path, bak)
 
-        # 5) 覆盖
+        # 5) Overwrite
         os.makedirs(os.path.dirname(old_path), exist_ok=True)
         shutil.copy2(new_path, old_path)
         print(f'  [更新] {new_name} -> {rel_target}{row_note}')
         updated.append(new_name)
 
-    # 陈旧残留: 改造前那套无后缀的分段副本。ETL 已改成只读带后缀的分段文件,
-    # 所以这些副本**不再被任何东西读到**, 留着只会让人以为分段没生效。
-    # 仍然不自动删 —— 删文件不可逆, 而且全量跑通前它们是唯一的回退参照。
+    # Stale leftovers: the set of suffix-less segment copies from before the rework. The ETL
+    # now reads only the suffixed segment files, so these copies are **no longer read by
+    # anything** and keeping them only makes people think segmentation did not take effect.
+    # Still not deleted automatically -- deleting files is irreversible, and before a full
+    # run passes they are the only fallback reference.
     if seg_mode:
         for new_name, rel_target, is_segmented in MAPPING:
             if not is_segmented:
@@ -310,8 +327,9 @@ def main():
     if not a['dry_run'] and not a['no_backup'] and updated:
         print(f'备份保存在: {a["backup_dir"]} (回滚: python update_database.py --restore=该目录)')
 
-    # 「一张都没部署, 且全部原因是新输出不存在」几乎总是路径指错了, 不是真的没数据。
-    # 必须以非 0 退出, 否则调用方(或人)会把 no-op 当成成功的空更新。
+    # "Nothing deployed, and every reason was new output missing" is almost always a wrong
+    # path, not genuinely no data. Must exit non-zero, otherwise the caller (or a human)
+    # would take the no-op for a successful empty update.
     if skipped and not updated and all(w == '新输出不存在' for _, w in skipped):
         print(f'\n错误: {len(skipped)} 张表全部因「新输出不存在」被跳过, 没有可部署的东西')
         print(f'      新输出目录: {a["new_dir"]}')

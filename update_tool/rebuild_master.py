@@ -1,30 +1,30 @@
 """
-Generate uniprotkb_master.tsv (总表: 每个酶一行, 聚合所有子表横向铺开).
+Generate uniprotkb_master.tsv (master table: one row per enzyme, all child tables aggregated side by side).
 Format: Entry, UniProt Link, Recommended Name, Alternative Names, Gene Names,
-        Rhea ID_1..N, ..., GO ID_1..N, ..., 核酸序列链接列, 参考文献列
+        Rhea ID_1..N, ..., GO ID_1..N, ..., nucleic-sequence link columns, reference columns
 
-数据来源 (全部参数化, 供新数据工作流复用):
-  - 子表 go/isoform_sequences/references/rhea/sequence_links : 由各自 fetch/build 脚本生成
-  - Canonical Sequence     : 统一原始 TSV 的 'Sequence' 列 (旧: 0712)
-  - Sequence Length        : 统一原始 TSV 的 'Length' 列 (旧: 0716, 已验证 == len(Sequence))
-  - Canonical Mass         : 统一原始 TSV 的 'Mass' 列 (旧: 0716)
-  - 推荐名/替代名          : parse_names.py 产物 parsed.tsv (与 build_names_split 同逻辑)
-  - Gene Names             : 统一原始 TSV 的 'Gene Names (primary)' 列
-行序 = union(go, ref, rhea, seq) 的 Entry 字符串升序 (与旧表一致)。
+Data sources (all parameterized, for reuse by the new data workflow):
+  - child tables go/isoform_sequences/references/rhea/sequence_links : produced by their own fetch/build scripts
+  - Canonical Sequence     : the unified raw TSV's 'Sequence' column (old: 0712)
+  - Sequence Length        : the unified raw TSV's 'Length' column (old: 0716, verified == len(Sequence))
+  - Canonical Mass         : the unified raw TSV's 'Mass' column (old: 0716)
+  - recommended/alternative names          : parse_names.py output parsed.tsv (same logic as build_names_split)
+  - Gene Names             : the unified raw TSV's 'Gene Names (primary)' column
+Row order = ascending string order of Entry over union(go, ref, rhea, seq) (same as the old table).
 
-注意: 旧版依赖中间表 output/uniprotkb_integrated.tsv 取 canonical 序列/长度;
-      已验证 integrated.Canonical Sequence == 0712.Sequence、长度 == 0716.Length (0 差异),
-      故直接改从原始 TSV 取, 去掉中间表依赖。
+Note: the old version depended on the intermediate table output/uniprotkb_integrated.tsv for canonical sequence/length;
+      verified integrated.Canonical Sequence == 0712.Sequence and length == 0716.Length (0 diff),
+      so it now reads straight from the raw TSV, dropping the intermediate-table dependency.
 """
 import csv
 import re
 import sys
 from collections import OrderedDict, defaultdict
 
-# 用法:
-#   新 4 参: python rebuild_master.py [child_tables目录] [统一原始TSV] [parsed.tsv] [输出]
-#     统一表 = 19 列并集 (含 Sequence/Length/Mass/Gene Names), 三个 raw 来源都读它
-#   旧 6 参: python rebuild_master.py [child_tables目录] [0710] [0712] [0716] [parsed.tsv] [输出]
+# Usage:
+#   new 4-arg: python rebuild_master.py [child_tables dir] [unified raw TSV] [parsed.tsv] [output]
+#     unified table = 19-column union (includes Sequence/Length/Mass/Gene Names); all three raw sources read it
+#   old 6-arg: python rebuild_master.py [child_tables dir] [0710] [0712] [0716] [parsed.tsv] [output]
 CDIR = sys.argv[1] if len(sys.argv) > 1 else '../for_enzyme_detail/child_tables'
 if len(sys.argv) >= 7:
     RAW_0710, RAW_0712, RAW_0716 = sys.argv[2], sys.argv[3], sys.argv[4]
@@ -98,13 +98,13 @@ with open(PARSED, 'r', encoding='utf-8') as f:
         alt_names_list = [n.strip() for n in alt_names_str.split(';') if n.strip()]
         ecs = [ec.strip().replace('EC ', '') for ec in ec_str.split(';') if ec.strip()]
 
-        # 推荐名 + 第一个 EC
+        # recommended name + first EC
         if ecs:
             rec_full = f'{rec_name} (EC {ecs[0]})'
         else:
             rec_full = rec_name
 
-        # 替代名按顺序配剩余的 EC
+        # alternative names paired with the remaining ECs in order
         alt_parts = []
         for i, alt in enumerate(alt_names_list):
             ec_idx = min(i + 1, len(ecs) - 1) if len(ecs) > 1 else 0
@@ -137,10 +137,10 @@ max_refseq = max((int(re.search(r'_(\d+)$', f).group(1)) for f in seq_fields_raw
 all_entries = sorted(set(list(go_by_entry.keys()) + list(ref_by_entry.keys()) +
                           list(rhea_by_entry.keys()) + list(seq_by_entry.keys())))
 
-# ---- Entry -> Source (来源分段归属) ----
-# 优先读原始统一表自带的 Source 列 (权威, 覆盖全部条目);
-# 旧版三导出没有该列时, 回退到子表自带的 Source —— references / sequence_links
-# 每个条目都有一行, 覆盖最全。
+# ---- Entry -> Source (source-segment attribution) ----
+# Prefer the raw unified table's own Source column (authoritative, covers every entry);
+# when the old three exports lack that column, fall back to the child tables' own Source -- references / sequence_links
+# have one row per entry, the fullest coverage.
 def _read_source_col(path):
     out = {}
     try:
@@ -164,8 +164,8 @@ if not source_by_entry:
     for _e, _r in seq_by_entry.items():
         source_by_entry.setdefault(_e, (_r.get('Source') or '').strip())
 
-# 'Source' 必须从动态列里排除: 它已经单独成一列, 若同时被 ref_cols/seq_cols
-# 各自收一次, 输出会出现两个同名列, pandas 读回时被改写成 Source / Source.1。
+# 'Source' must be excluded from the dynamic columns: it is already its own column, and if ref_cols/seq_cols
+# each collected it again, the output would carry two same-named columns, rewritten by pandas on read-back to Source / Source.1.
 seq_cols = [f for f in seq_fields_raw if f not in ('Entry', 'Source')]
 
 # Build fields: Entry > Names > Rhea > Protein Seq > Nucleic Seq > GO > Refs > Source
@@ -194,7 +194,7 @@ for i in range(1, max_go + 1):
 ref_cols = [f for f in ref_fields_raw if f not in ('Entry', 'Source')]
 fields += ref_cols
 
-# Source (末列, 与各子表保持一致的位置)
+# Source (last column, at the position consistent with every child table)
 fields += ['Source']
 
 # Build rows

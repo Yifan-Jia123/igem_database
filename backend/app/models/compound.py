@@ -18,8 +18,9 @@ class Compound(Base):
     smiles: Mapped[Optional[str]] = mapped_column(Text)
     inchi: Mapped[Optional[str]] = mapped_column(Text)
     inchi_key: Mapped[Optional[str]] = mapped_column(String(100))
-    # 第二个键 (RDKit 从 smiles 现算): 只给结构检索做匹配兜底, 不对外返回。
-    # 见 app/routers/structure_search.py
+    # The second key (RDKit's on-the-fly computation from smiles): only a
+    # matching fallback for structure search, never returned externally.
+    # See app/routers/structure_search.py
     inchi_key_derived: Mapped[Optional[str]] = mapped_column(String(100))
     structure_image_url: Mapped[Optional[str]] = mapped_column(String(500))
     chebi_url: Mapped[Optional[str]] = mapped_column(String(500))

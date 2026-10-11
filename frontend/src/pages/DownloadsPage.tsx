@@ -382,12 +382,12 @@ export function DownloadsPage({
           className="atlas-brand"
           onClick={onResetHome}
           title="Back to the Atlas home map"
-          aria-label="Starase Atlas home"
+          aria-label="Atlas EDGE home"
         >
           <span className="atlas-logo">
             <img className="atlas-logo-mark" src="/starase-atlas-logo.png" alt="" />
           </span>
-          <span>Starase Atlas</span>
+          <span>Atlas EDGE</span>
         </button>
 
         <div className="downloads-topnav-slot">

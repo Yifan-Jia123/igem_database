@@ -10,8 +10,8 @@ import json
 import os
 import sys
 
-# 用法: python fetch_references.py [原始TSV(取Entry列)] [输出] [缓存文件]
-# 注意: Entry 列表取自原始 TSV 而非 master, 打破循环依赖 (master 由本表拼装)。
+# Usage: python fetch_references.py [raw TSV (takes the Entry column)] [output] [cache file]
+# Note: the Entry list comes from the raw TSV, not master, breaking the circular dependency (master is assembled from this table).
 INPUT = sys.argv[1] if len(sys.argv) > 1 else '../uniprotkb_terpene_AND_reviewed_true_2026_07_10.tsv'
 OUTPUT = sys.argv[2] if len(sys.argv) > 2 else 'output_references.tsv'
 CACHE_FILE = sys.argv[3] if len(sys.argv) > 3 else '_ref_cache.json'
@@ -19,14 +19,14 @@ BATCH_SIZE = 50
 
 # ---- Step 1: collect all entries ----
 entries = []
-# Entry -> Source。entries 被排序过, 所以来源必须用字典按 Entry 取, 不能按下标对齐。
+# Entry -> Source. entries has been sorted, so the source must be fetched from a dict keyed by Entry, not aligned by index.
 source_by_entry = {}
 with open(INPUT, 'r', encoding='utf-8') as f:
     for row in csv.DictReader(f, delimiter='\t'):
         e = row['Entry']
         entries.append(e)
         source_by_entry[e] = (row.get('Source') or '').strip()
-entries = sorted(entries)  # 旧表按 Entry 升序
+entries = sorted(entries)  # ascending Entry (the old table's order)
 print(f'Total entries: {len(entries)}')
 
 # ---- Step 2: load cache ----
@@ -132,7 +132,7 @@ for n in range(1, max_refs + 1):
         f'Journal_{n}', f'Volume_{n}', f'Pages_{n}', f'Year_{n}',
         f'Type_{n}', f'Positions_{n}', f'URL_{n}',
     ]
-# 'Source' 追加在最末: 前面是宽度动态的引用列, 只能放尾部才能保证列名→列号映射稳定。
+# 'Source' is appended last: the preceding columns are a dynamic-width set of reference columns, so it must sit at the tail to keep the column-name -> column-number mapping stable.
 fields += ['Source']
 
 # ---- Step 6: write ----

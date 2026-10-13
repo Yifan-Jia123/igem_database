@@ -2178,10 +2178,10 @@ export function CompoundGraphHome({
           >
             <defs>
               <marker id="home-map-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto-start-reverse">
-                <path d="M0,0 L8,4 L0,8 z" fill="rgba(249, 238, 201, 0.82)" />
+                <path d="M0,0 L8,4 L0,8 z" fill="rgba(214, 172, 64, 0.9)" />
               </marker>
               <filter id="home-node-glow" x="-60%" y="-60%" width="220%" height="220%">
-                <feDropShadow dx="0" dy="0" stdDeviation="0.62" floodColor="rgba(247, 240, 214, 0.54)" />
+                <feDropShadow dx="0" dy="0" stdDeviation="0.62" floodColor="rgba(214, 172, 64, 0.5)" />
               </filter>
               <filter id="selected-node-glow" x="-80%" y="-80%" width="260%" height="260%">
                 <feDropShadow dx="0" dy="0" stdDeviation="0.95" floodColor="rgba(250, 214, 242, 0.72)" />
